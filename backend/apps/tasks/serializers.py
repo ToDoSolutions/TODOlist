@@ -1,3 +1,6 @@
+from datetime import timedelta
+
+from django.utils import timezone
 from rest_framework import serializers
 
 from apps.projects.models import Project
@@ -46,6 +49,26 @@ class TaskRelationSerializer(serializers.ModelSerializer):
                   "relation_type", "created_at"]
         read_only_fields = ["id", "source", "source_title", "target_title", "created_at"]
 
+    def validate(self, data):
+        target = data.get("target")
+        if not target:
+            raise serializers.ValidationError("Debes especificar una tarea objetivo.")
+        # source se settea en la view, pero si existe validamos
+        source = data.get("source", getattr(self.instance, "source", None))
+        if source and target and source.id == target.id:
+            raise serializers.ValidationError("Una tarea no puede relacionarse consigo misma.")
+        # Evitar dependencia circular: si A blocks B, B no puede blocks A
+        relation_type = data.get("relation_type", getattr(self.instance, "relation_type", None))
+        if source and target and relation_type in ("blocks", "depends_on"):
+            reverse_type = "depends_on" if relation_type == "blocks" else "blocks"
+            if TaskRelation.objects.filter(
+                source=target, target=source, relation_type=reverse_type
+            ).exists():
+                raise serializers.ValidationError(
+                    "Dependencia circular: la tarea objetivo ya bloquea a la tarea origen."
+                )
+        return data
+
 
 class TaskActivitySerializer(serializers.ModelSerializer):
     actor_email = serializers.CharField(source="actor.email", read_only=True)
@@ -70,6 +93,26 @@ class SprintSerializer(serializers.ModelSerializer):
     def get_task_count(self, obj):
         return obj.tasks.count()
 
+    def validate(self, data):
+        start = data.get("start_date", getattr(self.instance, "start_date", None))
+        end = data.get("end_date", getattr(self.instance, "end_date", None))
+        if start and end and end < start:
+            raise serializers.ValidationError(
+                "La fecha de fin del sprint debe ser posterior a la de inicio."
+            )
+        # Solo un sprint activo por proyecto
+        state = data.get("state", getattr(self.instance, "state", None))
+        project = data.get("project", getattr(self.instance, "project", None))
+        if state == "active" and project:
+            qs = Sprint.objects.filter(project=project, state="active")
+            if self.instance:
+                qs = qs.exclude(id=self.instance.id)
+            if qs.exists():
+                raise serializers.ValidationError(
+                    "Ya existe un sprint activo para este proyecto."
+                )
+        return data
+
 
 class EpicSerializer(serializers.ModelSerializer):
     progress_done = serializers.SerializerMethodField()
@@ -88,6 +131,15 @@ class EpicSerializer(serializers.ModelSerializer):
 
     def get_progress_total(self, obj):
         return obj.progress[1]
+
+    def validate(self, data):
+        start = data.get("start_date", getattr(self.instance, "start_date", None))
+        end = data.get("end_date", getattr(self.instance, "end_date", None))
+        if start and end and end < start:
+            raise serializers.ValidationError(
+                "La fecha de fin de la épica debe ser posterior a la de inicio."
+            )
+        return data
 
 
 class SavedSearchSerializer(serializers.ModelSerializer):
@@ -191,6 +243,43 @@ class TaskCreateUpdateSerializer(serializers.ModelSerializer):
                 parent = parent.parent
         return value
 
+    def validate_priority(self, value):
+        if value is not None and (value < 0 or value > 5):
+            raise serializers.ValidationError("La prioridad debe estar entre 0 y 5.")
+        return value
+
+    def validate_story_points(self, value):
+        if value is not None and value < 0:
+            raise serializers.ValidationError("Los story points no pueden ser negativos.")
+        return value
+
+    def validate(self, data):
+        # Sprint y epic deben pertenecer al mismo proyecto
+        sprint = data.get("sprint", getattr(self.instance, "sprint", None))
+        epic = data.get("epic", getattr(self.instance, "epic", None))
+        project = data.get("project", getattr(self.instance, "project", None))
+        if sprint and project and sprint.project_id and sprint.project_id != project.id:
+            raise serializers.ValidationError(
+                "El sprint debe pertenecer al mismo proyecto que la tarea."
+            )
+        if epic and project and epic.project_id and epic.project_id != project.id:
+            raise serializers.ValidationError(
+                "La épica debe pertenecer al mismo proyecto que la tarea."
+            )
+        # No permitir due_date en el pasado para tareas nuevas
+        due_date = data.get("due_date")
+        if due_date and not self.instance:
+            today = timezone.now().date()
+            if hasattr(due_date, "date"):
+                d = due_date.date()
+            else:
+                d = due_date
+            if d < today:
+                raise serializers.ValidationError(
+                    "No puedes crear una tarea con fecha de vencimiento en el pasado."
+                )
+        return data
+
     def create(self, validated_data):
         tags = validated_data.pop("tags", [])
         recurrence_data = validated_data.pop("recurrence_data", None)
@@ -219,6 +308,27 @@ class TimeEntrySerializer(serializers.ModelSerializer):
             "description", "started_at", "ended_at", "created_at",
         ]
         read_only_fields = ["id", "user", "user_email", "created_at"]
+
+    def validate_task(self, value):
+        if value is None:
+            raise serializers.ValidationError("Debes asociar el registro de tiempo a una tarea.")
+        return value
+
+    def validate_duration_seconds(self, value):
+        if value is not None and value <= 0:
+            raise serializers.ValidationError("La duración debe ser mayor que cero.")
+        return value
+
+    def validate_started_at(self, value):
+        if value and not self.instance:
+            today = timezone.now()
+            if hasattr(value, "tzinfo") and value.tzinfo is None:
+                value = timezone.make_aware(value)
+            if value > today + timedelta(minutes=5):
+                raise serializers.ValidationError(
+                    "No puedes registrar tiempo en el futuro."
+                )
+        return value
 
 
 class AttachmentSerializer(serializers.ModelSerializer):

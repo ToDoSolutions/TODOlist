@@ -1,5 +1,6 @@
 import { useState } from "react";
 import { Outlet, useNavigate, useLocation } from "react-router-dom";
+import { useProject } from "../auth/ProjectContext";
 import {
   Box,
   Drawer,
@@ -36,6 +37,7 @@ import {
   Calendar,
   Tag as TagIcon,
   User as UserIcon,
+  X,
   Folder,
   Github,
   Flag,
@@ -81,6 +83,7 @@ export default function AppLayout() {
   const { user, logout } = useAuth();
   const navigate = useNavigate();
   const location = useLocation();
+  const projectCtx = useProject();
   const { mode: themeMode, toggle: toggleTheme } = useThemeMode();
   const { i18n: i18nObj } = useTranslation();
   const changeLang = (lang: string) => {
@@ -160,27 +163,28 @@ export default function AppLayout() {
           <Typography variant="h6" fontWeight={700} ml={1}>
             TODOlist
           </Typography>
+          {projectCtx.project && (
+            <Box sx={{ ml: 2, display: "flex", alignItems: "center", gap: 0.5 }}>
+              <Box sx={{ width: 10, height: 10, borderRadius: "50%", bgcolor: projectCtx.project.color }} />
+              <Typography variant="body2" fontWeight={600}>
+                {projectCtx.project.name}
+              </Typography>
+              <Tooltip title="Quitar filtro de proyecto">
+                <IconButton
+                  size="small"
+                  onClick={() => {
+                    projectCtx.clearProject();
+                    navigate("/app");
+                  }}
+                  sx={{ ml: 0.5 }}
+                >
+                  <X size={14} />
+                </IconButton>
+              </Tooltip>
+            </Box>
+          )}
           <Box sx={{ flexGrow: 1 }} />
           <Box sx={{ display: "flex", alignItems: "center", gap: 1 }}>
-            {isTasksView && (
-              <Stack direction="row" spacing={0.5}>
-                <Tooltip title="Lista">
-                  <IconButton onClick={() => setView("list")} color={view === "list" ? "primary" : "default"}>
-                    <ListIcon size={20} />
-                  </IconButton>
-                </Tooltip>
-                <Tooltip title="Kanban">
-                  <IconButton onClick={() => setView("kanban")} color={view === "kanban" ? "primary" : "default"}>
-                    <Columns size={20} />
-                  </IconButton>
-                </Tooltip>
-                <Tooltip title="Calendario">
-                  <IconButton onClick={() => setView("calendar")} color={view === "calendar" ? "primary" : "default"}>
-                    <Calendar size={20} />
-                  </IconButton>
-                </Tooltip>
-              </Stack>
-            )}
             <Divider orientation="vertical" flexItem sx={{ mx: 1 }} />
             <Tooltip title={themeMode === "dark" ? "Modo claro" : "Modo oscuro"}>
               <IconButton onClick={toggleTheme} color="inherit">
@@ -225,8 +229,11 @@ export default function AppLayout() {
           {/* --- Sección: Principal --- */}
           <List>
             <ListItemButton
-              selected={location.pathname === "/app"}
-              onClick={() => navigate("/app")}
+              selected={location.pathname === "/app" && !projectCtx.project}
+              onClick={() => {
+                projectCtx.clearProject();
+                navigate("/app");
+              }}
             >
               <ListItemIcon>
                 <Inbox size={20} />
@@ -269,7 +276,7 @@ export default function AppLayout() {
             <List>
               <NavItem icon={<LayoutDashboard size={20} />} label="Dashboard" path="/app/dashboard" current={location.pathname} navigate={navigate} />
               <NavItem icon={<Target size={20} />} label="OKRs" path="/app/okrs" current={location.pathname} navigate={navigate} />
-              <NavItem icon={<Lightbulb size={20} />} label="AI Assistant" path="/app/ai-assistant" current={location.pathname} navigate={navigate} />
+              <NavItem icon={<Lightbulb size={20} />} label="Asistente Inteligente" path="/app/ai-assistant" current={location.pathname} navigate={navigate} />
             </List>
           )}
 
@@ -321,8 +328,11 @@ export default function AppLayout() {
             {projects.map((p) => (
               <ListItemButton
                 key={p.id}
-                selected={location.pathname === `/app/project/${p.id}`}
-                onClick={() => navigate(`/app/project/${p.id}?view=${view}`)}
+                selected={location.pathname === `/app/project/${p.id}` || projectCtx.project?.id === p.id}
+                onClick={() => {
+                  projectCtx.setProject({ id: p.id, name: p.name, color: p.color });
+                  navigate(`/app/project/${p.id}?view=${view}`);
+                }}
               >
                 <ListItemIcon>
                   <Folder size={18} color={p.color} />

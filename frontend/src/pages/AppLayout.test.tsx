@@ -17,6 +17,15 @@ vi.mock("../auth/AuthContext", () => ({
   }),
 }));
 
+// Mock project context
+vi.mock("../auth/ProjectContext", () => ({
+  useProject: () => ({
+    project: null,
+    setProject: vi.fn(),
+    clearProject: vi.fn(),
+  }),
+}));
+
 // Mock API resources - simula respuestas paginadas del backend real
 vi.mock("../api/resources", () => ({
   projectsApi: {

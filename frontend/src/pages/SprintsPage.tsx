@@ -41,6 +41,7 @@ import { sprintsApi, type Sprint } from "../api/resources";
 import type { Task } from "../types";
 import { STATE_LABELS, PRIORITY_LABELS } from "../types";
 import { notify } from "../notify";
+import { useProject } from "../auth/ProjectContext";
 
 function formatDate(d: Date) {
   return d.toISOString().split("T")[0];
@@ -48,6 +49,7 @@ function formatDate(d: Date) {
 
 export default function SprintsPage() {
   const qc = useQueryClient();
+  const { project } = useProject();
   const [dialogOpen, setDialogOpen] = useState(false);
   const [closeDialog, setCloseDialog] = useState<Sprint | null>(null);
   const [editDialog, setEditDialog] = useState<Sprint | null>(null);
@@ -77,7 +79,7 @@ export default function SprintsPage() {
   });
 
   const createMut = useMutation({
-    mutationFn: () => sprintsApi.create(form),
+    mutationFn: () => sprintsApi.create({ ...form, project: project?.id || null } as any),
     onSuccess: () => {
       notify.success("Sprint creado");
       qc.invalidateQueries({ queryKey: ["sprints"] });

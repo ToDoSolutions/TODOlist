@@ -27,10 +27,11 @@ import {
 } from "@mui/material";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { Layers, Plus, Trash2, Pencil, Eye } from "lucide-react";
-import { epicsApi, type Epic } from "../api/resources";
+import { epicsApi, projectsApi, type Epic } from "../api/resources";
 import type { Task } from "../types";
 import { STATE_LABELS, PRIORITY_LABELS } from "../types";
 import { notify } from "../notify";
+import { useProject } from "../auth/ProjectContext";
 
 const EPIC_STATES: Epic["state"][] = ["planned", "in_progress", "completed", "cancelled"];
 
@@ -41,6 +42,7 @@ interface EpicForm {
   state: Epic["state"];
   start_date: string;
   end_date: string;
+  project_id: string;
 }
 
 const emptyForm: EpicForm = {
@@ -50,10 +52,12 @@ const emptyForm: EpicForm = {
   state: "planned",
   start_date: "",
   end_date: "",
+  project_id: "",
 };
 
 export default function EpicsPage() {
   const qc = useQueryClient();
+  const { project: ctxProject } = useProject();
   const [dialogOpen, setDialogOpen] = useState(false);
   const [editOpen, setEditOpen] = useState(false);
   const [editingId, setEditingId] = useState<number | null>(null);
@@ -65,6 +69,14 @@ export default function EpicsPage() {
     queryFn: epicsApi.list,
   });
 
+  const { data: projectsData } = useQuery({
+    queryKey: ["projects"],
+    queryFn: projectsApi.list,
+  });
+  const projects = Array.isArray(projectsData)
+    ? projectsData
+    : (projectsData as any)?.results || [];
+
   const { data: epicTasks = [], isLoading: isLoadingEpicTasks } = useQuery({
     queryKey: ["epic-tasks", viewTasksEpic?.id],
     queryFn: () => epicsApi.getTasks(viewTasksEpic!.id),
@@ -72,7 +84,11 @@ export default function EpicsPage() {
   });
 
   const createMut = useMutation({
-    mutationFn: () => epicsApi.create(form),
+    mutationFn: () =>
+      epicsApi.create({
+        ...form,
+        project_id: form.project_id ? Number(form.project_id) : null,
+      } as any),
     onSuccess: () => {
       notify.success("Épica creada");
       qc.invalidateQueries({ queryKey: ["epics"] });
@@ -83,7 +99,11 @@ export default function EpicsPage() {
   });
 
   const updateMut = useMutation({
-    mutationFn: () => epicsApi.update(editingId!, form),
+    mutationFn: () =>
+      epicsApi.update(editingId!, {
+        ...form,
+        project_id: form.project_id ? Number(form.project_id) : null,
+      } as any),
     onSuccess: () => {
       notify.success("Épica actualizada");
       qc.invalidateQueries({ queryKey: ["epics"] });
@@ -126,6 +146,7 @@ export default function EpicsPage() {
       state: epic.state,
       start_date: epic.start_date ?? "",
       end_date: epic.end_date ?? "",
+      project_id: epic.project != null ? String(epic.project) : "",
     });
     setEditOpen(true);
   };
@@ -140,7 +161,7 @@ export default function EpicsPage() {
           variant="contained"
           startIcon={<Plus size={18} />}
           onClick={() => {
-            setForm(emptyForm);
+            setForm({ ...emptyForm, project_id: ctxProject ? String(ctxProject.id) : "" });
             setDialogOpen(true);
           }}
         >
@@ -152,7 +173,7 @@ export default function EpicsPage() {
 
       {epics.length === 0 && !isLoading && (
         <Alert severity="info">
-          No hay épicas. Las épicas agrupan tareas relacionadas para追踪ar el progreso de iniciativas grandes.
+          No hay épicas. Las épicas agrupan tareas relacionadas para rastrear el progreso de iniciativas grandes.
         </Alert>
       )}
 
@@ -239,6 +260,25 @@ export default function EpicsPage() {
               multiline
               rows={3}
             />
+            <FormControl fullWidth>
+              <InputLabel>Proyecto</InputLabel>
+              <Select
+                label="Proyecto"
+                value={form.project_id}
+                onChange={(e) =>
+                  setForm({ ...form, project_id: e.target.value as string })
+                }
+              >
+                <MenuItem value="">
+                  <em>Sin proyecto</em>
+                </MenuItem>
+                {projects.map((p: any) => (
+                  <MenuItem key={p.id} value={String(p.id)}>
+                    {p.name}
+                  </MenuItem>
+                ))}
+              </Select>
+            </FormControl>
             <Stack direction="row" alignItems="center" spacing={2}>
               <Typography variant="body2">Color:</Typography>
               <input
@@ -281,6 +321,25 @@ export default function EpicsPage() {
               multiline
               rows={3}
             />
+            <FormControl fullWidth>
+              <InputLabel>Proyecto</InputLabel>
+              <Select
+                label="Proyecto"
+                value={form.project_id}
+                onChange={(e) =>
+                  setForm({ ...form, project_id: e.target.value as string })
+                }
+              >
+                <MenuItem value="">
+                  <em>Sin proyecto</em>
+                </MenuItem>
+                {projects.map((p: any) => (
+                  <MenuItem key={p.id} value={String(p.id)}>
+                    {p.name}
+                  </MenuItem>
+                ))}
+              </Select>
+            </FormControl>
             <FormControl fullWidth>
               <InputLabel>Estado</InputLabel>
               <Select

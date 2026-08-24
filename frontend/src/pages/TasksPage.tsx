@@ -44,6 +44,7 @@ import KanbanBoard from "../components/KanbanBoard";
 import CalendarView from "../components/CalendarView";
 import TaskTableView from "../components/TaskTableView";
 import { notify } from "../notify";
+import { useProject } from "../auth/ProjectContext";
 
 interface TasksPageProps {
   projectId?: number;
@@ -52,6 +53,8 @@ interface TasksPageProps {
 
 export default function TasksPage({ projectId, title }: TasksPageProps) {
   const [params, setParams] = useSearchParams();
+  const { project: ctxProject } = useProject();
+  const effectiveProjectId = projectId ?? ctxProject?.id;
   const view = (params.get("view") as "list" | "kanban" | "calendar" | "table") || "list";
   const [dialogOpen, setDialogOpen] = useState(false);
   const [editing, setEditing] = useState<Task | null>(null);
@@ -66,14 +69,14 @@ export default function TasksPage({ projectId, title }: TasksPageProps) {
 
   const filters: TaskFilters = useMemo(
     () => ({
-      project: projectId,
+      project: effectiveProjectId,
       state: params.get("state") || undefined,
       priority: params.get("priority") ? Number(params.get("priority")) : undefined,
       tags: params.get("tag") ? Number(params.get("tag")) : undefined,
       search: params.get("q") || undefined,
       ordering: params.get("ordering") || "-created_at",
     }),
-    [projectId, params]
+    [effectiveProjectId, params]
   );
 
   const { data: tasksData, isLoading, error } = useQuery({
@@ -392,25 +395,41 @@ export default function TasksPage({ projectId, title }: TasksPageProps) {
       ) : (
         <Stack spacing={1}>
           {tasks.length > 0 && (
-            <Box sx={{ display: "flex", alignItems: "center", gap: 1 }}>
+            <Box sx={{ display: "flex", alignItems: "center", gap: 1, ml: 0.5 }}>
               <Checkbox
                 size="small"
                 checked={selected.size === tasks.length && tasks.length > 0}
                 indeterminate={selected.size > 0 && selected.size < tasks.length}
                 onChange={toggleSelectAll}
+                sx={{ opacity: selected.size > 0 ? 1 : 0.5 }}
               />
               <Typography variant="caption" color="text.secondary">
-                Seleccionar todo
+                {selected.size > 0 ? `${selected.size} seleccionada${selected.size > 1 ? "s" : ""} — usa las acciones arriba` : "Seleccionar todo para acciones en lote"}
               </Typography>
             </Box>
           )}
           {tasks.map((t) => (
-            <Box key={t.id} sx={{ display: "flex", alignItems: "flex-start", gap: 0.5 }}>
+            <Box
+              key={t.id}
+              sx={{
+                display: "flex",
+                alignItems: "flex-start",
+                gap: 0.5,
+                "&:hover .select-checkbox": { opacity: 1 },
+              }}
+            >
               <Checkbox
+                className="select-checkbox"
                 size="small"
                 checked={selected.has(t.id)}
                 onChange={() => toggleSelect(t.id)}
-                sx={{ mt: 0.5 }}
+                sx={{
+                  mt: 0.5,
+                  opacity: selected.has(t.id) ? 1 : 0,
+                  transition: "opacity 0.2s",
+                  color: "primary.main",
+                  "&.Mui-checked": { opacity: 1 },
+                }}
               />
               <Box sx={{ flex: 1 }}>
                 <TaskListItem task={t} onEdit={openEdit} />
@@ -423,7 +442,7 @@ export default function TasksPage({ projectId, title }: TasksPageProps) {
       <TaskDialog
         open={dialogOpen}
         task={editing}
-        defaultProjectId={projectId}
+        defaultProjectId={effectiveProjectId}
         onClose={() => setDialogOpen(false)}
         onSaved={onSaved}
       />

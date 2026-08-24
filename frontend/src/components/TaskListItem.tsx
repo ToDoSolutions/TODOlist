@@ -21,6 +21,7 @@ import {
   History,
   ChevronDown,
   ChevronRight,
+  Target,
 } from "lucide-react";
 import { useState } from "react";
 import { format, isPast, isToday } from "date-fns";
@@ -153,6 +154,15 @@ export default function TaskListItem({ task, onEdit }: Props) {
               label={PRIORITY_LABELS[task.priority]}
               sx={{ height: 20, fontSize: 11 }}
             />
+            {task.sprint_name && (
+              <Chip
+                size="small"
+                variant="outlined"
+                icon={<Target size={12} />}
+                label={task.sprint_name}
+                sx={{ height: 20, fontSize: 11, bgcolor: "primary.light", borderColor: "primary.main" }}
+              />
+            )}
             {due && (
               <Chip
                 size="small"

@@ -147,10 +147,16 @@ export default function TeamsPage() {
 
   return (
     <Box maxWidth={900} mx="auto">
-      <Stack direction="row" alignItems="center" spacing={1} mb={3}>
+      <Stack direction="row" alignItems="center" spacing={1} mb={1}>
         <Users size={24} color="#1976d2" />
-        <Typography variant="h5" fontWeight={700}>Equipos y Menciones</Typography>
+        <Typography variant="h5" fontWeight={700}>Equipos y Colaboración</Typography>
       </Stack>
+      <Typography variant="body2" color="text.secondary" mb={2}>
+        Gestiona equipos de trabajo, invita miembros a proyectos y consulta menciones.
+        Los <strong>equipos</strong> agrupan personas por área (frontend, backend, devops).
+        Los <strong>miembros de proyecto</strong> controlan quién tiene acceso a cada proyecto y con qué rol.
+        Las <strong>menciones</strong> te avisan cuando alguien te etiqueta en una tarea o comentario.
+      </Typography>
 
       <Tabs value={tab} onChange={(_, v) => setTab(v)} sx={{ mb: 2 }}>
         <Tab icon={<Users size={16} />} iconPosition="start" label="Equipos" />

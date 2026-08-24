@@ -3,6 +3,7 @@ import { Routes, Route, Navigate, useLocation, useParams } from "react-router-do
 import { useQuery } from "@tanstack/react-query";
 import { CircularProgress, Box } from "@mui/material";
 import { AuthProvider, useAuth } from "./auth/AuthContext";
+import { ProjectProvider } from "./auth/ProjectContext";
 import AppLayout from "./pages/AppLayout";
 import { projectsApi } from "./api/resources";
 
@@ -82,6 +83,7 @@ function ProjectTasks() {
 export default function App() {
   return (
     <AuthProvider>
+      <ProjectProvider>
       <Suspense fallback={<Loading />}>
         <Routes>
           <Route path="/login" element={<PublicOnly><LoginPage /></PublicOnly>} />
@@ -127,6 +129,7 @@ export default function App() {
           <Route path="*" element={<Navigate to="/app" replace />} />
         </Routes>
       </Suspense>
+      </ProjectProvider>
     </AuthProvider>
   );
 }

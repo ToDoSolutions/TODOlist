@@ -118,7 +118,7 @@ export default function AiAssistantPage() {
     <Box>
       <Typography variant="h5" gutterBottom>
         <Lightbulb size={24} style={{ verticalAlign: "middle", marginRight: 8 }} />
-        AI Assistant
+        Asistente Inteligente
       </Typography>
 
       {/* Task Analysis Section */}
@@ -128,7 +128,7 @@ export default function AiAssistantPage() {
           Análisis de tarea
         </Typography>
         <Typography variant="body2" color="textSecondary" sx={{ mb: 2 }}>
-          Ingresa el ID de una tarea y usa las acciones de IA para analizarla.
+          Ingresa el ID de una tarea y usa las sugerencias automáticas para analizarla.
         </Typography>
         <Stack direction="row" spacing={2} sx={{ mb: 2, alignItems: "center" }}>
           <TextField

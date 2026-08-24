@@ -22,7 +22,7 @@ import {
 } from "@mui/material";
 import { Plus, Trash2, Settings } from "lucide-react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
-import { customFieldsApi } from "../api/resources";
+import { customFieldsApi, projectsApi } from "../api/resources";
 import { notify } from "../notify";
 
 const FIELD_TYPES = ["text", "number", "select", "multiselect", "date"] as const;
@@ -32,7 +32,8 @@ export default function CustomFieldsPage() {
   const qc = useQueryClient();
   const [dialogOpen, setDialogOpen] = useState(false);
   const [deleteId, setDeleteId] = useState<number | null>(null);
-  const [form, setForm] = useState<{ name: string; type: FieldType; options: string }>({
+  const [form, setForm] = useState<{ project_id: string; name: string; type: FieldType; options: string }>({
+    project_id: "",
     name: "",
     type: "text",
     options: "",
@@ -45,6 +46,12 @@ export default function CustomFieldsPage() {
     fieldId: 0,
     value: "",
   });
+
+  const { data: projectsData } = useQuery({
+    queryKey: ["projects"],
+    queryFn: projectsApi.list,
+  });
+  const projects = Array.isArray(projectsData) ? projectsData : (projectsData as any)?.results || [];
 
   const { data: fields, isLoading } = useQuery({
     queryKey: ["custom-fields"],
@@ -89,7 +96,7 @@ export default function CustomFieldsPage() {
   });
 
   const handleCreate = () => {
-    const payload: any = { name: form.name, type: form.type };
+    const payload: any = { name: form.name, type: form.type, project: Number(form.project_id) };
     if (form.type === "select" || form.type === "multiselect") {
       payload.options = form.options
         .split(",")
@@ -116,6 +123,9 @@ export default function CustomFieldsPage() {
 
   return (
     <Box maxWidth={900} mx="auto">
+      <Alert severity="info" sx={{ mb: 3 }}>
+        Los campos personalizados permiten añadir información extra a tus tareas más allá de los campos estándar. Por ejemplo: Cliente, Tipo de bug, Severidad, Sprint objetivo, etc.
+      </Alert>
       <Stack direction="row" alignItems="center" justifyContent="space-between" mb={3}>
         <Stack direction="row" alignItems="center" spacing={1}>
           <Settings size={24} color="#1976d2" />
@@ -124,7 +134,7 @@ export default function CustomFieldsPage() {
         <Button
           variant="contained"
           startIcon={<Plus size={18} />}
-          onClick={() => { setForm({ name: "", type: "text", options: "" }); setDialogOpen(true); }}
+          onClick={() => { setForm({ project_id: "", name: "", type: "text", options: "" }); setDialogOpen(true); }}
         >
           Nuevo campo
         </Button>
@@ -269,6 +279,22 @@ export default function CustomFieldsPage() {
         <DialogTitle>Crear campo personalizado</DialogTitle>
         <DialogContent>
           <Stack spacing={2} sx={{ mt: 1 }}>
+            <FormControl fullWidth size="small" required>
+              <InputLabel>Proyecto</InputLabel>
+              <Select
+                value={form.project_id}
+                label="Proyecto *"
+                onChange={(e) => setForm({ ...form, project_id: e.target.value as string })}
+              >
+                <MenuItem value="" disabled>Selecciona un proyecto</MenuItem>
+                {projects.map((p: any) => (
+                  <MenuItem key={p.id} value={p.id}>{p.name}</MenuItem>
+                ))}
+              </Select>
+            </FormControl>
+            <Alert severity="info">
+              Los campos personalizados se definen por proyecto y permiten añadir metadata extra a las tareas (ej: Cliente, Tipo de bug, Severidad)
+            </Alert>
             <TextField
               label="Nombre"
               value={form.name}
@@ -305,7 +331,7 @@ export default function CustomFieldsPage() {
           <Button
             variant="contained"
             onClick={handleCreate}
-            disabled={!form.name || createMut.isPending}
+            disabled={!form.name || !form.project_id || createMut.isPending}
           >
             Crear
           </Button>

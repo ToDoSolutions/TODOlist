@@ -210,7 +210,7 @@ class GitHubCommit(models.Model):
 
 
 class GitHubRelease(models.Model):
-    """Release de GitHub para追踪ar versiones y trabajo asociado."""
+    """Release de GitHub para rastrear versiones y trabajo asociado."""
 
     class ReleaseState(models.TextChoices):
         DRAFT = "draft", "Borrador"
