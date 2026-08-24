@@ -13,6 +13,7 @@ import {
 } from "@mui/material";
 import { useNavigate, Link as RouterLink, useLocation } from "react-router-dom";
 import { useAuth } from "../auth/AuthContext";
+import { notify } from "../notify";
 import { useState } from "react";
 
 const schema = z.object({
@@ -38,10 +39,13 @@ export default function LoginPage() {
     setServerError("");
     try {
       await login(values.email, values.password);
+      notify.success("Sesión iniciada");
       const dest = (location.state as { from?: string })?.from || "/app";
       navigate(dest);
     } catch (e: any) {
-      setServerError(e.response?.data?.detail || "No se pudo iniciar sesión.");
+      const msg = e.response?.data?.detail || "No se pudo iniciar sesión.";
+      setServerError(msg);
+      notify.error(msg);
     }
   };
 

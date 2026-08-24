@@ -6,6 +6,8 @@ import LoginPage from "./pages/LoginPage";
 import RegisterPage from "./pages/RegisterPage";
 import AppLayout from "./pages/AppLayout";
 import TasksPage from "./pages/TasksPage";
+import TagsPage from "./pages/TagsPage";
+import ProfilePage from "./pages/ProfilePage";
 import { projectsApi } from "./api/resources";
 
 function Protected({ children }: { children: React.ReactNode }) {
@@ -56,6 +58,8 @@ export default function App() {
         >
           <Route index element={<TasksPage title="Bandeja de entrada" />} />
           <Route path="project/:projectId" element={<ProjectTasks />} />
+          <Route path="tags" element={<TagsPage />} />
+          <Route path="profile" element={<ProfilePage />} />
         </Route>
         <Route path="*" element={<Navigate to="/app" replace />} />
       </Routes>

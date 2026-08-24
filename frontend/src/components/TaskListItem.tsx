@@ -12,6 +12,7 @@ import { format, isPast, isToday } from "date-fns";
 import { es } from "date-fns/locale";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { tasksApi } from "../api/resources";
+import { notify } from "../notify";
 import {
   Task,
   TaskState,
@@ -37,7 +38,10 @@ export default function TaskListItem({ task, onEdit }: Props) {
             ? ("pending" as TaskState)
             : ("completed" as TaskState),
       }),
-    onSuccess: () => qc.invalidateQueries({ queryKey: ["tasks"] }),
+    onSuccess: () => {
+      notify.success(task.state === "completed" ? "Tarea reabierta" : "Tarea completada");
+      qc.invalidateQueries({ queryKey: ["tasks"] });
+    },
   });
 
   const due = task.due_date ? new Date(task.due_date) : null;

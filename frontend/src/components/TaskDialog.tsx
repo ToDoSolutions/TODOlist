@@ -21,6 +21,7 @@ import { Trash2, Plus, Send } from "lucide-react";
 import { Controller, useForm } from "react-hook-form";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { projectsApi, tagsApi, tasksApi } from "../api/resources";
+import { notify } from "../notify";
 import {
   Task,
   TaskInput,
@@ -113,9 +114,15 @@ export default function TaskDialog({
       if (task) return tasksApi.update(task.id, payload);
       return tasksApi.create(payload);
     },
-    onSuccess: onSaved,
-    onError: (e: any) =>
-      setServerError(e.response?.data?.title?.[0] || "No se pudo guardar."),
+    onSuccess: () => {
+      notify.success(task ? "Tarea actualizada" : "Tarea creada");
+      onSaved();
+    },
+    onError: (e: any) => {
+      const msg = e.response?.data?.title?.[0] || "No se pudo guardar.";
+      setServerError(msg);
+      notify.error(msg);
+    },
   });
 
   const addSubtask = useMutation({
@@ -148,6 +155,7 @@ export default function TaskDialog({
   const removeTask = useMutation({
     mutationFn: () => tasksApi.remove(task!.id),
     onSuccess: () => {
+      notify.success("Tarea eliminada");
       qc.invalidateQueries({ queryKey: ["tasks"] });
       qc.invalidateQueries({ queryKey: ["projects"] });
       onSaved();

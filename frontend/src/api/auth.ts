@@ -20,6 +20,10 @@ export const authApi = {
     const { data } = await api.get<User>("/auth/me/");
     return data;
   },
+  async updateMe(payload: Partial<Pick<User, "username" | "timezone" | "locale">>) {
+    const { data } = await api.patch<User>("/auth/me/", payload);
+    return data;
+  },
   logout() {
     tokenStorage.clear();
   },

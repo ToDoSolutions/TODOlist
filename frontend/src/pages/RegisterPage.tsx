@@ -13,6 +13,7 @@ import {
 } from "@mui/material";
 import { useNavigate, Link as RouterLink } from "react-router-dom";
 import { useAuth } from "../auth/AuthContext";
+import { notify } from "../notify";
 import { useState } from "react";
 
 const schema = z
@@ -44,14 +45,16 @@ export default function RegisterPage() {
     setServerError("");
     try {
       await registerUser(values.email, values.username, values.password);
+      notify.success("Cuenta creada");
       navigate("/app");
     } catch (e: any) {
       const data = e.response?.data;
-      setServerError(
+      const msg =
         typeof data === "string"
           ? data
-          : data?.email?.[0] || data?.username?.[0] || "No se pudo registrar."
-      );
+          : data?.email?.[0] || data?.username?.[0] || "No se pudo registrar.";
+      setServerError(msg);
+      notify.error(msg);
     }
   };
 

@@ -4,6 +4,7 @@ import { format } from "date-fns";
 import { es } from "date-fns/locale";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { tasksApi } from "../api/resources";
+import { notify } from "../notify";
 import {
   Task,
   TaskState,
@@ -25,7 +26,10 @@ export default function KanbanBoard({ tasks, onEdit }: Props) {
   const move = useMutation({
     mutationFn: ({ id, state }: { id: number; state: TaskState }) =>
       tasksApi.update(id, { state }),
-    onSuccess: () => qc.invalidateQueries({ queryKey: ["tasks"] }),
+    onSuccess: () => {
+      notify.info("Tarea movida");
+      qc.invalidateQueries({ queryKey: ["tasks"] });
+    },
   });
 
   const onDrop = (e: React.DragEvent, state: TaskState) => {
