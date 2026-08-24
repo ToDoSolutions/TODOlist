@@ -10,13 +10,20 @@ from rest_framework.response import Response
 
 from apps.tasks.models import Task
 from .github_client import GitHubAppClient, GitHubOAuthClient
-from .models import GitHubInstallation, GitHubRepo, GitHubIssueLink
+from .models import (
+    GitHubInstallation, GitHubRepo, GitHubIssueLink,
+    GitHubPullRequest, GitHubCommit, GitHubRelease, GitHubCheckRun,
+)
 from .serializers import (
     GitHubInstallationSerializer,
     GitHubRepoSerializer,
     GitHubIssueLinkSerializer,
     ImportIssuesSerializer,
     CreateIssueSerializer,
+    GitHubPullRequestSerializer,
+    GitHubCommitSerializer,
+    GitHubReleaseSerializer,
+    GitHubCheckRunSerializer,
 )
 from .sync_service import (
     create_issue_for_task,
@@ -258,6 +265,107 @@ class GitHubIssueLinkViewSet(
                 status=status.HTTP_502_BAD_GATEWAY,
             )
         return Response({"message": "Sincronización completada"})
+
+
+# --- Pull Requests, Commits, Releases, CI ---
+
+class GitHubPullRequestViewSet(
+    mixins.ListModelMixin,
+    mixins.RetrieveModelMixin,
+    viewsets.GenericViewSet,
+):
+    """Lista y detalle de PRs sincronizados."""
+    serializer_class = GitHubPullRequestSerializer
+    permission_classes = [IsAuthenticated]
+
+    def get_queryset(self):
+        return GitHubPullRequest.objects.filter(
+            repo__installation__user=self.request.user
+        ).select_related("repo")
+
+    @action(detail=True, methods=["post"])
+    def link_task(self, request, pk=None):
+        """Vincula manualmente un PR a una tarea."""
+        pr = self.get_object()
+        task_id = request.data.get("task_id")
+        if not task_id:
+            return Response(
+                {"error": "task_id requerido"},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+        from apps.tasks.models import Task
+        try:
+            task = Task.objects.get(id=task_id, owner=request.user)
+        except Task.DoesNotExist:
+            return Response(
+                {"error": "Tarea no encontrada"},
+                status=status.HTTP_404_NOT_FOUND,
+            )
+        pr.tasks.add(task)
+        return Response({"message": f"PR #{pr.pr_number} vinculado a tarea {task_id}"})
+
+
+class GitHubCommitViewSet(
+    mixins.ListModelMixin,
+    mixins.RetrieveModelMixin,
+    viewsets.GenericViewSet,
+):
+    """Lista y detalle de commits sincronizados."""
+    serializer_class = GitHubCommitSerializer
+    permission_classes = [IsAuthenticated]
+
+    def get_queryset(self):
+        return GitHubCommit.objects.filter(
+            repo__installation__user=self.request.user
+        ).select_related("repo")
+
+
+class GitHubReleaseViewSet(
+    mixins.ListModelMixin,
+    mixins.RetrieveModelMixin,
+    viewsets.GenericViewSet,
+):
+    """Lista y detalle de releases sincronizados."""
+    serializer_class = GitHubReleaseSerializer
+    permission_classes = [IsAuthenticated]
+
+    def get_queryset(self):
+        return GitHubRelease.objects.filter(
+            repo__installation__user=self.request.user
+        ).select_related("repo")
+
+    @action(detail=True, methods=["get"])
+    def progress(self, request, pk=None):
+        """Progreso de una release: tareas completadas vs pendientes."""
+        release = self.get_object()
+        tasks = release.tasks.all()
+        total = tasks.count()
+        done = tasks.filter(state="completed").count()
+        prs = release.pull_requests.all()
+        prs_merged = prs.filter(is_merged=True).count()
+        return Response({
+            "tasks_total": total,
+            "tasks_done": done,
+            "tasks_pending": total - done,
+            "prs_total": prs.count(),
+            "prs_merged": prs_merged,
+            "prs_pending": prs.count() - prs_merged,
+            "progress_pct": round((done / total * 100) if total > 0 else 0, 1),
+        })
+
+
+class GitHubCheckRunViewSet(
+    mixins.ListModelMixin,
+    viewsets.GenericViewSet,
+):
+    """Lista de check runs (CI/CD)."""
+    serializer_class = GitHubCheckRunSerializer
+    permission_classes = [IsAuthenticated]
+
+    def get_queryset(self):
+        return GitHubCheckRun.objects.filter(
+            repo__installation__user=self.request.user
+        ).select_related("repo", "pull_request")
 
 
 # --- OAuth Login con GitHub ---

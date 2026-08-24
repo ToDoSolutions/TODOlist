@@ -84,6 +84,15 @@ export const tasksApi = {
         sprint_id: sprintId,
       })
       .then((r) => r.data),
+  // Métricas
+  metricsFlow: (days = 30) =>
+    api.get(`/tasks/metrics_flow/?days=${days}`).then((r) => r.data),
+  metricsBacklog: () =>
+    api.get("/tasks/metrics_backlog/").then((r) => r.data),
+  metricsDashboard: () =>
+    api.get("/tasks/metrics_dashboard/").then((r) => r.data),
+  metricsPRs: () =>
+    api.get("/tasks/metrics_prs/").then((r) => r.data),
 };
 
 // --- Sprints ---

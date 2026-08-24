@@ -15,6 +15,10 @@ from .serializers import (
     EpicSerializer,
     SavedSearchSerializer,
 )
+from .metrics import (
+    get_flow_metrics, get_backlog_health, get_sprint_metrics,
+    get_dashboard_summary, get_pr_metrics,
+)
 
 
 class TaskCreateUpdateViewSetMixin:
@@ -175,6 +179,29 @@ class TaskViewSet(TaskCreateUpdateViewSetMixin, viewsets.ModelViewSet):
         )
         return Response({"message": f"Tarea movida a {sprint.name}"})
 
+    # --- Métricas ---
+
+    @action(detail=False, methods=["get"])
+    def metrics_flow(self, request):
+        """Métricas de flujo: lead time, cycle time, throughput, WIP."""
+        days = int(request.query_params.get("days", 30))
+        return Response(get_flow_metrics(request.user, days))
+
+    @action(detail=False, methods=["get"])
+    def metrics_backlog(self, request):
+        """Salud del backlog."""
+        return Response(get_backlog_health(request.user))
+
+    @action(detail=False, methods=["get"])
+    def metrics_dashboard(self, request):
+        """Dashboard general: resumen ejecutivo."""
+        return Response(get_dashboard_summary(request.user))
+
+    @action(detail=False, methods=["get"])
+    def metrics_prs(self, request):
+        """Métricas de pull requests."""
+        return Response(get_pr_metrics(request.user))
+
 
 class SubtaskViewSet(viewsets.ModelViewSet):
     serializer_class = SubtaskSerializer
@@ -253,6 +280,17 @@ class SprintViewSet(viewsets.ModelViewSet):
             return Response(None)
         serializer = self.get_serializer(sprint)
         return Response(serializer.data)
+
+    @action(detail=True, methods=["get"])
+    def metrics(self, request, pk=None):
+        """Métricas de un sprint específico."""
+        result = get_sprint_metrics(request.user, pk)
+        if result is None:
+            return Response(
+                {"error": "Sprint no encontrado"},
+                status=status.HTTP_404_NOT_FOUND,
+            )
+        return Response(result)
 
 
 class EpicViewSet(viewsets.ModelViewSet):

@@ -16,6 +16,7 @@ const IntegrationsPage = lazy(() => import("./pages/IntegrationsPage"));
 const GitHubCallbackPage = lazy(() => import("./pages/GitHubCallbackPage"));
 const SprintsPage = lazy(() => import("./pages/SprintsPage"));
 const EpicsPage = lazy(() => import("./pages/EpicsPage"));
+const DashboardPage = lazy(() => import("./pages/DashboardPage"));
 
 function Loading() {
   return (
@@ -81,6 +82,7 @@ export default function App() {
             <Route path="integrations" element={<IntegrationsPage />} />
             <Route path="sprints" element={<SprintsPage />} />
             <Route path="epics" element={<EpicsPage />} />
+            <Route path="dashboard" element={<DashboardPage />} />
           </Route>
           <Route path="*" element={<Navigate to="/app" replace />} />
         </Routes>

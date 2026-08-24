@@ -38,6 +38,7 @@ import {
   Github,
   Flag,
   Layers,
+  BarChart3,
 } from "lucide-react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { projectsApi, tasksApi } from "../api/resources";
@@ -216,6 +217,15 @@ export default function AppLayout() {
                 <Layers size={20} />
               </ListItemIcon>
               <ListItemText primary="Épicas" />
+            </ListItemButton>
+            <ListItemButton
+              selected={location.pathname === "/app/dashboard"}
+              onClick={() => navigate("/app/dashboard")}
+            >
+              <ListItemIcon>
+                <BarChart3 size={20} />
+              </ListItemIcon>
+              <ListItemText primary="Dashboard" />
             </ListItemButton>
           </List>
           <Divider />

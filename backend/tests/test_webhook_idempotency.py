@@ -237,10 +237,18 @@ class TestWebhookDeliveryAPI:
 @pytest.mark.django_db
 class TestWebhookPRAndRelease:
     @patch("apps.integrations.views.GitHubAppClient.verify_webhook_signature", return_value=True)
-    def test_webhook_pull_request(self, mock_verify, api_client):
+    def test_webhook_pull_request(self, mock_verify, api_client, github_repo):
         payload = {
             "action": "opened",
-            "pull_request": {"number": 42, "state": "open", "merged": False},
+            "pull_request": {
+                "id": 9001, "number": 42, "title": "Fix bug",
+                "state": "open", "merged": False,
+                "html_url": "https://github.com/testuser/my-repo/pull/42",
+                "head": {"ref": "fix"}, "base": {"ref": "main"},
+                "user": {"login": "dev1"},
+                "created_at": "2025-01-01T00:00:00Z",
+                "review_comments": 0,
+            },
             "repository": {"full_name": "testuser/my-repo"},
         }
         resp = api_client.post(
@@ -248,16 +256,22 @@ class TestWebhookPRAndRelease:
             data=json.dumps(payload),
             content_type="application/json",
             HTTP_X_GITHUB_EVENT="pull_request",
-            HTTP_X_GITHUB_DELIVERY="delivery-pr-001",
+            HTTP_X_GITHUB_DELIVERY="delivery-pr-idem-001",
         )
         assert resp.status_code == 200
         assert "PR #42" in resp.data["message"]
 
     @patch("apps.integrations.views.GitHubAppClient.verify_webhook_signature", return_value=True)
-    def test_webhook_release(self, mock_verify, api_client):
+    def test_webhook_release(self, mock_verify, api_client, github_repo):
         payload = {
             "action": "published",
-            "release": {"tag_name": "v1.0.0"},
+            "release": {
+                "id": 8001, "tag_name": "v1.0.0", "name": "Release 1",
+                "body": "", "html_url": "https://github.com/testuser/my-repo/releases/v1.0.0",
+                "prerelease": False,
+                "author": {"login": "dev1"},
+                "published_at": "2025-01-01T00:00:00Z",
+            },
             "repository": {"full_name": "testuser/my-repo"},
         }
         resp = api_client.post(
@@ -265,7 +279,7 @@ class TestWebhookPRAndRelease:
             data=json.dumps(payload),
             content_type="application/json",
             HTTP_X_GITHUB_EVENT="release",
-            HTTP_X_GITHUB_DELIVERY="delivery-release-001",
+            HTTP_X_GITHUB_DELIVERY="delivery-release-idem-001",
         )
         assert resp.status_code == 200
         assert "v1.0.0" in resp.data["message"]

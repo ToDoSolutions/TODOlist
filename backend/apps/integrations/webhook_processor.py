@@ -77,6 +77,8 @@ def _dispatch_event(event_type, action, payload):
         return _handle_pr_event(action, payload)
     elif event_type == "release":
         return _handle_release_event(action, payload)
+    elif event_type == "check_run":
+        return _handle_check_run_event(action, payload)
     return {"message": f"Event {event_type}/{action} no handler"}
 
 
@@ -153,22 +155,146 @@ def _handle_installation_event(action, payload):
 
 
 def _handle_pr_event(action, payload):
-    """Maneja eventos de pull requests (registro para futura trazabilidad)."""
-    pr = payload.get("pull_request", {})
+    """Maneja eventos de pull requests: crea/actualiza el PR en la BD."""
+    from .models import GitHubPullRequest, GitHubRepo
+    from django.utils import timezone
+
+    pr_data = payload.get("pull_request", {})
     repo_info = payload.get("repository", {})
+    repo_full_name = repo_info.get("full_name", "")
+    pr_number = pr_data.get("number")
+
+    if not pr_number or not repo_full_name:
+        return {"message": "Missing PR data"}
+
+    repo = GitHubRepo.objects.filter(full_name=repo_full_name).first()
+    if not repo:
+        return {"message": f"Repo {repo_full_name} not tracked"}
+
+    pr, created = GitHubPullRequest.objects.update_or_create(
+        repo=repo, pr_number=pr_number,
+        defaults={
+            "pr_id": pr_data.get("id", 0),
+            "title": pr_data.get("title", "")[:500],
+            "state": pr_data.get("state", "open"),
+            "is_merged": pr_data.get("merged", False),
+            "is_draft": pr_data.get("draft", False),
+            "html_url": pr_data.get("html_url", ""),
+            "head_branch": pr_data.get("head", {}).get("ref", ""),
+            "base_branch": pr_data.get("base", {}).get("ref", ""),
+            "author": pr_data.get("user", {}).get("login", ""),
+            "created_at_gh": pr_data.get("created_at"),
+            "merged_at": pr_data.get("merged_at"),
+            "closed_at": pr_data.get("closed_at"),
+            "review_comments_count": pr_data.get("review_comments", 0),
+        },
+    )
+
+    # Detectar tareas referenciadas por #number en el body/title
+    import re
+    text = (pr_data.get("body") or "") + " " + pr_data.get("title", "")
+    issue_refs = set(int(m) for m in re.findall(r"#(\d+)", text))
+    if issue_refs:
+        from apps.tasks.models import Task
+        from .models import GitHubIssueLink
+        for issue_num in issue_refs:
+            link = GitHubIssueLink.objects.filter(
+                repo=repo, issue_number=issue_num
+            ).first()
+            if link:
+                pr.tasks.add(link.task)
+
     return {
-        "message": f"PR #{pr.get('number')} {action} en {repo_info.get('full_name')}",
-        "pr_state": pr.get("state"),
-        "pr_merged": pr.get("merged", False),
+        "message": f"PR #{pr_number} {action} en {repo_full_name}",
+        "pr_state": pr_data.get("state"),
+        "pr_merged": pr_data.get("merged", False),
+        "created": created,
     }
 
 
 def _handle_release_event(action, payload):
-    """Maneja eventos de releases."""
-    release = payload.get("release", {})
+    """Maneja eventos de releases: crea/actualiza el release en la BD."""
+    from .models import GitHubRelease, GitHubRepo
+
+    release_data = payload.get("release", {})
     repo_info = payload.get("repository", {})
+    repo_full_name = repo_info.get("full_name", "")
+    tag = release_data.get("tag_name", "")
+
+    if not tag or not repo_full_name:
+        return {"message": "Missing release data"}
+
+    repo = GitHubRepo.objects.filter(full_name=repo_full_name).first()
+    if not repo:
+        return {"message": f"Repo {repo_full_name} not tracked"}
+
+    release, created = GitHubRelease.objects.update_or_create(
+        release_id=release_data.get("id", 0),
+        defaults={
+            "repo": repo,
+            "tag_name": tag,
+            "name": (release_data.get("name") or "")[:500],
+            "body": release_data.get("body") or "",
+            "html_url": release_data.get("html_url", ""),
+            "state": "prerelease" if release_data.get("prerelease") else "published",
+            "is_prerelease": release_data.get("prerelease", False),
+            "author": release_data.get("author", {}).get("login", ""),
+            "published_at": release_data.get("published_at"),
+        },
+    )
+
     return {
-        "message": f"Release {release.get('tag_name')} {action} en {repo_info.get('full_name')}",
+        "message": f"Release {tag} {action} en {repo_full_name}",
+        "created": created,
+    }
+
+
+def _handle_check_run_event(action, payload):
+    """Maneja eventos de check_run (CI/CD)."""
+    from .models import GitHubCheckRun, GitHubRepo, GitHubPullRequest
+
+    check_data = payload.get("check_run", {})
+    repo_info = payload.get("repository", {})
+    repo_full_name = repo_info.get("full_name", "")
+
+    if not repo_full_name:
+        return {"message": "Missing repo data"}
+
+    repo = GitHubRepo.objects.filter(full_name=repo_full_name).first()
+    if not repo:
+        return {"message": f"Repo {repo_full_name} not tracked"}
+
+    check, created = GitHubCheckRun.objects.update_or_create(
+        check_id=check_data.get("id", 0),
+        defaults={
+            "repo": repo,
+            "name": check_data.get("name", "")[:255],
+            "status": check_data.get("status", "queued"),
+            "conclusion": check_data.get("conclusion") or "",
+            "html_url": check_data.get("html_url", ""),
+            "started_at": check_data.get("started_at"),
+            "completed_at": check_data.get("completed_at"),
+            "commit_sha": check_data.get("head_sha", ""),
+        },
+    )
+
+    # Actualizar el CI status del PR si existe
+    pr_data = check_data.get("pull_requests", [])
+    if pr_data:
+        pr_number = pr_data[0].get("number")
+        pr = GitHubPullRequest.objects.filter(repo=repo, pr_number=pr_number).first()
+        if pr:
+            check.pull_request = pr
+            check.save(update_fields=["pull_request"])
+            # Actualizar CI status del PR
+            conclusion = check_data.get("conclusion") or ""
+            pr.ci_status = conclusion or check_data.get("status", "")
+            pr.ci_url = check_data.get("html_url", "")
+            pr.save(update_fields=["ci_status", "ci_url"])
+
+    return {
+        "message": f"Check {check_data.get('name')} {check_data.get('status')} en {repo_full_name}",
+        "created": created,
     }
 
 

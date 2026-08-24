@@ -6,6 +6,10 @@ from .views import (
     GitHubInstallationViewSet,
     GitHubRepoViewSet,
     GitHubIssueLinkViewSet,
+    GitHubPullRequestViewSet,
+    GitHubCommitViewSet,
+    GitHubReleaseViewSet,
+    GitHubCheckRunViewSet,
     github_oauth_start,
     github_oauth_callback,
     github_webhook,
@@ -19,6 +23,10 @@ router.register(
 )
 router.register(r"github/repos", GitHubRepoViewSet, basename="github-repo")
 router.register(r"github/links", GitHubIssueLinkViewSet, basename="github-link")
+router.register(r"github/prs", GitHubPullRequestViewSet, basename="github-pr")
+router.register(r"github/commits", GitHubCommitViewSet, basename="github-commit")
+router.register(r"github/releases", GitHubReleaseViewSet, basename="github-release")
+router.register(r"github/checks", GitHubCheckRunViewSet, basename="github-check")
 
 urlpatterns = [
     path("auth/github/start/", github_oauth_start, name="github_oauth_start"),
