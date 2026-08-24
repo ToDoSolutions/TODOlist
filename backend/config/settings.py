@@ -50,6 +50,7 @@ INSTALLED_APPS = [
     "apps.integrations",
     "apps.notifications",
     "apps.automations",
+    "apps.collaboration",
 ]
 
 MIDDLEWARE = [

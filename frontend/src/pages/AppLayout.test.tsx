@@ -66,6 +66,25 @@ vi.mock("../api/resources", () => ({
     test: vi.fn(),
     logs: vi.fn().mockResolvedValue({ results: [] }),
   },
+  collaborationApi: {
+    teams: {
+      list: vi.fn().mockResolvedValue({ results: [] }),
+      create: vi.fn(),
+      members: vi.fn().mockResolvedValue([]),
+      addMember: vi.fn(),
+      removeMember: vi.fn(),
+    },
+    projectMembers: {
+      list: vi.fn().mockResolvedValue({ results: [] }),
+      invite: vi.fn(),
+    },
+    mentions: {
+      list: vi.fn().mockResolvedValue({ results: [] }),
+    },
+    auditLogs: {
+      list: vi.fn().mockResolvedValue({ results: [] }),
+    },
+  },
 }));
 
 // Mock notistack

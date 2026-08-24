@@ -127,6 +127,35 @@ export const automationsApi = {
     api.get(`/automation-rules/${id}/logs/`).then((r) => r.data),
 };
 
+export const collaborationApi = {
+  // Teams
+  teams: {
+    list: () => api.get("/teams/").then((r) => r.data),
+    create: (data: any) => api.post("/teams/", data).then((r) => r.data),
+    members: (teamId: number) =>
+      api.get(`/teams/${teamId}/members/`).then((r) => r.data),
+    addMember: (teamId: number, userId: number, role: string) =>
+      api.post(`/teams/${teamId}/members/`, { user_id: userId, role }).then((r) => r.data),
+    removeMember: (teamId: number, memberId: number) =>
+      api.delete(`/teams/${teamId}/members/${memberId}/`).then((r) => r.data),
+  },
+  // Project members
+  projectMembers: {
+    list: () => api.get("/project-members/").then((r) => r.data),
+    invite: (email: string, projectId: number, role: string) =>
+      api.post("/project-members/invite/", { email, project_id: projectId, role }).then((r) => r.data),
+  },
+  // Mentions
+  mentions: {
+    list: () => api.get("/mentions/").then((r) => r.data),
+  },
+  // Audit logs
+  auditLogs: {
+    list: (params?: any) =>
+      api.get("/audit-logs/", { params }).then((r) => r.data),
+  },
+};
+
 // --- Sprints ---
 
 export interface Sprint {
