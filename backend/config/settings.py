@@ -17,6 +17,10 @@ SECRET_KEY = env("DJANGO_SECRET_KEY", default="dev-insecure-change-me")
 DEBUG = env("DJANGO_DEBUG")
 ALLOWED_HOSTS = env("DJANGO_ALLOWED_HOSTS")
 
+# Validación: en producción la SECRET_KEY no puede ser el valor por defecto
+if not DEBUG and SECRET_KEY == "dev-insecure-change-me":
+    raise RuntimeError("DJANGO_SECRET_KEY debe configurarse en producción")
+
 INSTALLED_APPS = [
     "django.contrib.admin",
     "django.contrib.auth",
@@ -122,6 +126,7 @@ REST_FRAMEWORK = {
     ),
     "DEFAULT_PAGINATION_CLASS": "rest_framework.pagination.PageNumberPagination",
     "PAGE_SIZE": 50,
+    "MAX_PAGE_SIZE": 100,
 }
 
 from datetime import timedelta

@@ -1,14 +1,25 @@
+import { lazy, Suspense } from "react";
 import { Routes, Route, Navigate, useLocation, useParams } from "react-router-dom";
 import { useQuery } from "@tanstack/react-query";
 import { CircularProgress, Box } from "@mui/material";
 import { AuthProvider, useAuth } from "./auth/AuthContext";
-import LoginPage from "./pages/LoginPage";
-import RegisterPage from "./pages/RegisterPage";
 import AppLayout from "./pages/AppLayout";
-import TasksPage from "./pages/TasksPage";
-import TagsPage from "./pages/TagsPage";
-import ProfilePage from "./pages/ProfilePage";
 import { projectsApi } from "./api/resources";
+
+// Code-splitting: las páginas pesadas se cargan bajo demanda
+const LoginPage = lazy(() => import("./pages/LoginPage"));
+const RegisterPage = lazy(() => import("./pages/RegisterPage"));
+const TasksPage = lazy(() => import("./pages/TasksPage"));
+const TagsPage = lazy(() => import("./pages/TagsPage"));
+const ProfilePage = lazy(() => import("./pages/ProfilePage"));
+
+function Loading() {
+  return (
+    <Box display="flex" justifyContent="center" alignItems="center" minHeight="60vh">
+      <CircularProgress />
+    </Box>
+  );
+}
 
 function Protected({ children }: { children: React.ReactNode }) {
   const { user, loading } = useAuth();
@@ -46,24 +57,26 @@ function ProjectTasks() {
 export default function App() {
   return (
     <AuthProvider>
-      <Routes>
-        <Route path="/login" element={<PublicOnly><LoginPage /></PublicOnly>} />
-        <Route path="/register" element={<PublicOnly><RegisterPage /></PublicOnly>} />
-        <Route
-          path="/app"
-          element={
-            <Protected>
-              <AppLayout />
-            </Protected>
-          }
-        >
-          <Route index element={<TasksPage title="Bandeja de entrada" />} />
-          <Route path="project/:projectId" element={<ProjectTasks />} />
-          <Route path="tags" element={<TagsPage />} />
-          <Route path="profile" element={<ProfilePage />} />
-        </Route>
-        <Route path="*" element={<Navigate to="/app" replace />} />
-      </Routes>
+      <Suspense fallback={<Loading />}>
+        <Routes>
+          <Route path="/login" element={<PublicOnly><LoginPage /></PublicOnly>} />
+          <Route path="/register" element={<PublicOnly><RegisterPage /></PublicOnly>} />
+          <Route
+            path="/app"
+            element={
+              <Protected>
+                <AppLayout />
+              </Protected>
+            }
+          >
+            <Route index element={<TasksPage title="Bandeja de entrada" />} />
+            <Route path="project/:projectId" element={<ProjectTasks />} />
+            <Route path="tags" element={<TagsPage />} />
+            <Route path="profile" element={<ProfilePage />} />
+          </Route>
+          <Route path="*" element={<Navigate to="/app" replace />} />
+        </Routes>
+      </Suspense>
     </AuthProvider>
   );
 }

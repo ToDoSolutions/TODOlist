@@ -12,7 +12,29 @@ from .serializers import (
 )
 
 
-class TaskViewSet(viewsets.ModelViewSet):
+class TaskCreateUpdateViewSetMixin:
+    """Devuelve la representación completa tras create/update."""
+
+    def create(self, request, *args, **kwargs):
+        serializer = self.get_serializer(data=request.data)
+        serializer.is_valid(raise_exception=True)
+        self.perform_create(serializer)
+        # Devolver con TaskSerializer (incluye recurrence, subtasks, etc.)
+        full = TaskSerializer(serializer.instance, context=self.get_serializer_context())
+        headers = self.get_success_headers(full.data)
+        return Response(full.data, status=status.HTTP_201_CREATED, headers=headers)
+
+    def update(self, request, *args, **kwargs):
+        partial = kwargs.pop("partial", False)
+        instance = self.get_object()
+        serializer = self.get_serializer(instance, data=request.data, partial=partial)
+        serializer.is_valid(raise_exception=True)
+        self.perform_update(serializer)
+        full = TaskSerializer(serializer.instance, context=self.get_serializer_context())
+        return Response(full.data)
+
+
+class TaskViewSet(TaskCreateUpdateViewSetMixin, viewsets.ModelViewSet):
     """CRUD de tareas con filtros por estado, prioridad, etiqueta, proyecto y fecha."""
 
     filterset_fields = ["state", "priority", "project", "tags"]
@@ -45,6 +67,9 @@ class TaskViewSet(viewsets.ModelViewSet):
         if instance.state == Task.State.COMPLETED and not instance.completed_at:
             instance.completed_at = timezone.now()
             instance.save(update_fields=["completed_at"])
+            # Si la tarea es recurrente, generar la siguiente ocurrencia
+            if instance.recurrence:
+                instance.generate_next_occurrence()
         elif instance.state != Task.State.COMPLETED and instance.completed_at:
             instance.completed_at = None
             instance.save(update_fields=["completed_at"])
