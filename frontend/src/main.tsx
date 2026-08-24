@@ -7,6 +7,7 @@ import App from "./App";
 import ErrorBoundary from "./ErrorBoundary";
 import { setSnackbarApi } from "./notify";
 import { AppThemeProvider } from "./theme-context";
+import "./i18n";
 import { registerSW } from "virtual:pwa-register";
 
 // Registrar service worker para PWA

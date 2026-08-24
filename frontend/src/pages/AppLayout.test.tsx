@@ -111,6 +111,14 @@ vi.mock("../theme-context", () => ({
   AppThemeProvider: ({ children }: any) => children,
 }));
 
+// Mock react-i18next
+vi.mock("react-i18next", () => ({
+  useTranslation: () => ({
+    t: (key: string) => key,
+    i18n: { language: "es", changeLanguage: vi.fn() },
+  }),
+}));
+
 function renderWithProviders(ui: React.ReactElement) {
   const qc = new QueryClient({
     defaultOptions: { queries: { retry: false } },

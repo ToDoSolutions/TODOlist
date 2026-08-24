@@ -23,6 +23,8 @@ import {
   DialogActions,
   TextField,
   Stack,
+  Select,
+  MenuItem,
 } from "@mui/material";
 import {
   CheckSquare,
@@ -53,6 +55,7 @@ import { notify } from "../notify";
 import NotificationBell from "../components/NotificationBell";
 import PwaInstallPrompt from "../components/PwaInstallPrompt";
 import { useThemeMode } from "../theme-context";
+import { useTranslation } from "react-i18next";
 import { isPast, isToday } from "date-fns";
 
 const drawerWidth = 260;
@@ -64,6 +67,11 @@ export default function AppLayout() {
   const navigate = useNavigate();
   const location = useLocation();
   const { mode: themeMode, toggle: toggleTheme } = useThemeMode();
+  const { i18n: i18nObj } = useTranslation();
+  const changeLang = (lang: string) => {
+    i18nObj.changeLanguage(lang);
+    localStorage.setItem("i18n-lang", lang);
+  };
   const qc = useQueryClient();
   const [projectDialog, setProjectDialog] = useState(false);
   const [projectName, setProjectName] = useState("");
@@ -160,6 +168,16 @@ export default function AppLayout() {
                 {themeMode === "dark" ? <Sun size={20} /> : <Moon size={20} />}
               </IconButton>
             </Tooltip>
+            <Select
+              size="small"
+              value={i18nObj.language}
+              onChange={(e) => changeLang(e.target.value)}
+              sx={{ minWidth: 60, height: 32 }}
+              variant="outlined"
+            >
+              <MenuItem value="es">ES</MenuItem>
+              <MenuItem value="en">EN</MenuItem>
+            </Select>
             <NotificationBell />
             <Tooltip title="Mi perfil">
               <IconButton onClick={() => navigate("/app/profile")} color={location.pathname === "/app/profile" ? "primary" : "default"}>
