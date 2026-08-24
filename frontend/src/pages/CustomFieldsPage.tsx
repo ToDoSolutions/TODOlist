@@ -99,7 +99,7 @@ export default function CustomFieldsPage() {
     createMut.mutate(payload);
   };
 
-  const fieldList: any[] = fields || [];
+  const fieldList: any[] = Array.isArray(fields) ? fields : (fields as any)?.results || [];
   const allValues: any[] = valuesData || [];
   const taskValues = taskId
     ? allValues.filter((v) => v.task === taskId)

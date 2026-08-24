@@ -88,11 +88,12 @@ export default function TaskListItem({ task, onEdit }: Props) {
     onError: () => notify.error("No se pudo mover la tarea"),
   });
 
-  const { data: activities, isLoading: activitiesLoading } = useQuery({
+  const { data: activitiesData, isLoading: activitiesLoading } = useQuery({
     queryKey: ["task-activities", task.id],
     queryFn: () => tasksApi.getActivities(task.id),
     enabled: !!showActivities,
   });
+  const activities: Activity[] = Array.isArray(activitiesData) ? activitiesData : (activitiesData as any)?.results || [];
 
   const due = task.due_date ? new Date(task.due_date) : null;
   const overdue =
@@ -162,9 +163,9 @@ export default function TaskListItem({ task, onEdit }: Props) {
                 sx={{ height: 20, fontSize: 11 }}
               />
             )}
-            {task.subtasks.length > 0 && (
+            {(task.subtasks || []).length > 0 && (
               <Typography variant="caption" color="text.secondary">
-                {task.subtasks.filter((s) => s.is_done).length}/{task.subtasks.length} subtareas
+                {(task.subtasks || []).filter((s) => s.is_done).length}/{(task.subtasks || []).length} subtareas
               </Typography>
             )}
           </Stack>

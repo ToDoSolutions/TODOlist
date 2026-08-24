@@ -187,15 +187,25 @@ export const timeEntriesApi = {
 };
 
 export const taskTemplatesApi = {
-  list: () => api.get("/task-templates/").then((r) => r.data),
+  list: () =>
+    api.get("/task-templates/").then((r) => {
+      const d = r.data;
+      return Array.isArray(d) ? d : d.results;
+    }),
   create: (data: any) => api.post("/task-templates/", data).then((r) => r.data),
+  update: (id: number, data: any) =>
+    api.patch(`/task-templates/${id}/`, data).then((r) => r.data),
   createTask: (id: number, overrides?: any) =>
     api.post(`/task-templates/${id}/create_task/`, { overrides }).then((r) => r.data),
   delete: (id: number) => api.delete(`/task-templates/${id}/`).then((r) => r.data),
 };
 
 export const customFieldsApi = {
-  list: () => api.get("/custom-fields/").then((r) => r.data),
+  list: () =>
+    api.get("/custom-fields/").then((r) => {
+      const d = r.data;
+      return Array.isArray(d) ? d : d.results;
+    }),
   create: (data: any) => api.post("/custom-fields/", data).then((r) => r.data),
   remove: (id: number) => api.delete(`/custom-fields/${id}/`),
   values: () => api.get("/custom-field-values/").then((r) => r.data),
@@ -204,7 +214,11 @@ export const customFieldsApi = {
 };
 
 export const outgoingWebhooksApi = {
-  list: () => api.get("/outgoing-webhooks/").then((r) => r.data),
+  list: () =>
+    api.get("/outgoing-webhooks/").then((r) => {
+      const d = r.data;
+      return Array.isArray(d) ? d : d.results;
+    }),
   create: (data: any) => api.post("/outgoing-webhooks/", data).then((r) => r.data),
   update: (id: number, data: any) =>
     api.patch(`/outgoing-webhooks/${id}/`, data).then((r) => r.data),
@@ -242,7 +256,11 @@ export const okrsApi = {
 
 // Feature flags
 export const featureFlagsApi = {
-  list: () => api.get("/feature-flags/").then((r) => r.data),
+  list: () =>
+    api.get("/feature-flags/").then((r) => {
+      const d = r.data;
+      return Array.isArray(d) ? d : d.results;
+    }),
   create: (data: any) => api.post("/feature-flags/", data).then((r) => r.data),
   remove: (id: number) => api.delete(`/feature-flags/${id}/`),
   check: (key: string) => api.get(`/feature-flags/${key}/check/`).then((r) => r.data),

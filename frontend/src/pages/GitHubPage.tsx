@@ -201,10 +201,10 @@ export default function GitHubPage() {
     onError: () => notify.error("Error al sincronizar link"),
   });
 
-  const instList: GitHubInstallation[] = installations || [];
-  const repoList: GitHubRepo[] = repos || [];
-  const issueList: GitHubIssue[] = issues || [];
-  const linkList: GitHubIssueLink[] = links || [];
+  const instList: GitHubInstallation[] = Array.isArray(installations) ? installations : (installations as any)?.results || [];
+  const repoList: GitHubRepo[] = Array.isArray(repos) ? repos : (repos as any)?.results || [];
+  const issueList: GitHubIssue[] = Array.isArray(issues) ? issues : (issues as any)?.results || [];
+  const linkList: GitHubIssueLink[] = Array.isArray(links) ? links : (links as any)?.results || [];
 
   /* ---------- render ---------- */
 

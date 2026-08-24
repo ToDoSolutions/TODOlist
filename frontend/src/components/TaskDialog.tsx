@@ -342,7 +342,7 @@ export default function TaskDialog({
                       <Plus size={18} />
                     </IconButton>
                   </Stack>
-                  {task.subtasks.map((s) => (
+                  {(task.subtasks || []).map((s) => (
                     <Stack key={s.id} direction="row" alignItems="center" spacing={1}>
                       <Checkbox
                         size="small"
@@ -384,7 +384,7 @@ export default function TaskDialog({
                       <Send size={18} />
                     </IconButton>
                   </Stack>
-                  {task.comments.map((c) => (
+                  {(task.comments || []).map((c) => (
                     <Box key={c.id} sx={{ mb: 1 }}>
                       <Typography variant="caption" color="text.secondary">
                         {c.author_email} · {format(new Date(c.created_at), "dd MMM HH:mm")}

@@ -96,6 +96,23 @@ export default function TaskTemplatesPage() {
     onError: () => notify.error("No se pudo crear la plantilla"),
   });
 
+  const updateMut = useMutation({
+    mutationFn: (id: number) =>
+      taskTemplatesApi.update(id, {
+        name: form.name.trim(),
+        description: form.description,
+        default_priority: Number(form.default_priority),
+        default_project_id: form.default_project_id ? Number(form.default_project_id) : undefined,
+        default_state: form.default_state,
+      }),
+    onSuccess: () => {
+      notify.success("Plantilla actualizada");
+      qc.invalidateQueries({ queryKey: ["task-templates"] });
+      setOpen(false);
+    },
+    onError: () => notify.error("No se pudo actualizar la plantilla"),
+  });
+
   const deleteMut = useMutation({
     mutationFn: (id: number) => taskTemplatesApi.delete(id),
     onSuccess: () => {
@@ -141,7 +158,11 @@ export default function TaskTemplatesPage() {
 
   const save = () => {
     if (!form.name.trim()) return;
-    createMut.mutate();
+    if (editing) {
+      updateMut.mutate(editing.id);
+    } else {
+      createMut.mutate();
+    }
   };
 
   const openCreateTask = (t: TaskTemplate) => {

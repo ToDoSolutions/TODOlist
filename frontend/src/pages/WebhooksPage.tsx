@@ -133,7 +133,7 @@ export default function WebhooksPage() {
     }
   };
 
-  const webhookList: any[] = webhooks || [];
+  const webhookList: any[] = Array.isArray(webhooks) ? webhooks : (webhooks as any)?.results || [];
 
   return (
     <Box maxWidth={900} mx="auto">

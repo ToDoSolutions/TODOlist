@@ -69,21 +69,6 @@ export default function FeatureFlagsPage() {
     onError: () => notify.error("Error al crear feature flag"),
   });
 
-  const toggleMut = useMutation({
-    mutationFn: (data: { id: number; is_enabled: boolean }) => {
-      // Use create with full payload to update via list+create pattern is not ideal,
-      // but featureFlagsApi has no update method. We toggle by creating a new one
-      // with same key. Instead, we rely on backend PATCH via api client.
-      // Since no update method exists, we use create with the full object.
-      return featureFlagsApi.create(data as any);
-    },
-    onSuccess: () => {
-      notify.info("Estado actualizado");
-      qc.invalidateQueries({ queryKey: ["feature-flags"] });
-    },
-    onError: () => notify.error("Error al cambiar estado"),
-  });
-
   const deleteMut = useMutation({
     mutationFn: (id: number) => featureFlagsApi.remove(id),
     onSuccess: () => {
@@ -132,7 +117,7 @@ export default function FeatureFlagsPage() {
     }
   };
 
-  const flagList: any[] = flags || [];
+  const flagList: any[] = Array.isArray(flags) ? flags : (flags as any)?.results || [];
 
   return (
     <Box maxWidth={900} mx="auto">
@@ -201,7 +186,7 @@ export default function FeatureFlagsPage() {
                     {(f.enabled_users || []).length > 0 && (
                       <Chip
                         size="small"
-                        label={`${f.enabled_users.length} usuarios`}
+                        label={`${(f.enabled_users || []).length} usuarios`}
                         sx={{ height: 22, fontSize: 11 }}
                         variant="outlined"
                       />
