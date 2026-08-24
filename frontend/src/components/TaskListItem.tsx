@@ -7,7 +7,7 @@ import {
   Box,
   Checkbox,
 } from "@mui/material";
-import { Calendar, Flag } from "lucide-react";
+import { Calendar, Flag, Trash2 } from "lucide-react";
 import { format, isPast, isToday } from "date-fns";
 import { es } from "date-fns/locale";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
@@ -42,6 +42,16 @@ export default function TaskListItem({ task, onEdit }: Props) {
       notify.success(task.state === "completed" ? "Tarea reabierta" : "Tarea completada");
       qc.invalidateQueries({ queryKey: ["tasks"] });
     },
+  });
+
+  const deleteTask = useMutation({
+    mutationFn: () => tasksApi.remove(task.id),
+    onSuccess: () => {
+      notify.success("Tarea eliminada");
+      qc.invalidateQueries({ queryKey: ["tasks"] });
+      qc.invalidateQueries({ queryKey: ["projects"] });
+    },
+    onError: () => notify.error("No se pudo eliminar la tarea"),
   });
 
   const due = task.due_date ? new Date(task.due_date) : null;
@@ -119,6 +129,17 @@ export default function TaskListItem({ task, onEdit }: Props) {
             )}
           </Stack>
         </Box>
+        <IconButton
+          size="small"
+          color="error"
+          onClick={(e) => {
+            e.stopPropagation();
+            if (confirm("¿Eliminar esta tarea?")) deleteTask.mutate();
+          }}
+          sx={{ opacity: 0.5, "&:hover": { opacity: 1 } }}
+        >
+          <Trash2 size={16} />
+        </IconButton>
       </Stack>
     </Paper>
   );

@@ -52,6 +52,10 @@ import {
   Target,
   Lightbulb,
   MessageSquare,
+  ChevronDown,
+  ChevronRight,
+  Settings,
+  LayoutDashboard,
 } from "lucide-react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { projectsApi, tasksApi } from "../api/resources";
@@ -81,6 +85,10 @@ export default function AppLayout() {
   const [projectDialog, setProjectDialog] = useState(false);
   const [projectName, setProjectName] = useState("");
   const [projectColor, setProjectColor] = useState("#1976d2");
+  const [collapsedSections, setCollapsedSections] = useState<Record<string, boolean>>({});
+
+  const toggleSection = (section: string) =>
+    setCollapsedSections((prev) => ({ ...prev, [section]: !prev[section] }));
 
   const { data: projectsData } = useQuery({
     queryKey: ["projects"],
@@ -207,7 +215,8 @@ export default function AppLayout() {
         }}
       >
         <Toolbar />
-        <Box sx={{ overflow: "auto" }}>
+        <Box sx={{ overflow: "auto", pb: 2 }}>
+          {/* --- Sección: Principal --- */}
           <List>
             <ListItemButton
               selected={location.pathname === "/app"}
@@ -230,134 +239,68 @@ export default function AppLayout() {
               </ListItemIcon>
               <ListItemText primary="Etiquetas" />
             </ListItemButton>
-            <ListItemButton
-              selected={location.pathname === "/app/integrations"}
-              onClick={() => navigate("/app/integrations")}
-            >
-              <ListItemIcon>
-                <Github size={20} />
-              </ListItemIcon>
-              <ListItemText primary="Integraciones" />
-            </ListItemButton>
-            <ListItemButton
-              selected={location.pathname === "/app/sprints"}
-              onClick={() => navigate("/app/sprints")}
-            >
-              <ListItemIcon>
-                <Flag size={20} />
-              </ListItemIcon>
-              <ListItemText primary="Sprints" />
-            </ListItemButton>
-            <ListItemButton
-              selected={location.pathname === "/app/epics"}
-              onClick={() => navigate("/app/epics")}
-            >
-              <ListItemIcon>
-                <Layers size={20} />
-              </ListItemIcon>
-              <ListItemText primary="Épicas" />
-            </ListItemButton>
-            <ListItemButton
-              selected={location.pathname === "/app/dashboard"}
-              onClick={() => navigate("/app/dashboard")}
-            >
-              <ListItemIcon>
-                <BarChart3 size={20} />
-              </ListItemIcon>
-              <ListItemText primary="Dashboard" />
-            </ListItemButton>
-            <ListItemButton
-              selected={location.pathname === "/app/automations"}
-              onClick={() => navigate("/app/automations")}
-            >
-              <ListItemIcon>
-                <Zap size={20} />
-              </ListItemIcon>
-              <ListItemText primary="Automatizaciones" />
-            </ListItemButton>
-            <ListItemButton
-              selected={location.pathname === "/app/audit"}
-              onClick={() => navigate("/app/audit")}
-            >
-              <ListItemIcon>
-                <ScrollText size={20} />
-              </ListItemIcon>
-              <ListItemText primary="Auditoría" />
-            </ListItemButton>
-            <ListItemButton
-              selected={location.pathname === "/app/api-keys"}
-              onClick={() => navigate("/app/api-keys")}
-            >
-              <ListItemIcon>
-                <Key size={20} />
-              </ListItemIcon>
-              <ListItemText primary="API Keys" />
-            </ListItemButton>
-            <ListItemButton
-              selected={location.pathname === "/app/security"}
-              onClick={() => navigate("/app/security")}
-            >
-              <ListItemIcon>
-                <Shield size={20} />
-              </ListItemIcon>
-              <ListItemText primary="Seguridad" />
-            </ListItemButton>
-            <ListItemButton
-              selected={location.pathname === "/app/gantt"}
-              onClick={() => navigate("/app/gantt")}
-            >
-              <ListItemIcon>
-                <BarChart3 size={20} />
-              </ListItemIcon>
-              <ListItemText primary="Gantt" />
-            </ListItemButton>
-            <ListItemButton
-              selected={location.pathname === "/app/burndown"}
-              onClick={() => navigate("/app/burndown")}
-            >
-              <ListItemIcon>
-                <TrendingDown size={20} />
-              </ListItemIcon>
-              <ListItemText primary="Burndown" />
-            </ListItemButton>
-            <ListItemButton
-              selected={location.pathname === "/app/capacity"}
-              onClick={() => navigate("/app/capacity")}
-            >
-              <ListItemIcon>
-                <Users size={20} />
-              </ListItemIcon>
-              <ListItemText primary="Capacity" />
-            </ListItemButton>
-            <ListItemButton
-              selected={location.pathname === "/app/okrs"}
-              onClick={() => navigate("/app/okrs")}
-            >
-              <ListItemIcon>
-                <Target size={20} />
-              </ListItemIcon>
-              <ListItemText primary="OKRs" />
-            </ListItemButton>
-            <ListItemButton
-              selected={location.pathname === "/app/ai-assistant"}
-              onClick={() => navigate("/app/ai-assistant")}
-            >
-              <ListItemIcon>
-                <Lightbulb size={20} />
-              </ListItemIcon>
-              <ListItemText primary="AI Assistant" />
-            </ListItemButton>
-            <ListItemButton
-              selected={location.pathname === "/app/integrations"}
-              onClick={() => navigate("/app/integrations")}
-            >
-              <ListItemIcon>
-                <MessageSquare size={20} />
-              </ListItemIcon>
-              <ListItemText primary="Integraciones" />
-            </ListItemButton>
           </List>
-          <Divider />
+
+          {/* --- Sección: Planificación --- */}
+          <SectionHeader
+            label="Planificación"
+            collapsed={!!collapsedSections.planning}
+            onToggle={() => toggleSection("planning")}
+          />
+          {!collapsedSections.planning && (
+            <List>
+              <NavItem icon={<Flag size={20} />} label="Sprints" path="/app/sprints" current={location.pathname} navigate={navigate} />
+              <NavItem icon={<Layers size={20} />} label="Épicas" path="/app/epics" current={location.pathname} navigate={navigate} />
+              <NavItem icon={<BarChart3 size={20} />} label="Gantt" path="/app/gantt" current={location.pathname} navigate={navigate} />
+              <NavItem icon={<TrendingDown size={20} />} label="Burndown" path="/app/burndown" current={location.pathname} navigate={navigate} />
+              <NavItem icon={<Users size={20} />} label="Capacity" path="/app/capacity" current={location.pathname} navigate={navigate} />
+            </List>
+          )}
+
+          {/* --- Sección: Métricas y OKRs --- */}
+          <SectionHeader
+            label="Métricas y OKRs"
+            collapsed={!!collapsedSections.metrics}
+            onToggle={() => toggleSection("metrics")}
+          />
+          {!collapsedSections.metrics && (
+            <List>
+              <NavItem icon={<LayoutDashboard size={20} />} label="Dashboard" path="/app/dashboard" current={location.pathname} navigate={navigate} />
+              <NavItem icon={<Target size={20} />} label="OKRs" path="/app/okrs" current={location.pathname} navigate={navigate} />
+              <NavItem icon={<Lightbulb size={20} />} label="AI Assistant" path="/app/ai-assistant" current={location.pathname} navigate={navigate} />
+            </List>
+          )}
+
+          {/* --- Sección: Integraciones y Automatización --- */}
+          <SectionHeader
+            label="Integraciones"
+            collapsed={!!collapsedSections.integrations}
+            onToggle={() => toggleSection("integrations")}
+          />
+          {!collapsedSections.integrations && (
+            <List>
+              <NavItem icon={<Github size={20} />} label="GitHub" path="/app/integrations" current={location.pathname} navigate={navigate} />
+              <NavItem icon={<MessageSquare size={20} />} label="Chat (Slack/Discord)" path="/app/integrations" current={location.pathname} navigate={navigate} />
+              <NavItem icon={<Zap size={20} />} label="Automatizaciones" path="/app/automations" current={location.pathname} navigate={navigate} />
+            </List>
+          )}
+
+          {/* --- Sección: Sistema --- */}
+          <SectionHeader
+            label="Sistema"
+            collapsed={!!collapsedSections.system}
+            onToggle={() => toggleSection("system")}
+          />
+          {!collapsedSections.system && (
+            <List>
+              <NavItem icon={<ScrollText size={20} />} label="Auditoría" path="/app/audit" current={location.pathname} navigate={navigate} />
+              <NavItem icon={<Key size={20} />} label="API Keys" path="/app/api-keys" current={location.pathname} navigate={navigate} />
+              <NavItem icon={<Shield size={20} />} label="Seguridad" path="/app/security" current={location.pathname} navigate={navigate} />
+              <NavItem icon={<UserIcon size={20} />} label="Mi perfil" path="/app/profile" current={location.pathname} navigate={navigate} />
+            </List>
+          )}
+
+          <Divider sx={{ mt: 1 }} />
           <Box sx={{ px: 2, py: 1, display: "flex", alignItems: "center" }}>
             <Typography variant="overline" color="text.secondary" sx={{ flex: 1 }}>
               Proyectos
@@ -436,5 +379,70 @@ export default function AppLayout() {
         </DialogActions>
       </Dialog>
     </Box>
+  );
+}
+
+/* --- Componentes auxiliares para el sidebar --- */
+
+function SectionHeader({
+  label,
+  collapsed,
+  onToggle,
+}: {
+  label: string;
+  collapsed: boolean;
+  onToggle: () => void;
+}) {
+  return (
+    <Box
+      onClick={onToggle}
+      sx={{
+        px: 2,
+        pt: 2,
+        pb: 0.5,
+        display: "flex",
+        alignItems: "center",
+        cursor: "pointer",
+        userSelect: "none",
+        "&:hover": { bgcolor: "action.hover" },
+      }}
+    >
+      <Typography
+        variant="overline"
+        color="text.secondary"
+        sx={{ flex: 1, fontSize: "0.65rem", fontWeight: 700 }}
+      >
+        {label}
+      </Typography>
+      {collapsed ? <ChevronRight size={14} /> : <ChevronDown size={14} />}
+    </Box>
+  );
+}
+
+function NavItem({
+  icon,
+  label,
+  path,
+  current,
+  navigate,
+}: {
+  icon: React.ReactNode;
+  label: string;
+  path: string;
+  current: string;
+  navigate: (to: string) => void;
+}) {
+  return (
+    <ListItemButton
+      selected={current === path}
+      onClick={() => navigate(path)}
+      sx={{ py: 0.75 }}
+    >
+      <ListItemIcon sx={{ minWidth: 36 }}>{icon}</ListItemIcon>
+      <ListItemText
+        primary={label}
+        primaryTypographyProps={{ fontSize: "0.875rem", noWrap: true }}
+      />
+    </ListItemButton>
   );
 }

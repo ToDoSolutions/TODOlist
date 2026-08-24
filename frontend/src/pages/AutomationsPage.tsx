@@ -23,7 +23,7 @@ import {
   Tooltip,
   Collapse,
 } from "@mui/material";
-import { Plus, Zap, Play, History, ChevronDown, ChevronRight, Trash2 } from "lucide-react";
+import { Plus, Zap, Play, History, ChevronDown, ChevronRight, Trash2, Pencil } from "lucide-react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { automationsApi } from "../api/resources";
 import { notify } from "../notify";
@@ -55,6 +55,7 @@ const ACTION_LABELS: Record<string, string> = {
 export default function AutomationsPage() {
   const qc = useQueryClient();
   const [dialogOpen, setDialogOpen] = useState(false);
+  const [editingId, setEditingId] = useState<number | null>(null);
   const [expandedId, setExpandedId] = useState<number | null>(null);
   const [form, setForm] = useState({
     name: "",
@@ -83,7 +84,19 @@ export default function AutomationsPage() {
       notify.success("Regla creada");
       qc.invalidateQueries({ queryKey: ["automation-rules"] });
       setDialogOpen(false);
+      resetForm();
     },
+  });
+
+  const editMut = useMutation({
+    mutationFn: ({ id, data }: { id: number; data: any }) => automationsApi.update(id, data),
+    onSuccess: () => {
+      notify.success("Regla actualizada");
+      qc.invalidateQueries({ queryKey: ["automation-rules"] });
+      setDialogOpen(false);
+      resetForm();
+    },
+    onError: () => notify.error("No se pudo actualizar la regla"),
   });
 
   const toggleMut = useMutation({
@@ -107,11 +120,30 @@ export default function AutomationsPage() {
     },
   });
 
-  const handleCreate = () => {
+  const resetForm = () => {
+    setForm({ name: "", description: "", trigger: "task_blocked", action: "set_priority", action_params: '{"priority": 0}', conditions: "[]", enabled: true });
+    setEditingId(null);
+  };
+
+  const openEdit = (rule: any) => {
+    setEditingId(rule.id);
+    setForm({
+      name: rule.name || "",
+      description: rule.description || "",
+      trigger: rule.trigger || "task_blocked",
+      action: rule.action || "set_priority",
+      action_params: JSON.stringify(rule.action_params || {}),
+      conditions: JSON.stringify(rule.conditions || []),
+      enabled: rule.enabled,
+    });
+    setDialogOpen(true);
+  };
+
+  const handleSubmit = () => {
     try {
       const action_params = JSON.parse(form.action_params);
       const conditions = JSON.parse(form.conditions);
-      createMut.mutate({
+      const payload = {
         name: form.name,
         description: form.description,
         trigger: form.trigger,
@@ -119,7 +151,12 @@ export default function AutomationsPage() {
         action_params,
         conditions,
         enabled: form.enabled,
-      });
+      };
+      if (editingId !== null) {
+        editMut.mutate({ id: editingId, data: payload });
+      } else {
+        createMut.mutate(payload);
+      }
     } catch {
       notify.error("JSON inválido en action_params o conditions");
     }
@@ -134,7 +171,7 @@ export default function AutomationsPage() {
           <Zap size={24} color="#7c4dff" />
           <Typography variant="h5" fontWeight={700}>Automatizaciones</Typography>
         </Stack>
-        <Button variant="contained" startIcon={<Plus size={18} />} onClick={() => setDialogOpen(true)}>
+        <Button variant="contained" startIcon={<Plus size={18} />} onClick={() => { resetForm(); setDialogOpen(true); }}>
           Nueva regla
         </Button>
       </Stack>
@@ -202,6 +239,17 @@ export default function AutomationsPage() {
                   label=""
                   onClick={(e) => e.stopPropagation()}
                 />
+                <Tooltip title="Editar">
+                  <IconButton
+                    size="small"
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      openEdit(rule);
+                    }}
+                  >
+                    <Pencil size={16} />
+                  </IconButton>
+                </Tooltip>
                 <Tooltip title="Probar">
                   <IconButton
                     size="small"
@@ -290,7 +338,7 @@ export default function AutomationsPage() {
 
       {/* Dialog de creación */}
       <Dialog open={dialogOpen} onClose={() => setDialogOpen(false)} maxWidth="sm" fullWidth>
-        <DialogTitle>Nueva regla de automatización</DialogTitle>
+        <DialogTitle>{editingId !== null ? "Editar regla" : "Nueva regla de automatización"}</DialogTitle>
         <DialogContent>
           <Stack spacing={2} sx={{ mt: 1 }}>
             <TextField
@@ -362,8 +410,8 @@ export default function AutomationsPage() {
         </DialogContent>
         <DialogActions>
           <Button onClick={() => setDialogOpen(false)}>Cancelar</Button>
-          <Button variant="contained" onClick={handleCreate} disabled={createMut.isPending}>
-            Crear
+          <Button variant="contained" onClick={handleSubmit} disabled={createMut.isPending || editMut.isPending}>
+            {editingId !== null ? "Guardar" : "Crear"}
           </Button>
         </DialogActions>
       </Dialog>

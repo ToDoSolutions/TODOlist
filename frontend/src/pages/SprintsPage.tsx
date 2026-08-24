@@ -32,6 +32,7 @@ import {
   Calendar,
   Target,
   ArrowRight,
+  Pencil,
 } from "lucide-react";
 import { sprintsApi, type Sprint } from "../api/resources";
 import { notify } from "../notify";
@@ -44,6 +45,13 @@ export default function SprintsPage() {
   const qc = useQueryClient();
   const [dialogOpen, setDialogOpen] = useState(false);
   const [closeDialog, setCloseDialog] = useState<Sprint | null>(null);
+  const [editDialog, setEditDialog] = useState<Sprint | null>(null);
+  const [editForm, setEditForm] = useState({
+    name: "",
+    goal: "",
+    start_date: formatDate(new Date()),
+    end_date: formatDate(new Date(Date.now() + 14 * 24 * 60 * 60 * 1000)),
+  });
   const [form, setForm] = useState({
     name: "",
     goal: "",
@@ -97,6 +105,27 @@ export default function SprintsPage() {
       qc.invalidateQueries({ queryKey: ["sprints"] });
     },
   });
+
+  const editMut = useMutation({
+    mutationFn: ({ id, data }: { id: number; data: Partial<Sprint> }) =>
+      sprintsApi.update(id, data),
+    onSuccess: () => {
+      notify.success("Sprint actualizado");
+      qc.invalidateQueries({ queryKey: ["sprints"] });
+      setEditDialog(null);
+    },
+    onError: () => notify.error("Error al actualizar sprint"),
+  });
+
+  const openEdit = (sprint: Sprint) => {
+    setEditDialog(sprint);
+    setEditForm({
+      name: sprint.name,
+      goal: sprint.goal,
+      start_date: sprint.start_date,
+      end_date: sprint.end_date,
+    });
+  };
 
   const stateColors: Record<string, "default" | "primary" | "success"> = {
     planned: "default",
@@ -189,6 +218,14 @@ export default function SprintsPage() {
                         Cerrar
                       </Button>
                     )}
+                    <Tooltip title="Editar">
+                      <IconButton
+                        size="small"
+                        onClick={() => openEdit(sprint)}
+                      >
+                        <Pencil size={16} />
+                      </IconButton>
+                    </Tooltip>
                     <Tooltip title="Eliminar">
                       <IconButton
                         size="small"
@@ -250,6 +287,63 @@ export default function SprintsPage() {
             disabled={!form.name || createMut.isPending}
           >
             Crear
+          </Button>
+        </DialogActions>
+      </Dialog>
+
+      {/* Dialog editar sprint */}
+      <Dialog
+        open={!!editDialog}
+        onClose={() => setEditDialog(null)}
+        maxWidth="sm"
+        fullWidth
+      >
+        <DialogTitle>Editar sprint</DialogTitle>
+        <DialogContent>
+          <Stack spacing={2} sx={{ mt: 1 }}>
+            <TextField
+              label="Nombre"
+              value={editForm.name}
+              onChange={(e) => setEditForm({ ...editForm, name: e.target.value })}
+              fullWidth
+            />
+            <TextField
+              label="Objetivo"
+              value={editForm.goal}
+              onChange={(e) => setEditForm({ ...editForm, goal: e.target.value })}
+              fullWidth
+              multiline
+              rows={2}
+            />
+            <TextField
+              label="Fecha de inicio"
+              type="date"
+              value={editForm.start_date}
+              onChange={(e) => setEditForm({ ...editForm, start_date: e.target.value })}
+              InputLabelProps={{ shrink: true }}
+              fullWidth
+            />
+            <TextField
+              label="Fecha de fin"
+              type="date"
+              value={editForm.end_date}
+              onChange={(e) => setEditForm({ ...editForm, end_date: e.target.value })}
+              InputLabelProps={{ shrink: true }}
+              fullWidth
+            />
+          </Stack>
+        </DialogContent>
+        <DialogActions>
+          <Button onClick={() => setEditDialog(null)}>Cancelar</Button>
+          <Button
+            variant="contained"
+            onClick={() =>
+              editDialog &&
+              editMut.mutate({ id: editDialog.id, data: editForm })
+            }
+            disabled={!editForm.name || editMut.isPending}
+          >
+            Guardar
           </Button>
         </DialogActions>
       </Dialog>

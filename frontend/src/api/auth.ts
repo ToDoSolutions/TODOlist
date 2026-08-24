@@ -24,6 +24,13 @@ export const authApi = {
     const { data } = await api.patch<User>("/auth/me/", payload);
     return data;
   },
+  async changePassword(currentPassword: string, newPassword: string) {
+    const { data } = await api.post("/auth/change-password/", {
+      current_password: currentPassword,
+      new_password: newPassword,
+    });
+    return data;
+  },
   logout() {
     tokenStorage.clear();
   },

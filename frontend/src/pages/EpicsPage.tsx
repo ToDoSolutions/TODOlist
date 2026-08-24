@@ -16,16 +16,42 @@ import {
   IconButton,
   Tooltip,
   Alert,
+  Select,
+  MenuItem,
+  InputLabel,
+  FormControl,
 } from "@mui/material";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
-import { Layers, Plus, Trash2 } from "lucide-react";
+import { Layers, Plus, Trash2, Pencil } from "lucide-react";
 import { epicsApi, type Epic } from "../api/resources";
 import { notify } from "../notify";
+
+const EPIC_STATES: Epic["state"][] = ["planned", "in_progress", "completed", "cancelled"];
+
+interface EpicForm {
+  title: string;
+  description: string;
+  color: string;
+  state: Epic["state"];
+  start_date: string;
+  end_date: string;
+}
+
+const emptyForm: EpicForm = {
+  title: "",
+  description: "",
+  color: "#9c27b0",
+  state: "planned",
+  start_date: "",
+  end_date: "",
+};
 
 export default function EpicsPage() {
   const qc = useQueryClient();
   const [dialogOpen, setDialogOpen] = useState(false);
-  const [form, setForm] = useState({ title: "", description: "", color: "#9c27b0" });
+  const [editOpen, setEditOpen] = useState(false);
+  const [editingId, setEditingId] = useState<number | null>(null);
+  const [form, setForm] = useState<EpicForm>(emptyForm);
 
   const { data: epics = [], isLoading } = useQuery({
     queryKey: ["epics"],
@@ -38,9 +64,21 @@ export default function EpicsPage() {
       notify.success("Épica creada");
       qc.invalidateQueries({ queryKey: ["epics"] });
       setDialogOpen(false);
-      setForm({ title: "", description: "", color: "#9c27b0" });
+      setForm(emptyForm);
     },
     onError: () => notify.error("Error al crear épica"),
+  });
+
+  const updateMut = useMutation({
+    mutationFn: () => epicsApi.update(editingId!, form),
+    onSuccess: () => {
+      notify.success("Épica actualizada");
+      qc.invalidateQueries({ queryKey: ["epics"] });
+      setEditOpen(false);
+      setEditingId(null);
+      setForm(emptyForm);
+    },
+    onError: () => notify.error("Error al actualizar épica"),
   });
 
   const deleteMut = useMutation({
@@ -49,6 +87,7 @@ export default function EpicsPage() {
       notify.info("Épica eliminada");
       qc.invalidateQueries({ queryKey: ["epics"] });
     },
+    onError: () => notify.error("Error al eliminar épica"),
   });
 
   const stateLabels: Record<string, string> = {
@@ -65,6 +104,19 @@ export default function EpicsPage() {
     cancelled: "error",
   };
 
+  const openEdit = (epic: Epic) => {
+    setEditingId(epic.id);
+    setForm({
+      title: epic.title,
+      description: epic.description,
+      color: epic.color,
+      state: epic.state,
+      start_date: epic.start_date ?? "",
+      end_date: epic.end_date ?? "",
+    });
+    setEditOpen(true);
+  };
+
   return (
     <Box maxWidth={900} mx="auto">
       <Stack direction="row" justifyContent="space-between" alignItems="center" mb={3}>
@@ -74,7 +126,10 @@ export default function EpicsPage() {
         <Button
           variant="contained"
           startIcon={<Plus size={18} />}
-          onClick={() => setDialogOpen(true)}
+          onClick={() => {
+            setForm(emptyForm);
+            setDialogOpen(true);
+          }}
         >
           Nueva épica
         </Button>
@@ -128,6 +183,11 @@ export default function EpicsPage() {
                       <Typography variant="caption" color="text.secondary">
                         {epic.progress_done}/{epic.progress_total} ({pct}%)
                       </Typography>
+                      <Tooltip title="Editar">
+                        <IconButton size="small" onClick={() => openEdit(epic)}>
+                          <Pencil size={16} />
+                        </IconButton>
+                      </Tooltip>
                       <Tooltip title="Eliminar">
                         <IconButton size="small" onClick={() => deleteMut.mutate(epic.id)}>
                           <Trash2 size={16} />
@@ -142,6 +202,7 @@ export default function EpicsPage() {
         })}
       </Stack>
 
+      {/* Create dialog */}
       <Dialog open={dialogOpen} onClose={() => setDialogOpen(false)} maxWidth="sm" fullWidth>
         <DialogTitle>Nueva épica</DialogTitle>
         <DialogContent>
@@ -179,6 +240,80 @@ export default function EpicsPage() {
             disabled={!form.title || createMut.isPending}
           >
             Crear
+          </Button>
+        </DialogActions>
+      </Dialog>
+
+      {/* Edit dialog */}
+      <Dialog open={editOpen} onClose={() => setEditOpen(false)} maxWidth="sm" fullWidth>
+        <DialogTitle>Editar épica</DialogTitle>
+        <DialogContent>
+          <Stack spacing={2} sx={{ mt: 1 }}>
+            <TextField
+              label="Título"
+              value={form.title}
+              onChange={(e) => setForm({ ...form, title: e.target.value })}
+              fullWidth
+            />
+            <TextField
+              label="Descripción"
+              value={form.description}
+              onChange={(e) => setForm({ ...form, description: e.target.value })}
+              fullWidth
+              multiline
+              rows={3}
+            />
+            <FormControl fullWidth>
+              <InputLabel>Estado</InputLabel>
+              <Select
+                label="Estado"
+                value={form.state}
+                onChange={(e) =>
+                  setForm({ ...form, state: e.target.value as Epic["state"] })
+                }
+              >
+                {EPIC_STATES.map((s) => (
+                  <MenuItem key={s} value={s}>
+                    {stateLabels[s]}
+                  </MenuItem>
+                ))}
+              </Select>
+            </FormControl>
+            <Stack direction="row" alignItems="center" spacing={2}>
+              <Typography variant="body2">Color:</Typography>
+              <input
+                type="color"
+                value={form.color}
+                onChange={(e) => setForm({ ...form, color: e.target.value })}
+                style={{ width: 50, height: 30, border: "none", cursor: "pointer" }}
+              />
+            </Stack>
+            <TextField
+              label="Fecha de inicio"
+              type="date"
+              value={form.start_date}
+              onChange={(e) => setForm({ ...form, start_date: e.target.value })}
+              fullWidth
+              InputLabelProps={{ shrink: true }}
+            />
+            <TextField
+              label="Fecha de fin"
+              type="date"
+              value={form.end_date}
+              onChange={(e) => setForm({ ...form, end_date: e.target.value })}
+              fullWidth
+              InputLabelProps={{ shrink: true }}
+            />
+          </Stack>
+        </DialogContent>
+        <DialogActions>
+          <Button onClick={() => setEditOpen(false)}>Cancelar</Button>
+          <Button
+            variant="contained"
+            onClick={() => updateMut.mutate()}
+            disabled={!form.title || updateMut.isPending}
+          >
+            Guardar
           </Button>
         </DialogActions>
       </Dialog>

@@ -14,7 +14,7 @@ from drf_spectacular.views import (
 )
 from graphene_django.views import GraphQLView
 
-from apps.users.views import RegisterView, MeView
+from apps.users.views import RegisterView, MeView, change_password
 
 urlpatterns = [
     path("admin/", admin.site.urls),
@@ -24,6 +24,7 @@ urlpatterns = [
     path("api/auth/refresh/", TokenRefreshView.as_view(), name="token_refresh"),
     path("api/auth/register/", RegisterView.as_view(), name="auth_register"),
     path("api/auth/me/", MeView.as_view(), name="auth_me"),
+    path("api/auth/change-password/", change_password, name="change_password"),
 
     # API Keys
     path("api/", include("apps.users.api_urls")),

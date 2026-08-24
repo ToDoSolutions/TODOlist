@@ -227,9 +227,13 @@ export const searchApi = {
 export const okrsApi = {
   listObjectives: () => api.get("/objectives/").then((r) => r.data),
   createObjective: (data: any) => api.post("/objectives/", data).then((r) => r.data),
+  updateObjective: (id: number, data: any) => api.patch(`/objectives/${id}/`, data).then((r) => r.data),
+  deleteObjective: (id: number) => api.delete(`/objectives/${id}/`).then((r) => r.data),
   getProgress: (id: number) => api.get(`/objectives/${id}/progress/`).then((r) => r.data),
   listKeyResults: () => api.get("/key-results/").then((r) => r.data),
   createKeyResult: (data: any) => api.post("/key-results/", data).then((r) => r.data),
+  updateKeyResult: (id: number, data: any) => api.patch(`/key-results/${id}/`, data).then((r) => r.data),
+  deleteKeyResult: (id: number) => api.delete(`/key-results/${id}/`).then((r) => r.data),
   updateValue: (id: number, newValue: number, note: string) =>
     api.post(`/key-results/${id}/update_value/`, { new_value: newValue, note }).then((r) => r.data),
 };
