@@ -21,6 +21,11 @@ import {
   InputLabel,
   Switch,
   FormControlLabel,
+  Table,
+  TableHead,
+  TableBody,
+  TableRow,
+  TableCell,
 } from "@mui/material";
 import { Plus, Pencil, Trash2, Send } from "lucide-react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
@@ -47,6 +52,11 @@ export default function WebhooksPage() {
   const { data: webhooks, isLoading } = useQuery({
     queryKey: ["outgoing-webhooks"],
     queryFn: outgoingWebhooksApi.list,
+  });
+
+  const { data: deliveries } = useQuery({
+    queryKey: ["webhook-deliveries"],
+    queryFn: outgoingWebhooksApi.deliveries,
   });
 
   const createMut = useMutation({
@@ -134,6 +144,7 @@ export default function WebhooksPage() {
   };
 
   const webhookList: any[] = Array.isArray(webhooks) ? webhooks : (webhooks as any)?.results || [];
+  const deliveryList: any[] = Array.isArray(deliveries) ? deliveries : (deliveries as any)?.results || [];
 
   return (
     <Box maxWidth={900} mx="auto">
@@ -231,6 +242,78 @@ export default function WebhooksPage() {
           {testResult}
         </Paper>
       )}
+
+      {/* Historial de entregas */}
+      <Box mt={4}>
+        <Typography variant="h6" fontWeight={700} mb={2}>
+          Historial de entregas
+        </Typography>
+        {deliveryList.length === 0 ? (
+          <Paper variant="outlined" sx={{ p: 4, textAlign: "center" }}>
+            <Typography color="text.secondary">
+              No hay entregas registradas.
+            </Typography>
+          </Paper>
+        ) : (
+          <Table size="small">
+            <TableHead>
+              <TableRow>
+                <TableCell>Evento</TableCell>
+                <TableCell>Acción</TableCell>
+                <TableCell>Estado</TableCell>
+                <TableCell>Repo</TableCell>
+                <TableCell>Error</TableCell>
+                <TableCell>Fecha</TableCell>
+                <TableCell>Reintentos</TableCell>
+              </TableRow>
+            </TableHead>
+            <TableBody>
+              {deliveryList.map((d: any) => {
+                const statusColors: Record<string, string> = {
+                  success: "success.main",
+                  failed: "error.main",
+                  retrying: "warning.main",
+                  pending: "info.main",
+                };
+                return (
+                  <TableRow key={d.id}>
+                    <TableCell>{d.event_type || "—"}</TableCell>
+                    <TableCell>{d.action || "—"}</TableCell>
+                    <TableCell>
+                      <Chip
+                        size="small"
+                        label={d.status || "—"}
+                        sx={{
+                          height: 20,
+                          fontSize: 10,
+                          color: "#fff",
+                          bgcolor: statusColors[d.status] || "grey.400",
+                        }}
+                      />
+                    </TableCell>
+                    <TableCell>{d.repo_full_name || "—"}</TableCell>
+                    <TableCell sx={{ maxWidth: 200 }}>
+                      {d.error_message ? (
+                        <Typography variant="caption" color="error.main" noWrap title={d.error_message}>
+                          {d.error_message}
+                        </Typography>
+                      ) : "—"}
+                    </TableCell>
+                    <TableCell>
+                      {d.created_at
+                        ? new Date(d.created_at).toLocaleString("es-ES")
+                        : "—"}
+                    </TableCell>
+                    <TableCell>
+                      {d.retry_count ?? 0}/{d.max_retries ?? 0}
+                    </TableCell>
+                  </TableRow>
+                );
+              })}
+            </TableBody>
+          </Table>
+        )}
+      </Box>
 
       {/* Dialog de creación/edición */}
       <Dialog open={dialogOpen} onClose={() => setDialogOpen(false)} maxWidth="sm" fullWidth>

@@ -5,7 +5,7 @@ from .views import (
     SprintViewSet, EpicViewSet, SavedSearchViewSet,
     TaskRelationViewSet, TimeEntryViewSet, AttachmentViewSet,
     TaskTemplateViewSet, CustomFieldViewSet, CustomFieldValueViewSet,
-    OutgoingWebhookViewSet,
+    OutgoingWebhookViewSet, RecurrenceRuleViewSet,
 )
 
 router = DefaultRouter()
@@ -22,5 +22,6 @@ router.register(r"task-templates", TaskTemplateViewSet, basename="task-template"
 router.register(r"custom-fields", CustomFieldViewSet, basename="custom-field")
 router.register(r"custom-field-values", CustomFieldValueViewSet, basename="custom-field-value")
 router.register(r"outgoing-webhooks", OutgoingWebhookViewSet, basename="outgoing-webhook")
+router.register(r"recurrence-rules", RecurrenceRuleViewSet, basename="recurrence-rule")
 
 urlpatterns = router.urls

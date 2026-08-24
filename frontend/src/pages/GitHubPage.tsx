@@ -39,6 +39,10 @@ import {
   Settings,
   ExternalLink,
   Plus,
+  GitPullRequest,
+  GitCommit,
+  Tag,
+  CheckCircle,
 } from "lucide-react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import {
@@ -167,6 +171,27 @@ export default function GitHubPage() {
     queryFn: githubApi.listLinks,
   });
 
+  /* ----- PRs, Commits, Releases, CI ----- */
+  const { data: pullRequests, isLoading: loadingPRs } = useQuery({
+    queryKey: ["github-pull-requests"],
+    queryFn: githubApi.listPullRequests,
+  });
+
+  const { data: commits, isLoading: loadingCommits } = useQuery({
+    queryKey: ["github-commits"],
+    queryFn: githubApi.listCommits,
+  });
+
+  const { data: releases, isLoading: loadingReleases } = useQuery({
+    queryKey: ["github-releases"],
+    queryFn: githubApi.listReleases,
+  });
+
+  const { data: checks, isLoading: loadingChecks } = useQuery({
+    queryKey: ["github-checks"],
+    queryFn: githubApi.listChecks,
+  });
+
   const importMut = useMutation({
     mutationFn: () =>
       githubApi.importIssues(selectedRepoId as number, issueState, importLabel),
@@ -206,6 +231,11 @@ export default function GitHubPage() {
   const repoList: GitHubRepo[] = Array.isArray(repos) ? repos : (repos as any)?.results || [];
   const issueList: GitHubIssue[] = Array.isArray(issues) ? issues : (issues as any)?.results || [];
   const linkList: GitHubIssueLink[] = Array.isArray(links) ? links : (links as any)?.results || [];
+
+  const prList: any[] = Array.isArray(pullRequests) ? pullRequests : (pullRequests as any)?.results || [];
+  const commitList: any[] = Array.isArray(commits) ? commits : (commits as any)?.results || [];
+  const releaseList: any[] = Array.isArray(releases) ? releases : (releases as any)?.results || [];
+  const checkList: any[] = Array.isArray(checks) ? checks : (checks as any)?.results || [];
 
   const { data: tasksData } = useQuery({
     queryKey: ["tasks-for-github-links"],
@@ -248,6 +278,26 @@ export default function GitHubPage() {
             icon={<Link2 size={16} />}
             iconPosition="start"
             label="Issues & Links"
+          />
+          <Tab
+            icon={<GitPullRequest size={16} />}
+            iconPosition="start"
+            label="PRs"
+          />
+          <Tab
+            icon={<GitCommit size={16} />}
+            iconPosition="start"
+            label="Commits"
+          />
+          <Tab
+            icon={<Tag size={16} />}
+            iconPosition="start"
+            label="Releases"
+          />
+          <Tab
+            icon={<CheckCircle size={16} />}
+            iconPosition="start"
+            label="CI"
           />
         </Tabs>
 
@@ -700,6 +750,446 @@ export default function GitHubPage() {
                       </TableCell>
                     </TableRow>
                   ))}
+                </TableBody>
+              </Table>
+            </TableContainer>
+          )}
+        </TabPanel>
+
+        {/* ===== Tab 4: PRs ===== */}
+        <TabPanel value={tab} index={3}>
+          <Stack
+            direction="row"
+            justifyContent="space-between"
+            alignItems="center"
+            mb={2}
+          >
+            <Typography variant="subtitle1" fontWeight={600}>
+              Pull Requests
+            </Typography>
+            <Button
+              variant="outlined"
+              size="small"
+              startIcon={<RefreshCw size={16} />}
+              onClick={() =>
+                qc.invalidateQueries({ queryKey: ["github-pull-requests"] })
+              }
+            >
+              Refrescar
+            </Button>
+          </Stack>
+
+          {loadingPRs ? (
+            <LoadingBox />
+          ) : prList.length === 0 ? (
+            <EmptyState
+              icon={<GitPullRequest size={40} color="text.disabled" />}
+              message="No hay pull requests para mostrar."
+            />
+          ) : (
+            <TableContainer component={Paper} variant="outlined">
+              <Table size="small">
+                <TableHead>
+                  <TableRow>
+                    <TableCell width={60}>PR#</TableCell>
+                    <TableCell>Título</TableCell>
+                    <TableCell>Estado</TableCell>
+                    <TableCell>Autor</TableCell>
+                    <TableCell>Branch</TableCell>
+                    <TableCell>Approvals</TableCell>
+                    <TableCell>CI</TableCell>
+                  </TableRow>
+                </TableHead>
+                <TableBody>
+                  {prList.map((pr) => {
+                    const stateLabel = pr.is_merged
+                      ? "merged"
+                      : pr.state === "open"
+                      ? "open"
+                      : "closed";
+                    const stateColor =
+                      stateLabel === "merged"
+                        ? "secondary.light"
+                        : stateLabel === "open"
+                        ? "success.light"
+                        : "grey.400";
+                    return (
+                      <TableRow key={pr.pr_number}>
+                        <TableCell>
+                          <Typography variant="body2" fontFamily="monospace">
+                            #{pr.pr_number}
+                          </Typography>
+                        </TableCell>
+                        <TableCell>
+                          <MuiLink
+                            href={pr.html_url}
+                            target="_blank"
+                            rel="noopener noreferrer"
+                          >
+                            {pr.title}
+                          </MuiLink>
+                        </TableCell>
+                        <TableCell>
+                          <Chip
+                            size="small"
+                            label={stateLabel}
+                            sx={{
+                              height: 20,
+                              fontSize: 11,
+                              bgcolor: stateColor,
+                              color: "#fff",
+                            }}
+                          />
+                        </TableCell>
+                        <TableCell>
+                          <Typography variant="body2">{pr.author}</Typography>
+                        </TableCell>
+                        <TableCell>
+                          <Typography variant="caption" color="text.secondary">
+                            {pr.head_branch} → {pr.base_branch}
+                          </Typography>
+                        </TableCell>
+                        <TableCell>
+                          <Chip
+                            size="small"
+                            label={pr.approvals_count ?? 0}
+                            sx={{ height: 20, fontSize: 11 }}
+                            variant="outlined"
+                          />
+                        </TableCell>
+                        <TableCell>
+                          {pr.ci_status ? (
+                            <Chip
+                              size="small"
+                              label={pr.ci_status}
+                              sx={{
+                                height: 20,
+                                fontSize: 11,
+                                bgcolor:
+                                  pr.ci_status === "success"
+                                    ? "success.light"
+                                    : pr.ci_status === "failure"
+                                    ? "error.light"
+                                    : "grey.400",
+                                color: "#fff",
+                              }}
+                            />
+                          ) : (
+                            <Typography variant="caption" color="text.secondary">
+                              —
+                            </Typography>
+                          )}
+                        </TableCell>
+                      </TableRow>
+                    );
+                  })}
+                </TableBody>
+              </Table>
+            </TableContainer>
+          )}
+        </TabPanel>
+
+        {/* ===== Tab 5: Commits ===== */}
+        <TabPanel value={tab} index={4}>
+          <Stack
+            direction="row"
+            justifyContent="space-between"
+            alignItems="center"
+            mb={2}
+          >
+            <Typography variant="subtitle1" fontWeight={600}>
+              Commits recientes
+            </Typography>
+            <Button
+              variant="outlined"
+              size="small"
+              startIcon={<RefreshCw size={16} />}
+              onClick={() =>
+                qc.invalidateQueries({ queryKey: ["github-commits"] })
+              }
+            >
+              Refrescar
+            </Button>
+          </Stack>
+
+          {loadingCommits ? (
+            <LoadingBox />
+          ) : commitList.length === 0 ? (
+            <EmptyState
+              icon={<GitCommit size={40} color="text.disabled" />}
+              message="No hay commits para mostrar."
+            />
+          ) : (
+            <TableContainer component={Paper} variant="outlined">
+              <Table size="small">
+                <TableHead>
+                  <TableRow>
+                    <TableCell width={100}>SHA</TableCell>
+                    <TableCell>Mensaje</TableCell>
+                    <TableCell>Autor</TableCell>
+                    <TableCell>Fecha</TableCell>
+                  </TableRow>
+                </TableHead>
+                <TableBody>
+                  {commitList.map((c) => (
+                    <TableRow key={c.sha}>
+                      <TableCell>
+                        <MuiLink
+                          href={c.html_url}
+                          target="_blank"
+                          rel="noopener noreferrer"
+                          sx={{ fontFamily: "monospace" }}
+                        >
+                          {c.sha}
+                        </MuiLink>
+                      </TableCell>
+                      <TableCell>
+                        <Typography variant="body2">
+                          {c.message?.split("\n")[0]}
+                        </Typography>
+                      </TableCell>
+                      <TableCell>
+                        <Typography variant="body2">{c.author}</Typography>
+                      </TableCell>
+                      <TableCell>
+                        <Typography variant="caption" color="text.secondary">
+                          {c.author_date
+                            ? new Date(c.author_date).toLocaleString("es-ES")
+                            : "—"}
+                        </Typography>
+                      </TableCell>
+                    </TableRow>
+                  ))}
+                </TableBody>
+              </Table>
+            </TableContainer>
+          )}
+        </TabPanel>
+
+        {/* ===== Tab 6: Releases ===== */}
+        <TabPanel value={tab} index={5}>
+          <Stack
+            direction="row"
+            justifyContent="space-between"
+            alignItems="center"
+            mb={2}
+          >
+            <Typography variant="subtitle1" fontWeight={600}>
+              Releases
+            </Typography>
+            <Button
+              variant="outlined"
+              size="small"
+              startIcon={<RefreshCw size={16} />}
+              onClick={() =>
+                qc.invalidateQueries({ queryKey: ["github-releases"] })
+              }
+            >
+              Refrescar
+            </Button>
+          </Stack>
+
+          {loadingReleases ? (
+            <LoadingBox />
+          ) : releaseList.length === 0 ? (
+            <EmptyState
+              icon={<Tag size={40} color="text.disabled" />}
+              message="No hay releases para mostrar."
+            />
+          ) : (
+            <Stack spacing={2}>
+              {releaseList.map((r) => (
+                <Paper key={r.tag_name} variant="outlined" sx={{ p: 2 }}>
+                  <Stack
+                    direction="row"
+                    alignItems="center"
+                    spacing={1}
+                    mb={1}
+                    flexWrap="wrap"
+                  >
+                    <Chip
+                      size="small"
+                      label={r.tag_name}
+                      sx={{ height: 22, fontSize: 12, fontWeight: 600 }}
+                      color="primary"
+                    />
+                    {r.is_prerelease && (
+                      <Chip
+                        size="small"
+                        label="pre-release"
+                        sx={{
+                          height: 20,
+                          fontSize: 11,
+                          bgcolor: "warning.light",
+                          color: "#fff",
+                        }}
+                      />
+                    )}
+                    <Typography variant="subtitle2" fontWeight={600}>
+                      {r.name}
+                    </Typography>
+                    <MuiLink
+                      href={r.html_url}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                    >
+                      <ExternalLink size={14} />
+                    </MuiLink>
+                  </Stack>
+                  <Typography
+                    variant="body2"
+                    color="text.secondary"
+                    sx={{
+                      display: "-webkit-box",
+                      WebkitLineClamp: 3,
+                      WebkitBoxOrient: "vertical",
+                      overflow: "hidden",
+                    }}
+                  >
+                    {r.body || "Sin descripción."}
+                  </Typography>
+                  <Stack direction="row" spacing={2} mt={1}>
+                    <Typography variant="caption" color="text.secondary">
+                      Autor: {r.author || "—"}
+                    </Typography>
+                    <Typography variant="caption" color="text.secondary">
+                      Publicado:{" "}
+                      {r.published_at
+                        ? new Date(r.published_at).toLocaleString("es-ES")
+                        : "—"}
+                    </Typography>
+                  </Stack>
+                </Paper>
+              ))}
+            </Stack>
+          )}
+        </TabPanel>
+
+        {/* ===== Tab 7: CI ===== */}
+        <TabPanel value={tab} index={6}>
+          <Stack
+            direction="row"
+            justifyContent="space-between"
+            alignItems="center"
+            mb={2}
+          >
+            <Typography variant="subtitle1" fontWeight={600}>
+              CI Check Runs
+            </Typography>
+            <Button
+              variant="outlined"
+              size="small"
+              startIcon={<RefreshCw size={16} />}
+              onClick={() =>
+                qc.invalidateQueries({ queryKey: ["github-checks"] })
+              }
+            >
+              Refrescar
+            </Button>
+          </Stack>
+
+          {loadingChecks ? (
+            <LoadingBox />
+          ) : checkList.length === 0 ? (
+            <EmptyState
+              icon={<CheckCircle size={40} color="text.disabled" />}
+              message="No hay check runs para mostrar."
+            />
+          ) : (
+            <TableContainer component={Paper} variant="outlined">
+              <Table size="small">
+                <TableHead>
+                  <TableRow>
+                    <TableCell>Nombre</TableCell>
+                    <TableCell>Estado</TableCell>
+                    <TableCell>Conclusión</TableCell>
+                    <TableCell>Duración</TableCell>
+                    <TableCell>URL</TableCell>
+                  </TableRow>
+                </TableHead>
+                <TableBody>
+                  {checkList.map((c, i) => {
+                    const statusLabel =
+                      c.status === "in_progress"
+                        ? "in_progress"
+                        : c.status === "queued"
+                        ? "queued"
+                        : "completed";
+                    const statusColor =
+                      statusLabel === "completed"
+                        ? "success.light"
+                        : statusLabel === "in_progress"
+                        ? "warning.light"
+                        : "grey.400";
+                    const conclusionLabel = c.conclusion || "—";
+                    const conclusionColor =
+                      c.conclusion === "success"
+                        ? "success.light"
+                        : c.conclusion === "failure"
+                        ? "error.light"
+                        : "grey.400";
+                    const duration =
+                      c.started_at && c.completed_at
+                        ? `${new Date(c.started_at).toLocaleTimeString(
+                            "es-ES"
+                          )} → ${new Date(c.completed_at).toLocaleTimeString(
+                            "es-ES"
+                          )}`
+                        : c.started_at
+                        ? new Date(c.started_at).toLocaleString("es-ES")
+                        : "—";
+                    return (
+                      <TableRow key={i}>
+                        <TableCell>
+                          <Typography variant="body2">{c.name}</Typography>
+                        </TableCell>
+                        <TableCell>
+                          <Chip
+                            size="small"
+                            label={statusLabel}
+                            sx={{
+                              height: 20,
+                              fontSize: 11,
+                              bgcolor: statusColor,
+                              color: "#fff",
+                            }}
+                          />
+                        </TableCell>
+                        <TableCell>
+                          {c.conclusion ? (
+                            <Chip
+                              size="small"
+                              label={conclusionLabel}
+                              sx={{
+                                height: 20,
+                                fontSize: 11,
+                                bgcolor: conclusionColor,
+                                color: "#fff",
+                              }}
+                            />
+                          ) : (
+                            <Typography variant="caption" color="text.secondary">
+                              —
+                            </Typography>
+                          )}
+                        </TableCell>
+                        <TableCell>
+                          <Typography variant="caption" color="text.secondary">
+                            {duration}
+                          </Typography>
+                        </TableCell>
+                        <TableCell>
+                          <MuiLink
+                            href={c.html_url}
+                            target="_blank"
+                            rel="noopener noreferrer"
+                          >
+                            <ExternalLink size={14} />
+                          </MuiLink>
+                        </TableCell>
+                      </TableRow>
+                    );
+                  })}
                 </TableBody>
               </Table>
             </TableContainer>

@@ -6,7 +6,7 @@ from rest_framework.response import Response
 from .models import (
     Task, Subtask, Comment, TaskRelation, TaskActivity, Sprint, Epic,
     SavedSearch, TimeEntry, Attachment, TaskTemplate, CustomField,
-    CustomFieldValue, OutgoingWebhook,
+    CustomFieldValue, OutgoingWebhook, RecurrenceRule,
 )
 from .serializers import (
     TaskSerializer,
@@ -25,6 +25,7 @@ from .serializers import (
     CustomFieldValueSerializer,
     OutgoingWebhookSerializer,
     SavedSearchSerializer,
+    RecurrenceRuleSerializer,
 )
 from .metrics import (
     get_flow_metrics, get_backlog_health, get_sprint_metrics,
@@ -614,3 +615,11 @@ class OutgoingWebhookViewSet(viewsets.ModelViewSet):
                 {"error": str(e)},
                 status=status.HTTP_502_BAD_GATEWAY,
             )
+
+
+class RecurrenceRuleViewSet(viewsets.ModelViewSet):
+    """CRUD de reglas de recurrencia para tareas repetitivas."""
+    serializer_class = RecurrenceRuleSerializer
+
+    def get_queryset(self):
+        return RecurrenceRule.objects.all()

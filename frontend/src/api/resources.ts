@@ -226,6 +226,10 @@ export const outgoingWebhooksApi = {
     api.patch(`/outgoing-webhooks/${id}/`, data).then((r) => r.data),
   delete: (id: number) => api.delete(`/outgoing-webhooks/${id}/`).then((r) => r.data),
   test: (id: number) => api.post(`/outgoing-webhooks/${id}/test/`).then((r) => r.data),
+  deliveries: () => api.get("/webhooks/deliveries/").then((r) => {
+    const d = r.data;
+    return Array.isArray(d) ? d : (d as any).results || [];
+  }),
 };
 
 export const bulkOpsApi = {
@@ -532,4 +536,29 @@ export const githubApi = {
       .then((r) => r.data),
   syncLink: (id: number) =>
     api.post<{ message: string }>(`/github/links/${id}/sync/`).then((r) => r.data),
+
+  // Pull Requests
+  listPullRequests: () =>
+    api.get<any[]>("/github/prs/").then((r) => {
+      const d = r.data;
+      return Array.isArray(d) ? d : (d as any).results || [];
+    }),
+  // Commits
+  listCommits: () =>
+    api.get<any[]>("/github/commits/").then((r) => {
+      const d = r.data;
+      return Array.isArray(d) ? d : (d as any).results || [];
+    }),
+  // Releases
+  listReleases: () =>
+    api.get<any[]>("/github/releases/").then((r) => {
+      const d = r.data;
+      return Array.isArray(d) ? d : (d as any).results || [];
+    }),
+  // Check Runs (CI)
+  listChecks: () =>
+    api.get<any[]>("/github/checks/").then((r) => {
+      const d = r.data;
+      return Array.isArray(d) ? d : (d as any).results || [];
+    }),
 };

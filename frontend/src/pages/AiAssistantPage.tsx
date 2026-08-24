@@ -11,7 +11,10 @@ import {
   Button,
   TextField,
   Stack,
+  Card,
+  CardContent,
 } from "@mui/material";
+import { Link as RouterLink } from "react-router-dom";
 import {
   Lightbulb,
   AlertTriangle,
@@ -310,6 +313,77 @@ export default function AiAssistantPage() {
           </Box>
         ))}
       </Paper>
+
+      {/* Previous Suggestions History */}
+      <Typography variant="h6" sx={{ mt: 3, mb: 1 }}>
+        Sugerencias anteriores
+      </Typography>
+      {suggestions.length === 0 && (
+        <Typography color="textSecondary">No hay sugerencias anteriores</Typography>
+      )}
+      <Stack spacing={2}>
+        {suggestions.map((s: any) => {
+          const confidence = s.confidence || 0;
+          const confidenceColor =
+            confidence > 0.8 ? "success" : confidence > 0.6 ? "warning" : "error";
+          const output = s.output_data || {};
+          const mainText = output.reason || output.summary || "";
+          const action =
+            output.suggested_action || output.suggested_priority
+              ? output.suggested_action
+                ? `Acción: ${output.suggested_action}`
+                : `Prioridad sugerida: ${output.suggested_priority}`
+              : null;
+          const created = s.created_at
+            ? new Date(s.created_at).toLocaleString()
+            : null;
+          return (
+            <Card key={s.id} variant="outlined">
+              <CardContent>
+                <Stack
+                  direction="row"
+                  spacing={1}
+                  useFlexGap
+                  sx={{ mb: 1, alignItems: "center", flexWrap: "wrap" }}
+                >
+                  <Chip label={s.suggestion_type} size="small" color="primary" />
+                  <Chip
+                    label={`Confianza: ${Math.round(confidence * 100)}%`}
+                    size="small"
+                    color={confidenceColor as any}
+                    variant="outlined"
+                  />
+                  {s.task && (
+                    <Chip
+                      label={`Tarea #${s.task.id ?? s.task}`}
+                      size="small"
+                      variant="outlined"
+                      component={RouterLink}
+                      to="/app"
+                      clickable
+                    />
+                  )}
+                </Stack>
+                {mainText && (
+                  <Typography variant="body2" sx={{ mb: 1 }}>
+                    {mainText}
+                  </Typography>
+                )}
+                {action && (
+                  <Typography variant="body2" color="textSecondary" sx={{ mb: 1 }}>
+                    {action}
+                  </Typography>
+                )}
+                {created && (
+                  <Typography variant="caption" color="textSecondary">
+                    {created}
+                  </Typography>
+                )}
+              </CardContent>
+            </Card>
+          );
+        })}
+      </Stack>
     </Box>
   );
 }
