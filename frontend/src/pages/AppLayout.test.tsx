@@ -48,6 +48,24 @@ vi.mock("../api/resources", () => ({
     updateSubtask: vi.fn(),
     removeSubtask: vi.fn(),
   },
+  notificationsApi: {
+    list: vi.fn().mockResolvedValue({ results: [] }),
+    unreadCount: vi.fn().mockResolvedValue({ count: 0 }),
+    markAllRead: vi.fn().mockResolvedValue({ marked: 0 }),
+    markRead: vi.fn(),
+    markUnread: vi.fn(),
+    preferences: vi.fn().mockResolvedValue({ results: [] }),
+    updatePreference: vi.fn(),
+  },
+  automationsApi: {
+    list: vi.fn().mockResolvedValue({ results: [] }),
+    get: vi.fn(),
+    create: vi.fn(),
+    update: vi.fn(),
+    delete: vi.fn(),
+    test: vi.fn(),
+    logs: vi.fn().mockResolvedValue({ results: [] }),
+  },
 }));
 
 // Mock notistack

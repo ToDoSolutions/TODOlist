@@ -26,6 +26,8 @@ urlpatterns = [
 
     # Integraciones (GitHub)
     path("api/", include("apps.integrations.urls")),
+    path("api/", include("apps.notifications.urls")),
+    path("api/", include("apps.automations.urls")),
 ]
 
 if settings.DEBUG:

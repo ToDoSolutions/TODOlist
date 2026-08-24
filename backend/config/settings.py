@@ -48,6 +48,8 @@ INSTALLED_APPS = [
     "apps.tasks",
     "apps.tags",
     "apps.integrations",
+    "apps.notifications",
+    "apps.automations",
 ]
 
 MIDDLEWARE = [
@@ -166,6 +168,10 @@ CELERY_BEAT_SCHEDULE = {
     "retry-pending-webhooks": {
         "task": "apps.integrations.tasks.process_pending_webhook_retries",
         "schedule": 60.0,  # cada minuto
+    },
+    "daily-automation-check": {
+        "task": "apps.automations.tasks.run_daily_checks_task",
+        "schedule": 3600.0,  # cada hora
     },
 }
 

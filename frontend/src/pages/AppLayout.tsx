@@ -39,11 +39,13 @@ import {
   Flag,
   Layers,
   BarChart3,
+  Zap,
 } from "lucide-react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { projectsApi, tasksApi } from "../api/resources";
 import { useAuth } from "../auth/AuthContext";
 import { notify } from "../notify";
+import NotificationBell from "../components/NotificationBell";
 import { isPast, isToday } from "date-fns";
 
 const drawerWidth = 260;
@@ -145,6 +147,7 @@ export default function AppLayout() {
               </Stack>
             )}
             <Divider orientation="vertical" flexItem sx={{ mx: 1 }} />
+            <NotificationBell />
             <Tooltip title="Mi perfil">
               <IconButton onClick={() => navigate("/app/profile")} color={location.pathname === "/app/profile" ? "primary" : "default"}>
                 <Avatar sx={{ width: 28, height: 28, bgcolor: "primary.main", fontSize: 13 }}>
@@ -226,6 +229,15 @@ export default function AppLayout() {
                 <BarChart3 size={20} />
               </ListItemIcon>
               <ListItemText primary="Dashboard" />
+            </ListItemButton>
+            <ListItemButton
+              selected={location.pathname === "/app/automations"}
+              onClick={() => navigate("/app/automations")}
+            >
+              <ListItemIcon>
+                <Zap size={20} />
+              </ListItemIcon>
+              <ListItemText primary="Automatizaciones" />
             </ListItemButton>
           </List>
           <Divider />

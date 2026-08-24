@@ -95,6 +95,38 @@ export const tasksApi = {
     api.get("/tasks/metrics_prs/").then((r) => r.data),
 };
 
+export const notificationsApi = {
+  list: () => api.get("/notifications/").then((r) => r.data),
+  unreadCount: () =>
+    api.get("/notifications/unread_count/").then((r) => r.data),
+  markAllRead: () =>
+    api.post("/notifications/mark_all_read/").then((r) => r.data),
+  markRead: (id: number) =>
+    api.post(`/notifications/${id}/mark_read/`).then((r) => r.data),
+  markUnread: (id: number) =>
+    api.post(`/notifications/${id}/mark_unread/`).then((r) => r.data),
+  preferences: () =>
+    api.get("/notification-preferences/").then((r) => r.data),
+  updatePreference: (id: number, data: any) =>
+    api.patch(`/notification-preferences/${id}/`, data).then((r) => r.data),
+};
+
+export const automationsApi = {
+  list: () => api.get("/automation-rules/").then((r) => r.data),
+  get: (id: number) =>
+    api.get(`/automation-rules/${id}/`).then((r) => r.data),
+  create: (data: any) =>
+    api.post("/automation-rules/", data).then((r) => r.data),
+  update: (id: number, data: any) =>
+    api.patch(`/automation-rules/${id}/`, data).then((r) => r.data),
+  delete: (id: number) =>
+    api.delete(`/automation-rules/${id}/`).then((r) => r.data),
+  test: (id: number) =>
+    api.post(`/automation-rules/${id}/test/`).then((r) => r.data),
+  logs: (id: number) =>
+    api.get(`/automation-rules/${id}/logs/`).then((r) => r.data),
+};
+
 // --- Sprints ---
 
 export interface Sprint {
