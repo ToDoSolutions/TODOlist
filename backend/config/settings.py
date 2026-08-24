@@ -52,9 +52,22 @@ INSTALLED_APPS = [
     "apps.automations",
     "apps.collaboration",
     "apps.graphql_app",
+    "apps.social_auth",
+    "apps.feature_flags",
+    "apps.ai_assistant",
+    "apps.okrs",
+    "apps.integrations_chat",
+    "apps.monitoring",
+    "apps.offline_sync",
+    "apps.encryption",
     "drf_spectacular",
     "graphene_django",
     "channels",
+    "allauth",
+    "allauth.account",
+    "allauth.socialaccount",
+    "allauth.socialaccount.providers.google",
+    "allauth.socialaccount.providers.github",
 ]
 
 MIDDLEWARE = [
@@ -66,6 +79,8 @@ MIDDLEWARE = [
     "django.contrib.auth.middleware.AuthenticationMiddleware",
     "django.contrib.messages.middleware.MessageMiddleware",
     "django.middleware.clickjacking.XFrameOptionsMiddleware",
+    "allauth.account.middleware.AccountMiddleware",
+    "apps.monitoring.middleware.MetricsMiddleware",
 ]
 
 ROOT_URLCONF = "config.urls"
@@ -222,6 +237,53 @@ GRAPHENE = {
     "SCHEMA": "apps.graphql_app.schema.schema",
     "MIDDLEWARE": [],
 }
+
+# Allauth (social login)
+AUTHENTICATION_BACKENDS = [
+    "django.contrib.auth.backends.ModelBackend",
+    "allauth.account.auth_backends.AuthenticationBackend",
+]
+SOCIALACCOUNT_ADAPTER = "apps.social_auth.adapters.CustomSocialAccountAdapter"
+ACCOUNT_EMAIL_VERIFICATION = "none"
+ACCOUNT_LOGIN_METHODS = {"email"}
+ACCOUNT_SIGNUP_FIELDS = ["email*", "username*", "password1*", "password2*"]
+SOCIALACCOUNT_STORE_TOKENS = True
+SOCIALACCOUNT_AUTO_SIGNUP = True
+
+# Google OAuth
+SOCIALACCOUNT_PROVIDERS = {
+    "google": {
+        "APP": {
+            "client_id": env("GOOGLE_OAUTH_CLIENT_ID", default=""),
+            "secret": env("GOOGLE_OAUTH_CLIENT_SECRET", default=""),
+            "key": "",
+        },
+        "SCOPE": ["profile", "email"],
+        "AUTH_PARAMS": {"access_type": "online"},
+    },
+    "github": {
+        "APP": {
+            "client_id": env("GITHUB_OAUTH_CLIENT_ID", default=""),
+            "secret": env("GITHUB_OAUTH_CLIENT_SECRET", default=""),
+            "key": "",
+        },
+        "SCOPE": ["user:email", "repo"],
+    },
+}
+
+# Feature flags
+FEATURE_FLAGS = {
+    "ai_assistant": env.bool("FEATURE_AI_ASSISTANT", default=False),
+    "elasticsearch": env.bool("FEATURE_ELASTICSEARCH", default=False),
+    "offline_sync": env.bool("FEATURE_OFFLINE_SYNC", default=False),
+    "e2e_encryption": env.bool("FEATURE_E2E_ENCRYPTION", default=False),
+}
+
+# Sentry (opcional)
+SENTRY_DSN = env("SENTRY_DSN", default="")
+
+# Prometheus metrics
+PROMETHEUS_METRICS_PORT = env.int("PROMETHEUS_METRICS_PORT", default=9090)
 CELERY_ACCEPT_CONTENT = ["json"]
 CELERY_TASK_SERIALIZER = "json"
 CELERY_RESULT_SERIALIZER = "json"

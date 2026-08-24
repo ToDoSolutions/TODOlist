@@ -47,6 +47,11 @@ import {
   Shield,
   Sun,
   Moon,
+  TrendingDown,
+  Users,
+  Target,
+  Lightbulb,
+  MessageSquare,
 } from "lucide-react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { projectsApi, tasksApi } from "../api/resources";
@@ -296,6 +301,60 @@ export default function AppLayout() {
                 <Shield size={20} />
               </ListItemIcon>
               <ListItemText primary="Seguridad" />
+            </ListItemButton>
+            <ListItemButton
+              selected={location.pathname === "/app/gantt"}
+              onClick={() => navigate("/app/gantt")}
+            >
+              <ListItemIcon>
+                <BarChart3 size={20} />
+              </ListItemIcon>
+              <ListItemText primary="Gantt" />
+            </ListItemButton>
+            <ListItemButton
+              selected={location.pathname === "/app/burndown"}
+              onClick={() => navigate("/app/burndown")}
+            >
+              <ListItemIcon>
+                <TrendingDown size={20} />
+              </ListItemIcon>
+              <ListItemText primary="Burndown" />
+            </ListItemButton>
+            <ListItemButton
+              selected={location.pathname === "/app/capacity"}
+              onClick={() => navigate("/app/capacity")}
+            >
+              <ListItemIcon>
+                <Users size={20} />
+              </ListItemIcon>
+              <ListItemText primary="Capacity" />
+            </ListItemButton>
+            <ListItemButton
+              selected={location.pathname === "/app/okrs"}
+              onClick={() => navigate("/app/okrs")}
+            >
+              <ListItemIcon>
+                <Target size={20} />
+              </ListItemIcon>
+              <ListItemText primary="OKRs" />
+            </ListItemButton>
+            <ListItemButton
+              selected={location.pathname === "/app/ai-assistant"}
+              onClick={() => navigate("/app/ai-assistant")}
+            >
+              <ListItemIcon>
+                <Lightbulb size={20} />
+              </ListItemIcon>
+              <ListItemText primary="AI Assistant" />
+            </ListItemButton>
+            <ListItemButton
+              selected={location.pathname === "/app/integrations"}
+              onClick={() => navigate("/app/integrations")}
+            >
+              <ListItemIcon>
+                <MessageSquare size={20} />
+              </ListItemIcon>
+              <ListItemText primary="Integraciones" />
             </ListItemButton>
           </List>
           <Divider />

@@ -1,0 +1,101 @@
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: todolist
+---
+apiVersion: v1
+kind: Secret
+metadata:
+  name: todolist-secrets
+  namespace: todolist
+type: Opaque
+stringData:
+  django-secret-key: "CHANGE_ME_IN_PRODUCTION"
+  database-url: "postgres://todolist:CHANGE_ME@postgres:5432/todolist"
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: postgres
+  namespace: todolist
+  labels:
+    app: todolist
+    component: postgres
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: todolist
+      component: postgres
+  template:
+    metadata:
+      labels:
+        app: todolist
+        component: postgres
+    spec:
+      containers:
+        - name: postgres
+          image: postgres:16-alpine
+          ports:
+            - containerPort: 5432
+          env:
+            - name: POSTGRES_DB
+              value: "todolist"
+            - name: POSTGRES_USER
+              value: "todolist"
+            - name: POSTGRES_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: todolist-secrets
+                  key: database-url
+          volumeMounts:
+            - name: postgres-data
+              mountPath: /var/lib/postgresql/data
+          resources:
+            requests:
+              memory: "256Mi"
+              cpu: "250m"
+            limits:
+              memory: "1Gi"
+              cpu: "500m"
+      volumes:
+        - name: postgres-data
+          persistentVolumeClaim:
+            claimName: postgres-pvc
+---
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: postgres-pvc
+  namespace: todolist
+spec:
+  accessModes:
+    - ReadWriteOnce
+  resources:
+    requests:
+      storage: 10Gi
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: postgres
+  namespace: todolist
+spec:
+  selector:
+    app: todolist
+    component: postgres
+  ports:
+    - port: 5432
+      targetPort: 5432
+  type: ClusterIP
+---
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: todolist-config
+  namespace: todolist
+data:
+  DJANGO_DEBUG: "False"
+  DJANGO_ALLOWED_HOSTS: "todolist.local,localhost"
+  REDIS_HOST: "redis"
+  CORS_ALLOWED_ORIGINS: "http://todolist.local,http://localhost:5173"

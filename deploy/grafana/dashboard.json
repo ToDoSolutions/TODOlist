@@ -1,0 +1,87 @@
+{
+  "annotations": {
+    "list": []
+  },
+  "title": "TODOlist Monitoring",
+  "panels": [
+    {
+      "title": "Requests per second",
+      "type": "graph",
+      "datasource": "Prometheus",
+      "targets": [
+        {
+          "expr": "rate(todolist_requests_total[5m])",
+          "legendFormat": "{{method}} {{endpoint}}"
+        }
+      ],
+      "gridPos": {"h": 8, "w": 12, "x": 0, "y": 0}
+    },
+    {
+      "title": "Request latency (p95)",
+      "type": "graph",
+      "datasource": "Prometheus",
+      "targets": [
+        {
+          "expr": "histogram_quantile(0.95, rate(todolist_request_latency_seconds_bucket[5m]))",
+          "legendFormat": "p95 latency"
+        }
+      ],
+      "gridPos": {"h": 8, "w": 12, "x": 12, "y": 0}
+    },
+    {
+      "title": "Tasks created vs completed",
+      "type": "graph",
+      "datasource": "Prometheus",
+      "targets": [
+        {
+          "expr": "rate(todolist_tasks_created_total[1h])",
+          "legendFormat": "Created"
+        },
+        {
+          "expr": "rate(todolist_tasks_completed_total[1h])",
+          "legendFormat": "Completed"
+        }
+      ],
+      "gridPos": {"h": 8, "w": 12, "x": 0, "y": 8}
+    },
+    {
+      "title": "Open tasks",
+      "type": "stat",
+      "datasource": "Prometheus",
+      "targets": [
+        {
+          "expr": "todolist_open_tasks",
+          "legendFormat": "Open"
+        }
+      ],
+      "gridPos": {"h": 4, "w": 6, "x": 12, "y": 8}
+    },
+    {
+      "title": "Active sprints",
+      "type": "stat",
+      "datasource": "Prometheus",
+      "targets": [
+        {
+          "expr": "todolist_active_sprints",
+          "legendFormat": "Active"
+        }
+      ],
+      "gridPos": {"h": 4, "w": 6, "x": 18, "y": 8}
+    },
+    {
+      "title": "API calls by endpoint",
+      "type": "table",
+      "datasource": "Prometheus",
+      "targets": [
+        {
+          "expr": "topk(10, sum by (endpoint) (rate(todolist_api_calls_total[5m])))",
+          "legendFormat": "{{endpoint}}"
+        }
+      ],
+      "gridPos": {"h": 8, "w": 24, "x": 0, "y": 16}
+    }
+  ],
+  "schemaVersion": 39,
+  "time": {"from": "now-6h", "to": "now"},
+  "refresh": "30s"
+}

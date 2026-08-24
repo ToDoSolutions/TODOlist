@@ -281,6 +281,54 @@ class TaskViewSet(TaskCreateUpdateViewSetMixin, viewsets.ModelViewSet):
         serializer = self.get_serializer(qs, many=True)
         return Response({"results": serializer.data, "count": len(serializer.data)})
 
+    @action(detail=False, methods=["get"])
+    def gantt(self, request):
+        """Datos para vista Gantt."""
+        from .advanced_metrics import get_gantt_data
+        from django.core.cache import cache
+        cache_key = f"gantt:{request.user.id}"
+        data = cache.get(cache_key)
+        if data is None:
+            data = get_gantt_data(request.user)
+            cache.set(cache_key, data, timeout=120)
+        return Response(data)
+
+    @action(detail=False, methods=["get"])
+    def burndown(self, request):
+        """Datos para burndown chart de un sprint."""
+        from .advanced_metrics import get_burndown_data
+        sprint_id = request.query_params.get("sprint_id")
+        if not sprint_id:
+            return Response({"error": "sprint_id requerido"}, status=400)
+        data = get_burndown_data(request.user, sprint_id)
+        if data is None:
+            return Response({"error": "Sprint no encontrado"}, status=404)
+        return Response(data)
+
+    @action(detail=False, methods=["get"])
+    def capacity(self, request):
+        """Datos de capacity planning."""
+        from .advanced_metrics import get_capacity_data
+        from django.core.cache import cache
+        cache_key = f"capacity:{request.user.id}"
+        data = cache.get(cache_key)
+        if data is None:
+            data = get_capacity_data(request.user)
+            cache.set(cache_key, data, timeout=120)
+        return Response(data)
+
+    @action(detail=False, methods=["get"])
+    def audit_dashboard(self, request):
+        """Dashboard de auditoría con gráficos."""
+        from .advanced_metrics import get_audit_dashboard
+        from django.core.cache import cache
+        cache_key = f"audit_dashboard:{request.user.id}"
+        data = cache.get(cache_key)
+        if data is None:
+            data = get_audit_dashboard(request.user)
+            cache.set(cache_key, data, timeout=60)
+        return Response(data)
+
     @action(detail=False, methods=["post"])
     def bulk_delete(self, request):
         """Elimina múltiples tareas a la vez."""

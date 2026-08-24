@@ -62,20 +62,36 @@ def notify(
 
 
 def _send_email_notification(recipient, title, body, action_url):
-    """Envía una notificación por email."""
+    """Envía una notificación por email con template HTML."""
     try:
+        from django.template.loader import render_to_string
+        from django.core.mail import EmailMultiAlternatives
+
         subject = f"[TODOlist] {title}"
-        message = body
-        if action_url:
-            frontend_url = getattr(settings, "DJANGO_FRONTEND_URL", "http://localhost:5173")
-            message += f"\n\nVer: {frontend_url}{action_url}"
-        send_mail(
+        frontend_url = getattr(settings, "DJANGO_FRONTEND_URL", "http://localhost:5173")
+        full_action_url = f"{frontend_url}{action_url}" if action_url else ""
+
+        # Versión texto plano
+        text_message = body
+        if full_action_url:
+            text_message += f"\n\nVer: {full_action_url}"
+
+        # Versión HTML con template
+        html_message = render_to_string("notifications/email_base.html", {
+            "title": title,
+            "body": body,
+            "action_url": full_action_url,
+            "settings_url": f"{frontend_url}/app/security",
+        })
+
+        msg = EmailMultiAlternatives(
             subject=subject,
-            message=message,
+            body=text_message,
             from_email=getattr(settings, "DEFAULT_FROM_EMAIL", "noreply@todolist.local"),
-            recipient_list=[recipient.email],
-            fail_silently=True,
+            to=[recipient.email],
         )
+        msg.attach_alternative(html_message, "text/html")
+        msg.send(fail_silently=True)
     except Exception as e:
         logger.error(f"Error enviando email a {recipient.email}: {e}")
 

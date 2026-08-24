@@ -28,6 +28,30 @@ urlpatterns = [
     # API Keys
     path("api/", include("apps.users.api_urls")),
 
+    # Social auth (Google, GitHub)
+    path("api/", include("apps.social_auth.urls")),
+
+    # OKRs
+    path("api/", include("apps.okrs.urls")),
+
+    # Feature flags
+    path("api/", include("apps.feature_flags.urls")),
+
+    # AI assistant
+    path("api/", include("apps.ai_assistant.urls")),
+
+    # Chat integrations (Slack, Discord)
+    path("api/", include("apps.integrations_chat.urls")),
+
+    # Monitoring (Prometheus metrics)
+    path("api/", include("apps.monitoring.urls")),
+
+    # Offline sync
+    path("api/", include("apps.offline_sync.urls")),
+
+    # E2E Encryption
+    path("api/", include("apps.encryption.urls")),
+
     # Resources
     path("api/", include("apps.projects.urls")),
     path("api/", include("apps.tasks.urls")),

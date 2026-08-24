@@ -1,246 +1,89 @@
 import { useState } from "react";
-import {
-  Box,
-  Button,
-  Card,
-  CardContent,
-  Typography,
-  List,
-  ListItem,
-  ListItemText,
-  ListItemIcon,
-  Switch,
-  IconButton,
-  Alert,
-  Stack,
-  Chip,
-  Dialog,
-  DialogTitle,
-  DialogContent,
-  DialogActions,
-  CircularProgress,
-  Divider,
-} from "@mui/material";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
-import { Github, RefreshCw, Trash2, Download, ExternalLink } from "lucide-react";
-import { githubApi, type GitHubRepo, type GitHubIssue } from "../api/resources";
-import { notify } from "../notify";
+import { chatIntegrationsApi } from "../api/resources";
+import { Box, Typography, CircularProgress, Paper, Button, TextField, Dialog, DialogTitle, DialogContent, DialogActions, Chip, IconButton, Switch, FormControlLabel } from "@mui/material";
+import { Trash2, Send } from "lucide-react";
 
 export default function IntegrationsPage() {
-  const qc = useQueryClient();
-  const [importDialogOpen, setImportDialogOpen] = useState(false);
-  const [selectedRepo, setSelectedRepo] = useState<GitHubRepo | null>(null);
-  const [issueState, setIssueState] = useState("open");
+  const queryClient = useQueryClient();
+  const [open, setOpen] = useState(false);
+  const [provider, setProvider] = useState("slack");
+  const [webhookUrl, setWebhookUrl] = useState("");
+  const [events, setEvents] = useState("task_created,task_completed");
 
-  const { data: installations = [], isLoading: loadingInst } = useQuery({
-    queryKey: ["github-installations"],
-    queryFn: githubApi.listInstallations,
-  });
+  const { data, isLoading } = useQuery({ queryKey: ["chat-integrations"], queryFn: chatIntegrationsApi.list });
+  const integrations = data?.results || data || [];
 
-  const { data: repos = [], isLoading: loadingRepos } = useQuery({
-    queryKey: ["github-repos"],
-    queryFn: githubApi.listRepos,
-  });
-
-  const discoverMut = useMutation({
-    mutationFn: githubApi.discoverRepos,
-    onSuccess: (data) => {
-      notify.success(data.message);
-      qc.invalidateQueries({ queryKey: ["github-repos"] });
-    },
-    onError: (e: any) => notify.error(e.response?.data?.error || "Error"),
-  });
-
-  const toggleSyncMut = useMutation({
-    mutationFn: ({ id, enabled }: { id: number; enabled: boolean }) =>
-      githubApi.updateRepo(id, { sync_enabled: enabled }),
+  const createMutation = useMutation({
+    mutationFn: chatIntegrationsApi.create,
     onSuccess: () => {
-      qc.invalidateQueries({ queryKey: ["github-repos"] });
-      notify.info("Sincronización actualizada");
+      queryClient.invalidateQueries({ queryKey: ["chat-integrations"] });
+      setOpen(false);
+      setWebhookUrl("");
     },
   });
 
-  const syncRepoMut = useMutation({
-    mutationFn: githubApi.syncRepo,
-    onSuccess: (data) => notify.success(data.message),
-    onError: (e: any) => notify.error(e.response?.data?.error || "Error"),
+  const deleteMutation = useMutation({
+    mutationFn: chatIntegrationsApi.delete,
+    onSuccess: () => queryClient.invalidateQueries({ queryKey: ["chat-integrations"] }),
   });
 
-  const importMut = useMutation({
-    mutationFn: ({ repoId, state }: { repoId: number; state: string }) =>
-      githubApi.importIssues(repoId, state),
-    onSuccess: (data) => {
-      notify.success(`Importadas ${data.imported} issues (${data.skipped} ya existían)`);
-      setImportDialogOpen(false);
-      qc.invalidateQueries({ queryKey: ["tasks"] });
-    },
-    onError: (e: any) => notify.error(e.response?.data?.error || "Error al importar"),
+  const testMutation = useMutation({
+    mutationFn: chatIntegrationsApi.test,
   });
 
-  const openImportDialog = (repo: GitHubRepo) => {
-    setSelectedRepo(repo);
-    setImportDialogOpen(true);
-  };
+  if (isLoading) return <CircularProgress />;
 
   return (
-    <Box maxWidth={800} mx="auto">
-      <Typography variant="h5" fontWeight={700} mb={3}>
-        Integraciones
-      </Typography>
+    <Box>
+      <Box sx={{ display: "flex", justifyContent: "space-between", alignItems: "center", mb: 2 }}>
+        <Typography variant="h5">Integraciones (Slack/Discord)</Typography>
+        <Button variant="contained" onClick={() => setOpen(true)}>Nueva integración</Button>
+      </Box>
 
-      {/* GitHub Connection Status */}
-      <Card variant="outlined" sx={{ mb: 3 }}>
-        <CardContent>
-          <Stack direction="row" alignItems="center" spacing={2} mb={2}>
-            <Github size={28} />
-            <Box flex={1}>
-              <Typography variant="h6">GitHub</Typography>
-              <Typography variant="body2" color="text.secondary">
-                Sincroniza tareas con issues de GitHub
-              </Typography>
-            </Box>
-            {installations.length > 0 ? (
-              <Chip label="Conectado" color="success" size="small" />
-            ) : (
-              <Chip label="No conectado" color="default" size="small" />
-            )}
-          </Stack>
-
-          {loadingInst ? (
-            <CircularProgress size={20} />
-          ) : installations.length > 0 ? (
-            <>
-              {installations.map((inst) => (
-                <Box key={inst.id} sx={{ mb: 1 }}>
-                  <Stack direction="row" alignItems="center" spacing={1}>
-                    {inst.avatar_url && (
-                      <img
-                        src={inst.avatar_url}
-                        alt={inst.account_login}
-                        style={{ width: 20, height: 20, borderRadius: "50%" }}
-                      />
-                    )}
-                    <Typography variant="body2">
-                      {inst.account_login} ({inst.account_type})
-                    </Typography>
-                  </Stack>
-                </Box>
-              ))}
-              <Button
-                variant="outlined"
-                size="small"
-                startIcon={<RefreshCw size={16} />}
-                onClick={() => discoverMut.mutate()}
-                disabled={discoverMut.isPending}
-                sx={{ mt: 1 }}
-              >
-                Descubrir repositorios
-              </Button>
-            </>
-          ) : (
-            <Alert severity="info" sx={{ mt: 1 }}>
-              Conecta tu cuenta de GitHub desde la pantalla de login con "Sign in with GitHub"
-            </Alert>
-          )}
-        </CardContent>
-      </Card>
-
-      {/* Repos sincronizados */}
-      {repos.length > 0 && (
-        <Card variant="outlined">
-          <CardContent>
-            <Typography variant="h6" mb={2}>
-              Repositorios sincronizados ({repos.length})
+      {integrations.map((int: any) => (
+        <Paper key={int.id} sx={{ p: 2, mb: 2 }}>
+          <Box sx={{ display: "flex", alignItems: "center", gap: 1 }}>
+            <Chip label={int.provider} color="primary" size="small" />
+            <Typography sx={{ flex: 1 }} variant="body2" noWrap>{int.webhook_url}</Typography>
+            <FormControlLabel
+              control={<Switch checked={int.is_active} size="small" onChange={() => {}} />}
+              label="Activa"
+            />
+            <IconButton onClick={() => testMutation.mutate(int.id)} title="Probar">
+              <Send size={16} />
+            </IconButton>
+            <IconButton onClick={() => deleteMutation.mutate(int.id)} title="Eliminar">
+              <Trash2 size={16} />
+            </IconButton>
+          </Box>
+          <Box sx={{ mt: 1, display: "flex", gap: 0.5, flexWrap: "wrap" }}>
+            {int.events?.map((e: string) => <Chip key={e} label={e} size="small" variant="outlined" />)}
+          </Box>
+          {testMutation.data && (
+            <Typography variant="caption" color={testMutation.data.success ? "success.main" : "error.main"}>
+              Test: {testMutation.data.success ? "OK" : testMutation.data.error}
             </Typography>
-            <List>
-              {repos.map((repo) => (
-                <ListItem
-                  key={repo.id}
-                  sx={{ borderBottom: "1px solid", borderColor: "divider" }}
-                  secondaryAction={
-                    <Stack direction="row" spacing={1} alignItems="center">
-                      <IconButton
-                        size="small"
-                        onClick={() => syncRepoMut.mutate(repo.id)}
-                        title="Sincronizar ahora"
-                      >
-                        <RefreshCw size={16} />
-                      </IconButton>
-                      <IconButton
-                        size="small"
-                        onClick={() => openImportDialog(repo)}
-                        title="Importar issues"
-                      >
-                        <Download size={16} />
-                      </IconButton>
-                      <Switch
-                        size="small"
-                        checked={repo.sync_enabled}
-                        onChange={(e) =>
-                          toggleSyncMut.mutate({
-                            id: repo.id,
-                            enabled: e.target.checked,
-                          })
-                        }
-                      />
-                    </Stack>
-                  }
-                >
-                  <ListItemIcon>
-                    <Github size={20} />
-                  </ListItemIcon>
-                  <ListItemText
-                    primary={
-                      <Stack direction="row" alignItems="center" spacing={1}>
-                        <Typography variant="body2" fontWeight={600}>
-                          {repo.full_name}
-                        </Typography>
-                        {repo.is_private && (
-                          <Chip label="Private" size="small" sx={{ height: 16, fontSize: 10 }} />
-                        )}
-                      </Stack>
-                    }
-                    secondary={`Branch: ${repo.default_branch}`}
-                  />
-                </ListItem>
-              ))}
-            </List>
-          </CardContent>
-        </Card>
-      )}
+          )}
+        </Paper>
+      ))}
 
-      {/* Dialog de importar issues */}
-      <Dialog open={importDialogOpen} onClose={() => setImportDialogOpen(false)} maxWidth="sm" fullWidth>
-        <DialogTitle>
-          Importar issues de {selectedRepo?.full_name}
-        </DialogTitle>
+      <Dialog open={open} onClose={() => setOpen(false)}>
+        <DialogTitle>Nueva integración</DialogTitle>
         <DialogContent>
-          <Typography variant="body2" mb={2}>
-            Selecciona el estado de los issues a importar:
-          </Typography>
-          <Stack direction="row" spacing={1}>
-            {["open", "closed", "all"].map((s) => (
-              <Chip
-                key={s}
-                label={s === "open" ? "Abiertos" : s === "closed" ? "Cerrados" : "Todos"}
-                color={issueState === s ? "primary" : "default"}
-                onClick={() => setIssueState(s)}
-              />
-            ))}
-          </Stack>
+          <TextField fullWidth select label="Provider" value={provider} onChange={(e) => setProvider(e.target.value)} sx={{ mt: 1 }}
+            SelectProps={{ native: true }}>
+            <option value="slack">Slack</option>
+            <option value="discord">Discord</option>
+          </TextField>
+          <TextField fullWidth label="Webhook URL" value={webhookUrl} onChange={(e) => setWebhookUrl(e.target.value)} sx={{ mt: 2 }} />
+          <TextField fullWidth label="Eventos (separados por coma)" value={events} onChange={(e) => setEvents(e.target.value)} sx={{ mt: 2 }} />
         </DialogContent>
         <DialogActions>
-          <Button onClick={() => setImportDialogOpen(false)}>Cancelar</Button>
-          <Button
-            variant="contained"
-            onClick={() =>
-              selectedRepo && importMut.mutate({ repoId: selectedRepo.id, state: issueState })
-            }
-            disabled={importMut.isPending}
-            startIcon={importMut.isPending ? <CircularProgress size={16} /> : <Download size={16} />}
-          >
-            Importar
-          </Button>
+          <Button onClick={() => setOpen(false)}>Cancelar</Button>
+          <Button variant="contained" onClick={() => createMutation.mutate({
+            provider, webhook_url: webhookUrl, events: events.split(",").map((e) => e.trim()),
+          })}>Crear</Button>
         </DialogActions>
       </Dialog>
     </Box>

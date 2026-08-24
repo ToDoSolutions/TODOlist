@@ -21,6 +21,11 @@ const AutomationsPage = lazy(() => import("./pages/AutomationsPage"));
 const AuditPage = lazy(() => import("./pages/AuditPage"));
 const ApiKeysPage = lazy(() => import("./pages/ApiKeysPage"));
 const SecurityPage = lazy(() => import("./pages/SecurityPage"));
+const GanttPage = lazy(() => import("./pages/GanttPage"));
+const BurndownPage = lazy(() => import("./pages/BurndownPage"));
+const CapacityPage = lazy(() => import("./pages/CapacityPage"));
+const OkrsPage = lazy(() => import("./pages/OkrsPage"));
+const AiAssistantPage = lazy(() => import("./pages/AiAssistantPage"));
 
 function Loading() {
   return (
@@ -91,6 +96,11 @@ export default function App() {
             <Route path="audit" element={<AuditPage />} />
             <Route path="api-keys" element={<ApiKeysPage />} />
             <Route path="security" element={<SecurityPage />} />
+            <Route path="gantt" element={<GanttPage />} />
+            <Route path="burndown" element={<BurndownPage />} />
+            <Route path="capacity" element={<CapacityPage />} />
+            <Route path="okrs" element={<OkrsPage />} />
+            <Route path="ai-assistant" element={<AiAssistantPage />} />
           </Route>
           <Route path="*" element={<Navigate to="/app" replace />} />
         </Routes>

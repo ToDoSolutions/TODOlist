@@ -1,0 +1,84 @@
+replicaCount:
+  backend: 3
+  frontend: 2
+
+image:
+  backend:
+    repository: todolist-backend
+    tag: latest
+    pullPolicy: IfNotPresent
+  frontend:
+    repository: todolist-frontend
+    tag: latest
+    pullPolicy: IfNotPresent
+
+service:
+  backend:
+    type: ClusterIP
+    port: 8000
+  frontend:
+    type: ClusterIP
+    port: 80
+
+ingress:
+  enabled: true
+  className: nginx
+  annotations:
+    nginx.ingress.kubernetes.io/rewrite-target: /
+    cert-manager.io/cluster-issuer: letsencrypt-prod
+  hosts:
+    - host: todolist.example.com
+      paths:
+        - path: /api
+          service: backend
+        - path: /
+          service: frontend
+  tls:
+    - secretName: todolist-tls
+      hosts:
+        - todolist.example.com
+
+resources:
+  backend:
+    requests:
+      memory: 256Mi
+      cpu: 250m
+    limits:
+      memory: 512Mi
+      cpu: 500m
+  frontend:
+    requests:
+      memory: 128Mi
+      cpu: 100m
+    limits:
+      memory: 256Mi
+      cpu: 200m
+
+autoscaling:
+  enabled: true
+  minReplicas: 2
+  maxReplicas: 10
+  targetCPUUtilizationPercentage: 70
+  targetMemoryUtilizationPercentage: 80
+
+postgresql:
+  enabled: true
+  auth:
+    username: todolist
+    database: todolist
+    password: CHANGE_ME
+  primary:
+    persistence:
+      size: 10Gi
+
+redis:
+  enabled: true
+  auth:
+    enabled: false
+
+env:
+  DJANGO_DEBUG: "False"
+  DJANGO_ALLOWED_HOSTS: "todolist.example.com,localhost"
+
+secrets:
+  djangoSecretKey: "CHANGE_ME_IN_PRODUCTION"

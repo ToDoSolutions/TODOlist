@@ -223,6 +223,75 @@ export const searchApi = {
   tasks: (q: string) => api.get(`/tasks/search/?q=${encodeURIComponent(q)}`).then((r) => r.data),
 };
 
+// OKRs
+export const okrsApi = {
+  listObjectives: () => api.get("/objectives/").then((r) => r.data),
+  createObjective: (data: any) => api.post("/objectives/", data).then((r) => r.data),
+  getProgress: (id: number) => api.get(`/objectives/${id}/progress/`).then((r) => r.data),
+  listKeyResults: () => api.get("/key-results/").then((r) => r.data),
+  createKeyResult: (data: any) => api.post("/key-results/", data).then((r) => r.data),
+  updateValue: (id: number, newValue: number, note: string) =>
+    api.post(`/key-results/${id}/update_value/`, { new_value: newValue, note }).then((r) => r.data),
+};
+
+// Feature flags
+export const featureFlagsApi = {
+  list: () => api.get("/feature-flags/").then((r) => r.data),
+  create: (data: any) => api.post("/feature-flags/", data).then((r) => r.data),
+  check: (key: string) => api.get(`/feature-flags/${key}/check/`).then((r) => r.data),
+};
+
+// AI assistant
+export const aiApi = {
+  estimatePriority: (taskId: number) =>
+    api.post("/ai/estimate-priority/", { task_id: taskId }).then((r) => r.data),
+  estimateStoryPoints: (taskId: number) =>
+    api.post("/ai/estimate-story-points/", { task_id: taskId }).then((r) => r.data),
+  detectBlockers: () => api.get("/ai/detect-blockers/").then((r) => r.data),
+  improveDescription: (taskId: number) =>
+    api.post("/ai/improve-description/", { task_id: taskId }).then((r) => r.data),
+  suggestions: () => api.get("/ai/suggestions/").then((r) => r.data),
+};
+
+// Chat integrations
+export const chatIntegrationsApi = {
+  list: () => api.get("/chat-integrations/").then((r) => r.data),
+  create: (data: any) => api.post("/chat-integrations/", data).then((r) => r.data),
+  update: (id: number, data: any) => api.patch(`/chat-integrations/${id}/`, data).then((r) => r.data),
+  delete: (id: number) => api.delete(`/chat-integrations/${id}/`).then((r) => r.data),
+  test: (id: number) => api.post(`/chat-integrations/${id}/test/`).then((r) => r.data),
+};
+
+// Advanced metrics
+export const advancedMetricsApi = {
+  gantt: () => api.get("/tasks/gantt/").then((r) => r.data),
+  burndown: (sprintId: number) => api.get(`/tasks/burndown/?sprint_id=${sprintId}`).then((r) => r.data),
+  capacity: () => api.get("/tasks/capacity/").then((r) => r.data),
+  auditDashboard: () => api.get("/tasks/audit_dashboard/").then((r) => r.data),
+};
+
+// Offline sync
+export const offlineSyncApi = {
+  registerDevice: (deviceId: string, deviceName: string) =>
+    api.post("/sync/register-device/", { device_id: deviceId, device_name: deviceName }).then((r) => r.data),
+  push: (operations: any[]) => api.post("/sync/push/", { operations }).then((r) => r.data),
+  pull: (since: string) => api.get(`/sync/pull/?since=${since}`).then((r) => r.data),
+};
+
+// E2E Encryption
+export const encryptionApi = {
+  registerPublicKey: (publicKey: string, keyId: string, algorithm: string = "RSA-OA-256") =>
+    api.post("/public-keys/", { public_key: publicKey, key_id: keyId, algorithm }).then((r) => r.data),
+  getActiveKey: () => api.get("/public-keys/active/").then((r) => r.data),
+  createEncryptedTask: (data: any) => api.post("/encrypted-tasks/", data).then((r) => r.data),
+  listEncryptedTasks: () => api.get("/encrypted-tasks/").then((r) => r.data),
+  shareTask: (taskId: number, userEmail: string, encryptedKey: string, publicKeyId: number) =>
+    api.post(`/encrypted-tasks/${taskId}/share/`, {
+      user_email: userEmail, encrypted_key: encryptedKey, public_key_id: publicKeyId,
+    }).then((r) => r.data),
+  sharedTasks: () => api.get("/encrypted-tasks/shared/").then((r) => r.data),
+};
+
 // --- Sprints ---
 
 export interface Sprint {

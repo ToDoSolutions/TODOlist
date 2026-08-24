@@ -1,0 +1,40 @@
+{
+  "name": "todolist-mobile",
+  "version": "1.0.0",
+  "private": true,
+  "description": "TODOlist mobile app (React Native)",
+  "scripts": {
+    "start": "react-native start",
+    "android": "react-native run-android",
+    "ios": "react-native run-ios",
+    "test": "jest",
+    "lint": "eslint ."
+  },
+  "dependencies": {
+    "react": "18.3.1",
+    "react-native": "0.75.0",
+    "@react-navigation/native": "^6.1.18",
+    "@react-navigation/bottom-tabs": "^6.6.1",
+    "@react-navigation/stack": "^6.4.1",
+    "@react-native-async-storage/async-storage": "^2.0.0",
+    "@tanstack/react-query": "^5.59.0",
+    "axios": "^1.7.7",
+    "react-i18next": "^17.0.12",
+    "i18next": "^26.4.0",
+    "date-fns": "^4.1.0",
+    "react-native-paper": "^5.12.5",
+    "react-native-vector-icons": "^10.2.0",
+    "react-native-gesture-handler": "^2.20.2",
+    "react-native-reanimated": "^3.16.0",
+    "react-native-safe-area-context": "^4.14.0",
+    "react-native-screens": "^3.35.0"
+  },
+  "devDependencies": {
+    "@babel/core": "^7.25.0",
+    "@babel/preset-env": "^7.25.0",
+    "babel-plugin-module-resolver": "^5.0.2",
+    "eslint": "^9.12.0",
+    "jest": "^29.7.0",
+    "@testing-library/react-native": "^12.8.0"
+  }
+}
