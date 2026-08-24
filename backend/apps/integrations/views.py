@@ -380,7 +380,7 @@ def github_oauth_callback(request):
 @api_view(["POST"])
 @permission_classes([AllowAny])
 def github_webhook(request):
-    """Recibe webhooks de GitHub y sincroniza cambios."""
+    """Recibe webhooks de GitHub con idempotencia y reintentos."""
     import json
 
     # Verificar firma
@@ -393,95 +393,40 @@ def github_webhook(request):
         )
 
     event_type = request.headers.get("X-GitHub-Event", "")
+    delivery_id = request.headers.get("X-GitHub-Delivery", "")
     payload = json.loads(body)
+    action = payload.get("action", "")
+    repo_full_name = payload.get("repository", {}).get("full_name", "")
 
-    if event_type == "issues":
-        return _handle_issue_event(payload)
-    elif event_type == "installation_repositories":
-        return _handle_installation_repos_event(payload)
-    elif event_type == "installation":
-        return _handle_installation_event(payload)
+    # Procesar con idempotencia
+    from .webhook_processor import process_webhook_delivery
+    result, status_code = process_webhook_delivery(
+        delivery_id=delivery_id,
+        event_type=event_type,
+        action=action,
+        payload=payload,
+        repo_full_name=repo_full_name,
+    )
 
-    return Response({"message": f"Event {event_type} received, no action"})
-
-
-def _handle_issue_event(payload):
-    """Maneja eventos de issues (opened, closed, reopened, edited)."""
-    action = payload.get("action")
-    issue = payload.get("issue", {})
-    repo_info = payload.get("repository", {})
-
-    repo_full_name = repo_info.get("full_name", "")
-    issue_number = issue.get("number")
-
-    if not issue_number or not repo_full_name:
-        return Response({"message": "Missing issue data"})
-
-    # Buscar el repo local
-    repo = GitHubRepo.objects.filter(full_name=repo_full_name).first()
-    if not repo:
-        return Response({"message": f"Repo {repo_full_name} not tracked"})
-
-    # Buscar el link
-    link = GitHubIssueLink.objects.filter(
-        repo=repo, issue_number=issue_number
-    ).first()
-
-    if action == "opened" and not link:
-        # Issue nuevo en GitHub: importar como tarea
-        installation = repo.installation
-        import_issue_as_task(issue, repo, installation.user)
-        return Response({"message": f"Issue #{issue_number} imported"})
-
-    if link and action in ("opened", "closed", "reopened", "edited"):
-        from .sync_service import sync_issue_to_task
-        # Marcar para evitar recursión en el signal
-        link.task._syncing_from_github = True
-        sync_issue_to_task(link, issue)
-        return Response({"message": f"Issue #{issue_number} synced"})
-
-    return Response({"message": f"Action {action} no handler"})
+    return Response(result, status=status_code)
 
 
-def _handle_installation_repos_event(payload):
-    """Maneja eventos de instalación (repos añadidos/eliminados)."""
-    action = payload.get("action")
-    repos_added = payload.get("repositories_added", [])
-    repos_removed = payload.get("repositories_removed", [])
+@api_view(["GET"])
+@permission_classes([IsAuthenticated])
+def webhook_deliveries(request):
+    """Lista las entregas de webhooks para auditoría."""
+    from .models import WebhookDelivery
+    from .serializers import WebhookDeliverySerializer
 
-    installation_id = payload.get("installation", {}).get("id")
-
-    if action == "added":
-        for r in repos_added:
-            inst = GitHubInstallation.objects.filter(
-                installation_id=installation_id
-            ).first()
-            if inst:
-                GitHubRepo.objects.get_or_create(
-                    installation=inst,
-                    repo_id=r["id"],
-                    defaults={
-                        "full_name": r["full_name"],
-                        "name": r["name"],
-                        "owner": r["full_name"].split("/")[0],
-                    },
-                )
-    elif action == "removed":
-        for r in repos_removed:
-            GitHubRepo.objects.filter(repo_id=r["id"]).delete()
-
-    return Response({"message": f"Installation repos {action}"})
+    deliveries = WebhookDelivery.objects.all()[:50]
+    serializer = WebhookDeliverySerializer(deliveries, many=True)
+    return Response(serializer.data)
 
 
-def _handle_installation_event(payload):
-    """Maneja eventos de instalación/desinstalación de la GitHub App."""
-    action = payload.get("action")
-    installation = payload.get("installation", {})
-    installation_id = installation.get("id")
-
-    if action == "deleted":
-        GitHubInstallation.objects.filter(
-            installation_id=installation_id
-        ).delete()
-
-    return Response({"message": f"Installation {action}"})
+@api_view(["POST"])
+@permission_classes([IsAuthenticated])
+def webhook_retry_dead_letter(request):
+    """Reintenta manualmente las entregas en DLQ."""
+    from .webhook_processor import retry_dead_letter_deliveries
+    result = retry_dead_letter_deliveries()
+    return Response({"message": result})

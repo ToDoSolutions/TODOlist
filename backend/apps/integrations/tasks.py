@@ -3,7 +3,7 @@ import logging
 
 from celery import shared_task
 
-from .models import GitHubRepo
+from .models import GitHubRepo, WebhookDelivery
 from .sync_service import sync_repo_issues
 
 logger = logging.getLogger(__name__)
@@ -34,3 +34,34 @@ def sync_all_github_issues():
         sync_repo_issues_task.delay(repo.id)
         total += 1
     return f"Queued sync for {total} repos"
+
+
+@shared_task(bind=True, max_retries=3)
+def process_webhook_retry_task(self, delivery_id):
+    """Reintenta procesar una entrega de webhook fallida."""
+    try:
+        delivery = WebhookDelivery.objects.get(id=delivery_id)
+        if delivery.status == WebhookDelivery.Status.PROCESSED:
+            return f"Delivery {delivery_id} already processed"
+
+        from .webhook_processor import process_webhook_delivery
+        result, status_code = process_webhook_delivery(
+            delivery_id=delivery.delivery_id,
+            event_type=delivery.event_type,
+            action=delivery.action,
+            payload=delivery.payload,
+            repo_full_name=delivery.repo_full_name,
+        )
+        return f"Retry delivery {delivery_id}: {result}"
+    except WebhookDelivery.DoesNotExist:
+        return f"Delivery {delivery_id} not found"
+    except Exception as e:
+        logger.error(f"Error retrying webhook {delivery_id}: {e}")
+        raise self.retry(exc=e, countdown=60)
+
+
+@shared_task
+def process_pending_webhook_retries():
+    """Procesa reintentos pendientes. Ejecutada por Celery beat cada minuto."""
+    from .webhook_processor import process_pending_retries
+    return process_pending_retries()

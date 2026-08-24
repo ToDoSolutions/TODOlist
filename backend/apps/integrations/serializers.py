@@ -1,7 +1,7 @@
 """Serializers para la API de integraciones."""
 from rest_framework import serializers
 
-from .models import GitHubInstallation, GitHubRepo, GitHubIssueLink
+from .models import GitHubInstallation, GitHubRepo, GitHubIssueLink, WebhookDelivery
 
 
 class GitHubInstallationSerializer(serializers.ModelSerializer):
@@ -53,3 +53,16 @@ class CreateIssueSerializer(serializers.Serializer):
     """Serializer para crear un issue desde una tarea existente."""
     task_id = serializers.IntegerField()
     repo_id = serializers.IntegerField()
+
+
+class WebhookDeliverySerializer(serializers.ModelSerializer):
+    """Serializer para auditoría de entregas de webhooks."""
+
+    class Meta:
+        model = WebhookDelivery
+        fields = [
+            "id", "delivery_id", "event_type", "action", "status",
+            "error_message", "retry_count", "max_retries",
+            "repo_full_name", "created_at", "processed_at", "next_retry_at",
+        ]
+        read_only_fields = fields

@@ -9,6 +9,8 @@ from .views import (
     github_oauth_start,
     github_oauth_callback,
     github_webhook,
+    webhook_deliveries,
+    webhook_retry_dead_letter,
 )
 
 router = DefaultRouter()
@@ -22,5 +24,7 @@ urlpatterns = [
     path("auth/github/start/", github_oauth_start, name="github_oauth_start"),
     path("auth/github/callback/", github_oauth_callback, name="github_oauth_callback"),
     path("webhooks/github/", github_webhook, name="github_webhook"),
+    path("webhooks/deliveries/", webhook_deliveries, name="webhook_deliveries"),
+    path("webhooks/retry-dead-letter/", webhook_retry_dead_letter, name="webhook_retry_dead_letter"),
     path("", include(router.urls)),
 ]

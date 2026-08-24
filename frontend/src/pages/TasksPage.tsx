@@ -16,7 +16,7 @@ import {
   CircularProgress,
   Alert,
 } from "@mui/material";
-import { Plus, List as ListIcon, Columns, Search, Calendar } from "lucide-react";
+import { Plus, List as ListIcon, Columns, Search, Calendar, Table as TableIcon } from "lucide-react";
 import { tasksApi, TaskFilters } from "../api/resources";
 import { tagsApi } from "../api/resources";
 import {
@@ -32,6 +32,7 @@ import TaskDialog from "../components/TaskDialog";
 import TaskListItem from "../components/TaskListItem";
 import KanbanBoard from "../components/KanbanBoard";
 import CalendarView from "../components/CalendarView";
+import TaskTableView from "../components/TaskTableView";
 
 interface TasksPageProps {
   projectId?: number;
@@ -40,7 +41,7 @@ interface TasksPageProps {
 
 export default function TasksPage({ projectId, title }: TasksPageProps) {
   const [params, setParams] = useSearchParams();
-  const view = (params.get("view") as "list" | "kanban" | "calendar") || "list";
+  const view = (params.get("view") as "list" | "kanban" | "calendar" | "table") || "list";
   const [dialogOpen, setDialogOpen] = useState(false);
   const [editing, setEditing] = useState<Task | null>(null);
   const qc = useQueryClient();
@@ -167,6 +168,9 @@ export default function TasksPage({ projectId, title }: TasksPageProps) {
             <ToggleButton value="list">
               <ListIcon size={16} />
             </ToggleButton>
+            <ToggleButton value="table">
+              <TableIcon size={16} />
+            </ToggleButton>
             <ToggleButton value="kanban">
               <Columns size={16} />
             </ToggleButton>
@@ -193,6 +197,8 @@ export default function TasksPage({ projectId, title }: TasksPageProps) {
         <KanbanBoard tasks={tasks} onEdit={openEdit} />
       ) : view === "calendar" ? (
         <CalendarView tasks={tasks} onEdit={openEdit} />
+      ) : view === "table" ? (
+        <TaskTableView tasks={tasks} onEdit={openEdit} />
       ) : (
         <Stack spacing={1}>
           {tasks.map((t) => (

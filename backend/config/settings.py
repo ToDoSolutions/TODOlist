@@ -163,6 +163,10 @@ CELERY_BEAT_SCHEDULE = {
         "task": "apps.integrations.tasks.sync_all_github_issues",
         "schedule": 300.0,  # cada 5 minutos
     },
+    "retry-pending-webhooks": {
+        "task": "apps.integrations.tasks.process_pending_webhook_retries",
+        "schedule": 60.0,  # cada minuto
+    },
 }
 
 # GitHub App
