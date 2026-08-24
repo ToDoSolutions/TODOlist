@@ -2,12 +2,11 @@ import React from "react";
 import ReactDOM from "react-dom/client";
 import { BrowserRouter } from "react-router-dom";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
-import { ThemeProvider, CssBaseline } from "@mui/material";
 import { SnackbarProvider } from "notistack";
 import App from "./App";
 import ErrorBoundary from "./ErrorBoundary";
 import { setSnackbarApi } from "./notify";
-import { theme } from "./theme";
+import { AppThemeProvider } from "./theme-context";
 import { registerSW } from "virtual:pwa-register";
 
 // Registrar service worker para PWA
@@ -22,8 +21,7 @@ const queryClient = new QueryClient({
 ReactDOM.createRoot(document.getElementById("root")!).render(
   <React.StrictMode>
     <QueryClientProvider client={queryClient}>
-      <ThemeProvider theme={theme}>
-        <CssBaseline />
+      <AppThemeProvider>
         <ErrorBoundary>
           <SnackbarProvider
             maxSnack={3}
@@ -35,7 +33,7 @@ ReactDOM.createRoot(document.getElementById("root")!).render(
             </BrowserRouter>
           </SnackbarProvider>
         </ErrorBoundary>
-      </ThemeProvider>
+      </AppThemeProvider>
     </QueryClientProvider>
   </React.StrictMode>
 );

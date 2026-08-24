@@ -51,7 +51,10 @@ INSTALLED_APPS = [
     "apps.notifications",
     "apps.automations",
     "apps.collaboration",
+    "apps.graphql_app",
     "drf_spectacular",
+    "graphene_django",
+    "channels",
 ]
 
 MIDDLEWARE = [
@@ -201,6 +204,23 @@ CACHES = {
         "KEY_PREFIX": "todolist",
         "TIMEOUT": 300,  # 5 minutos por defecto
     }
+}
+
+# Channels (WebSocket)
+ASGI_APPLICATION = "config.asgi.application"
+CHANNEL_LAYERS = {
+    "default": {
+        "BACKEND": "channels_redis.core.RedisChannelLayer",
+        "CONFIG": {
+            "hosts": [(REDIS_HOST, 6379)],
+        },
+    },
+}
+
+# GraphQL
+GRAPHENE = {
+    "SCHEMA": "apps.graphql_app.schema.schema",
+    "MIDDLEWARE": [],
 }
 CELERY_ACCEPT_CONTENT = ["json"]
 CELERY_TASK_SERIALIZER = "json"

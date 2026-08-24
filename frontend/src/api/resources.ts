@@ -177,6 +177,52 @@ export const twofactorApi = {
     api.post("/auth/2fa/verify/", { code }).then((r) => r.data),
 };
 
+export const timeEntriesApi = {
+  list: () => api.get("/time-entries/").then((r) => r.data),
+  create: (data: any) => api.post("/time-entries/", data).then((r) => r.data),
+  update: (id: number, data: any) =>
+    api.patch(`/time-entries/${id}/`, data).then((r) => r.data),
+  delete: (id: number) => api.delete(`/time-entries/${id}/`).then((r) => r.data),
+};
+
+export const taskTemplatesApi = {
+  list: () => api.get("/task-templates/").then((r) => r.data),
+  create: (data: any) => api.post("/task-templates/", data).then((r) => r.data),
+  createTask: (id: number, overrides?: any) =>
+    api.post(`/task-templates/${id}/create_task/`, { overrides }).then((r) => r.data),
+  delete: (id: number) => api.delete(`/task-templates/${id}/`).then((r) => r.data),
+};
+
+export const customFieldsApi = {
+  list: () => api.get("/custom-fields/").then((r) => r.data),
+  create: (data: any) => api.post("/custom-fields/", data).then((r) => r.data),
+  values: () => api.get("/custom-field-values/").then((r) => r.data),
+  setValue: (data: any) =>
+    api.post("/custom-field-values/", data).then((r) => r.data),
+};
+
+export const outgoingWebhooksApi = {
+  list: () => api.get("/outgoing-webhooks/").then((r) => r.data),
+  create: (data: any) => api.post("/outgoing-webhooks/", data).then((r) => r.data),
+  update: (id: number, data: any) =>
+    api.patch(`/outgoing-webhooks/${id}/`, data).then((r) => r.data),
+  delete: (id: number) => api.delete(`/outgoing-webhooks/${id}/`).then((r) => r.data),
+  test: (id: number) => api.post(`/outgoing-webhooks/${id}/test/`).then((r) => r.data),
+};
+
+export const bulkOpsApi = {
+  update: (taskIds: number[], updates: any) =>
+    api.post("/tasks/bulk_update/", { task_ids: taskIds, updates }).then((r) => r.data),
+  delete: (taskIds: number[]) =>
+    api.post("/tasks/bulk_delete/", { task_ids: taskIds }).then((r) => r.data),
+  moveSprint: (taskIds: number[], sprintId: number) =>
+    api.post("/tasks/bulk_move_sprint/", { task_ids: taskIds, sprint_id: sprintId }).then((r) => r.data),
+};
+
+export const searchApi = {
+  tasks: (q: string) => api.get(`/tasks/search/?q=${encodeURIComponent(q)}`).then((r) => r.data),
+};
+
 // --- Sprints ---
 
 export interface Sprint {

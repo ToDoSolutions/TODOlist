@@ -438,3 +438,169 @@ class Comment(models.Model):
 
     def __str__(self) -> str:
         return f"Comentario en {self.task_id} por {self.author_id}"
+
+
+class TimeEntry(models.Model):
+    """Registro de tiempo trabajado en una tarea."""
+
+    task = models.ForeignKey(Task, on_delete=models.CASCADE, related_name="time_entries")
+    user = models.ForeignKey(
+        settings.AUTH_USER_MODEL,
+        on_delete=models.CASCADE,
+        related_name="time_entries",
+    )
+    duration_seconds = models.PositiveIntegerField(default=0)
+    description = models.TextField(blank=True, default="")
+    started_at = models.DateTimeField(null=True, blank=True)
+    ended_at = models.DateTimeField(null=True, blank=True)
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        ordering = ["-created_at"]
+
+    def __str__(self):
+        return f"{self.user} - {self.duration_seconds}s on {self.task_id}"
+
+
+class Attachment(models.Model):
+    """Adjunto en una tarea o comentario."""
+
+    task = models.ForeignKey(
+        Task, on_delete=models.CASCADE, null=True, blank=True, related_name="attachments"
+    )
+    comment = models.ForeignKey(
+        Comment, on_delete=models.CASCADE, null=True, blank=True, related_name="attachments"
+    )
+    uploaded_by = models.ForeignKey(
+        settings.AUTH_USER_MODEL,
+        on_delete=models.CASCADE,
+        related_name="attachments",
+    )
+    file = models.FileField(upload_to="attachments/")
+    filename = models.CharField(max_length=255)
+    file_size = models.PositiveIntegerField(default=0)
+    content_type = models.CharField(max_length=100, blank=True, default="")
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        ordering = ["-created_at"]
+
+    def __str__(self):
+        return self.filename
+
+
+class TaskTemplate(models.Model):
+    """Plantilla reutilizable para crear tareas con campos predefinidos."""
+
+    name = models.CharField(max_length=120)
+    description = models.TextField(blank=True, default="")
+    owner = models.ForeignKey(
+        settings.AUTH_USER_MODEL,
+        on_delete=models.CASCADE,
+        related_name="task_templates",
+    )
+    project = models.ForeignKey(
+        Project, on_delete=models.CASCADE, null=True, blank=True, related_name="templates"
+    )
+    template_data = models.JSONField(
+        default=dict,
+        help_text="Campos predefinidos: title, description, priority, state, etc.",
+    )
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        ordering = ["-created_at"]
+
+    def __str__(self):
+        return self.name
+
+    def create_task(self, user, overrides=None):
+        """Crea una tarea a partir de la plantilla."""
+        data = dict(self.template_data)
+        if overrides:
+            data.update(overrides)
+        project = self.project or Project.objects.filter(owner=user).first()
+        return Task.objects.create(
+            owner=user,
+            project=project,
+            title=data.get("title", self.name),
+            description=data.get("description", ""),
+            priority=data.get("priority", 3),
+            state=data.get("state", "pending"),
+        )
+
+
+class CustomField(models.Model):
+    """Campo personalizado por proyecto."""
+
+    class FieldType(models.TextChoices):
+        TEXT = "text", "Texto"
+        NUMBER = "number", "Número"
+        DATE = "date", "Fecha"
+        SELECT = "select", "Selección"
+        MULTISELECT = "multiselect", "Multi-selección"
+        URL = "url", "URL"
+        CHECKBOX = "checkbox", "Checkbox"
+
+    project = models.ForeignKey(
+        Project, on_delete=models.CASCADE, related_name="custom_fields"
+    )
+    name = models.CharField(max_length=120)
+    field_type = models.CharField(max_length=20, choices=FieldType.choices)
+    options = models.JSONField(default=list, blank=True, help_text="Opciones para select/multiselect")
+    is_required = models.BooleanField(default=False)
+    default_value = models.JSONField(null=True, blank=True)
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        ordering = ["-created_at"]
+        unique_together = ("project", "name")
+
+    def __str__(self):
+        return f"{self.project.name} - {self.name}"
+
+
+class CustomFieldValue(models.Model):
+    """Valor de un campo personalizado en una tarea."""
+
+    task = models.ForeignKey(Task, on_delete=models.CASCADE, related_name="custom_field_values")
+    field = models.ForeignKey(CustomField, on_delete=models.CASCADE)
+    value = models.JSONField(null=True, blank=True)
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        unique_together = ("task", "field")
+
+    def __str__(self):
+        return f"{self.task_id}: {self.field.name} = {self.value}"
+
+
+class OutgoingWebhook(models.Model):
+    """Webhook saliente: notifica a servicios externos de eventos."""
+
+    class Event(models.TextChoices):
+        TASK_CREATED = "task_created", "Tarea creada"
+        TASK_UPDATED = "task_updated", "Tarea actualizada"
+        TASK_COMPLETED = "task_completed", "Tarea completada"
+        TASK_DELETED = "task_deleted", "Tarea eliminada"
+        COMMENT_ADDED = "comment_added", "Comentario añadido"
+        SPRINT_STARTED = "sprint_started", "Sprint iniciado"
+        SPRINT_CLOSED = "sprint_closed", "Sprint cerrado"
+
+    owner = models.ForeignKey(
+        settings.AUTH_USER_MODEL,
+        on_delete=models.CASCADE,
+        related_name="outgoing_webhooks",
+    )
+    url = models.URLField()
+    events = models.JSONField(default=list, help_text="Lista de eventos a notificar")
+    secret = models.CharField(max_length=100, blank=True, default="")
+    is_active = models.BooleanField(default=True)
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        ordering = ["-created_at"]
+
+    def __str__(self):
+        return f"{self.url} ({', '.join(self.events)})"

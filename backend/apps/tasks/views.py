@@ -3,7 +3,11 @@ from rest_framework import viewsets, status
 from rest_framework.decorators import action
 from rest_framework.response import Response
 
-from .models import Task, Subtask, Comment, TaskRelation, TaskActivity, Sprint, Epic, SavedSearch
+from .models import (
+    Task, Subtask, Comment, TaskRelation, TaskActivity, Sprint, Epic,
+    SavedSearch, TimeEntry, Attachment, TaskTemplate, CustomField,
+    CustomFieldValue, OutgoingWebhook,
+)
 from .serializers import (
     TaskSerializer,
     TaskCreateUpdateSerializer,
@@ -13,6 +17,13 @@ from .serializers import (
     TaskActivitySerializer,
     SprintSerializer,
     EpicSerializer,
+    SavedSearchSerializer,
+    TimeEntrySerializer,
+    AttachmentSerializer,
+    TaskTemplateSerializer,
+    CustomFieldSerializer,
+    CustomFieldValueSerializer,
+    OutgoingWebhookSerializer,
     SavedSearchSerializer,
 )
 from .metrics import (
@@ -84,7 +95,17 @@ class TaskViewSet(TaskCreateUpdateViewSetMixin, viewsets.ModelViewSet):
         serializer.save(owner=self.request.user)
 
     def perform_update(self, serializer):
+        old_state = serializer.instance.state
         instance = serializer.save()
+        # Registrar cambio de estado
+        if old_state != instance.state:
+            TaskActivity.objects.create(
+                task=instance,
+                actor=self.request.user,
+                action=TaskActivity.ActionType.STATE_CHANGED,
+                old_value=old_state,
+                new_value=instance.state,
+            )
         if instance.state == Task.State.COMPLETED and not instance.completed_at:
             instance.completed_at = timezone.now()
             instance.save(update_fields=["completed_at"])
@@ -226,6 +247,68 @@ class TaskViewSet(TaskCreateUpdateViewSetMixin, viewsets.ModelViewSet):
             cache.set(cache_key, data, timeout=120)
         return Response(data)
 
+    @action(detail=False, methods=["post"])
+    def bulk_update(self, request):
+        """Actualiza múltiples tareas a la vez."""
+        task_ids = request.data.get("task_ids", [])
+        updates = request.data.get("updates", {})
+        if not task_ids or not updates:
+            return Response(
+                {"error": "task_ids y updates son requeridos"},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+        qs = Task.objects.for_user(request.user).filter(id__in=task_ids)
+        updated = qs.update(**updates)
+        return Response({"updated": updated})
+
+    @action(detail=False, methods=["get"])
+    def search(self, request):
+        """Búsqueda full-text sobre tareas."""
+        from django.contrib.postgres.search import SearchVector, SearchQuery, SearchRank
+        from django.db.models import Q
+
+        query = request.query_params.get("q", "").strip()
+        if not query:
+            return Response({"results": [], "count": 0})
+
+        qs = Task.objects.for_user(request.user)
+        # Búsqueda simple con Q (compatible con SQLite en tests)
+        qs = qs.filter(
+            Q(title__icontains=query) |
+            Q(description__icontains=query)
+        ).select_related("project", "sprint").prefetch_related("tags")[:50]
+
+        serializer = self.get_serializer(qs, many=True)
+        return Response({"results": serializer.data, "count": len(serializer.data)})
+
+    @action(detail=False, methods=["post"])
+    def bulk_delete(self, request):
+        """Elimina múltiples tareas a la vez."""
+        task_ids = request.data.get("task_ids", [])
+        if not task_ids:
+            return Response(
+                {"error": "task_ids es requerido"},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+        qs = Task.objects.for_user(request.user).filter(id__in=task_ids)
+        count = qs.count()
+        qs.delete()
+        return Response({"deleted": count})
+
+    @action(detail=False, methods=["post"])
+    def bulk_move_sprint(self, request):
+        """Mueve múltiples tareas a un sprint."""
+        task_ids = request.data.get("task_ids", [])
+        sprint_id = request.data.get("sprint_id")
+        if not task_ids or not sprint_id:
+            return Response(
+                {"error": "task_ids y sprint_id son requeridos"},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+        qs = Task.objects.for_user(request.user).filter(id__in=task_ids)
+        updated = qs.update(sprint_id=sprint_id)
+        return Response({"moved": updated})
+
 
 class SubtaskViewSet(viewsets.ModelViewSet):
     serializer_class = SubtaskSerializer
@@ -359,3 +442,127 @@ class TaskRelationViewSet(viewsets.ModelViewSet):
         return TaskRelation.objects.filter(
             source__owner=self.request.user
         ).select_related("source", "target")
+
+
+class TimeEntryViewSet(viewsets.ModelViewSet):
+    """CRUD de registros de tiempo."""
+    serializer_class = TimeEntrySerializer
+    filterset_fields = ["task", "user"]
+    ordering_fields = ["created_at", "started_at"]
+
+    def get_queryset(self):
+        return TimeEntry.objects.filter(
+            user=self.request.user
+        ).select_related("task", "user")
+
+    def perform_create(self, serializer):
+        serializer.save(user=self.request.user)
+
+
+class AttachmentViewSet(viewsets.ModelViewSet):
+    """CRUD de adjuntos."""
+    serializer_class = AttachmentSerializer
+    filterset_fields = ["task", "comment"]
+
+    def get_queryset(self):
+        return Attachment.objects.filter(
+            uploaded_by=self.request.user
+        ).select_related("task", "comment")
+
+    def perform_create(self, serializer):
+        import os
+        file = self.request.FILES.get("file")
+        file_size = file.size if file else 0
+        content_type = file.content_type if file else ""
+        filename = file.name if file else ""
+        serializer.save(
+            uploaded_by=self.request.user,
+            file_size=file_size,
+            content_type=content_type,
+            filename=filename,
+        )
+
+
+class TaskTemplateViewSet(viewsets.ModelViewSet):
+    """CRUD de plantillas de tareas."""
+    serializer_class = TaskTemplateSerializer
+    filterset_fields = ["project"]
+    ordering_fields = ["created_at"]
+
+    def get_queryset(self):
+        return TaskTemplate.objects.filter(owner=self.request.user)
+
+    def perform_create(self, serializer):
+        serializer.save(owner=self.request.user)
+
+    @action(detail=True, methods=["post"])
+    def create_task(self, request, pk=None):
+        """Crea una tarea a partir de la plantilla."""
+        template = self.get_object()
+        overrides = request.data.get("overrides", {})
+        task = template.create_task(request.user, overrides)
+        return Response(TaskSerializer(task).data, status=status.HTTP_201_CREATED)
+
+
+class CustomFieldViewSet(viewsets.ModelViewSet):
+    """CRUD de campos personalizados."""
+    serializer_class = CustomFieldSerializer
+    filterset_fields = ["project"]
+
+    def get_queryset(self):
+        return CustomField.objects.filter(
+            project__owner=self.request.user
+        ).select_related("project")
+
+    def perform_create(self, serializer):
+        serializer.save()
+
+
+class CustomFieldValueViewSet(viewsets.ModelViewSet):
+    """CRUD de valores de campos personalizados."""
+    serializer_class = CustomFieldValueSerializer
+    filterset_fields = ["task", "field"]
+
+    def get_queryset(self):
+        return CustomFieldValue.objects.filter(
+            task__owner=self.request.user
+        ).select_related("task", "field")
+
+
+class OutgoingWebhookViewSet(viewsets.ModelViewSet):
+    """CRUD de webhooks salientes."""
+    serializer_class = OutgoingWebhookSerializer
+
+    def get_queryset(self):
+        return OutgoingWebhook.objects.filter(owner=self.request.user)
+
+    def perform_create(self, serializer):
+        serializer.save(owner=self.request.user)
+
+    @action(detail=True, methods=["post"])
+    def test(self, request, pk=None):
+        """Envía un payload de test al webhook."""
+        import json
+        import requests
+        webhook = self.get_object()
+        payload = {
+            "event": "test",
+            "message": "Test webhook from TODOlist",
+            "timestamp": timezone.now().isoformat(),
+        }
+        try:
+            resp = requests.post(
+                webhook.url,
+                json=payload,
+                timeout=10,
+                headers={"Content-Type": "application/json"},
+            )
+            return Response({
+                "status_code": resp.status_code,
+                "response": resp.text[:500],
+            })
+        except Exception as e:
+            return Response(
+                {"error": str(e)},
+                status=status.HTTP_502_BAD_GATEWAY,
+            )

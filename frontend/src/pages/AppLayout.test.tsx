@@ -4,7 +4,7 @@ import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { MemoryRouter } from "react-router-dom";
 import { ThemeProvider } from "@mui/material";
 import AppLayout from "./AppLayout";
-import { theme } from "../theme";
+import { createAppTheme } from "../theme";
 
 // Mock auth
 vi.mock("../auth/AuthContext", () => ({
@@ -105,13 +105,19 @@ vi.mock("notistack", () => ({
   SnackbarProvider: ({ children }: any) => children,
 }));
 
+// Mock theme-context
+vi.mock("../theme-context", () => ({
+  useThemeMode: () => ({ mode: "light", toggle: vi.fn(), setMode: vi.fn() }),
+  AppThemeProvider: ({ children }: any) => children,
+}));
+
 function renderWithProviders(ui: React.ReactElement) {
   const qc = new QueryClient({
     defaultOptions: { queries: { retry: false } },
   });
   return render(
     <QueryClientProvider client={qc}>
-      <ThemeProvider theme={theme}>
+      <ThemeProvider theme={createAppTheme(false)}>
         <MemoryRouter>{ui}</MemoryRouter>
       </ThemeProvider>
     </QueryClientProvider>

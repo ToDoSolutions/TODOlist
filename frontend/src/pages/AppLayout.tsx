@@ -43,6 +43,8 @@ import {
   ScrollText,
   Key,
   Shield,
+  Sun,
+  Moon,
 } from "lucide-react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { projectsApi, tasksApi } from "../api/resources";
@@ -50,6 +52,7 @@ import { useAuth } from "../auth/AuthContext";
 import { notify } from "../notify";
 import NotificationBell from "../components/NotificationBell";
 import PwaInstallPrompt from "../components/PwaInstallPrompt";
+import { useThemeMode } from "../theme-context";
 import { isPast, isToday } from "date-fns";
 
 const drawerWidth = 260;
@@ -60,6 +63,7 @@ export default function AppLayout() {
   const { user, logout } = useAuth();
   const navigate = useNavigate();
   const location = useLocation();
+  const { mode: themeMode, toggle: toggleTheme } = useThemeMode();
   const qc = useQueryClient();
   const [projectDialog, setProjectDialog] = useState(false);
   const [projectName, setProjectName] = useState("");
@@ -151,6 +155,11 @@ export default function AppLayout() {
               </Stack>
             )}
             <Divider orientation="vertical" flexItem sx={{ mx: 1 }} />
+            <Tooltip title={themeMode === "dark" ? "Modo claro" : "Modo oscuro"}>
+              <IconButton onClick={toggleTheme} color="inherit">
+                {themeMode === "dark" ? <Sun size={20} /> : <Moon size={20} />}
+              </IconButton>
+            </Tooltip>
             <NotificationBell />
             <Tooltip title="Mi perfil">
               <IconButton onClick={() => navigate("/app/profile")} color={location.pathname === "/app/profile" ? "primary" : "default"}>

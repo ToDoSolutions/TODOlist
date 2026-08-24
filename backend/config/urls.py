@@ -12,6 +12,7 @@ from drf_spectacular.views import (
     SpectacularSwaggerView,
     SpectacularRedocView,
 )
+from graphene_django.views import GraphQLView
 
 from apps.users.views import RegisterView, MeView
 
@@ -42,6 +43,9 @@ urlpatterns = [
     path("api/schema/", SpectacularAPIView.as_view(), name="api_schema"),
     path("api/docs/", SpectacularSwaggerView.as_view(url_name="api_schema"), name="api_docs"),
     path("api/redoc/", SpectacularRedocView.as_view(url_name="api_schema"), name="api_redoc"),
+
+    # GraphQL
+    path("graphql/", GraphQLView.as_view(graphiql=True), name="graphql"),
 ]
 
 if settings.DEBUG:

@@ -3,7 +3,11 @@ from rest_framework import serializers
 from apps.projects.models import Project
 from apps.tags.models import Tag
 
-from .models import Task, Subtask, Comment, RecurrenceRule, TaskRelation, TaskActivity, Sprint, Epic, SavedSearch
+from .models import (
+    Task, Subtask, Comment, RecurrenceRule, TaskRelation, TaskActivity,
+    Sprint, Epic, SavedSearch, TimeEntry, Attachment, TaskTemplate,
+    CustomField, CustomFieldValue, OutgoingWebhook,
+)
 
 
 class RecurrenceRuleSerializer(serializers.ModelSerializer):
@@ -203,6 +207,69 @@ class TaskCreateUpdateSerializer(serializers.ModelSerializer):
             action=TaskActivity.ActionType.CREATED,
         )
         return task
+
+
+class TimeEntrySerializer(serializers.ModelSerializer):
+    user_email = serializers.CharField(source="user.email", read_only=True)
+
+    class Meta:
+        model = TimeEntry
+        fields = [
+            "id", "task", "user", "user_email", "duration_seconds",
+            "description", "started_at", "ended_at", "created_at",
+        ]
+        read_only_fields = ["id", "user", "user_email", "created_at"]
+
+
+class AttachmentSerializer(serializers.ModelSerializer):
+    uploaded_by_email = serializers.CharField(source="uploaded_by.email", read_only=True)
+
+    class Meta:
+        model = Attachment
+        fields = [
+            "id", "task", "comment", "uploaded_by", "uploaded_by_email",
+            "file", "filename", "file_size", "content_type", "created_at",
+        ]
+        read_only_fields = ["id", "uploaded_by", "uploaded_by_email", "file_size", "content_type", "created_at"]
+
+
+class TaskTemplateSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = TaskTemplate
+        fields = [
+            "id", "name", "description", "owner", "project",
+            "template_data", "created_at",
+        ]
+        read_only_fields = ["id", "owner", "created_at"]
+
+
+class CustomFieldSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = CustomField
+        fields = [
+            "id", "project", "name", "field_type", "options",
+            "is_required", "default_value", "created_at",
+        ]
+        read_only_fields = ["id", "created_at"]
+
+
+class CustomFieldValueSerializer(serializers.ModelSerializer):
+    field_name = serializers.CharField(source="field.name", read_only=True)
+
+    class Meta:
+        model = CustomFieldValue
+        fields = ["id", "task", "field", "field_name", "value", "created_at", "updated_at"]
+        read_only_fields = ["id", "created_at", "updated_at", "field_name"]
+
+
+class OutgoingWebhookSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = OutgoingWebhook
+        fields = [
+            "id", "owner", "url", "events", "secret",
+            "is_active", "created_at",
+        ]
+        read_only_fields = ["id", "owner", "created_at"]
 
     def update(self, instance, validated_data):
         tags = validated_data.pop("tags", None)
