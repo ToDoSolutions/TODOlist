@@ -1,14 +1,22 @@
 import { useQuery } from "@tanstack/react-query";
 import { advancedMetricsApi } from "../api/resources";
-import { Box, Typography, CircularProgress, Paper, Chip, LinearProgress } from "@mui/material";
+import { Box, Typography, CircularProgress, Paper, Chip, LinearProgress, Alert } from "@mui/material";
 
 export default function CapacityPage() {
-  const { data, isLoading } = useQuery({
+  const { data, isLoading, isError } = useQuery({
     queryKey: ["capacity"],
     queryFn: advancedMetricsApi.capacity,
   });
 
   if (isLoading) return <CircularProgress />;
+
+  if (isError) {
+    return (
+      <Box maxWidth={1000} mx="auto" mt={4}>
+        <Alert severity="error">No se pudieron cargar los datos de capacidad.</Alert>
+      </Box>
+    );
+  }
 
   const capacity = data?.capacity || [];
   const maxPoints = Math.max(...capacity.map((c: any) => c.total_points), 1);

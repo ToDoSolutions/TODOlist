@@ -196,6 +196,7 @@ export const taskTemplatesApi = {
 export const customFieldsApi = {
   list: () => api.get("/custom-fields/").then((r) => r.data),
   create: (data: any) => api.post("/custom-fields/", data).then((r) => r.data),
+  remove: (id: number) => api.delete(`/custom-fields/${id}/`),
   values: () => api.get("/custom-field-values/").then((r) => r.data),
   setValue: (data: any) =>
     api.post("/custom-field-values/", data).then((r) => r.data),
@@ -242,6 +243,7 @@ export const okrsApi = {
 export const featureFlagsApi = {
   list: () => api.get("/feature-flags/").then((r) => r.data),
   create: (data: any) => api.post("/feature-flags/", data).then((r) => r.data),
+  remove: (id: number) => api.delete(`/feature-flags/${id}/`),
   check: (key: string) => api.get(`/feature-flags/${key}/check/`).then((r) => r.data),
 };
 

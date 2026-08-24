@@ -17,10 +17,12 @@ import {
   Alert,
   LinearProgress,
   List,
+  ListItem,
   ListItemButton,
   ListItemText,
   ListItemIcon,
   Divider,
+  CircularProgress,
 } from "@mui/material";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import {
@@ -33,8 +35,11 @@ import {
   Target,
   ArrowRight,
   Pencil,
+  Eye,
 } from "lucide-react";
 import { sprintsApi, type Sprint } from "../api/resources";
+import type { Task } from "../types";
+import { STATE_LABELS, PRIORITY_LABELS } from "../types";
 import { notify } from "../notify";
 
 function formatDate(d: Date) {
@@ -46,6 +51,7 @@ export default function SprintsPage() {
   const [dialogOpen, setDialogOpen] = useState(false);
   const [closeDialog, setCloseDialog] = useState<Sprint | null>(null);
   const [editDialog, setEditDialog] = useState<Sprint | null>(null);
+  const [viewTasksSprint, setViewTasksSprint] = useState<Sprint | null>(null);
   const [editForm, setEditForm] = useState({
     name: "",
     goal: "",
@@ -62,6 +68,12 @@ export default function SprintsPage() {
   const { data: sprints = [], isLoading } = useQuery({
     queryKey: ["sprints"],
     queryFn: sprintsApi.list,
+  });
+
+  const { data: sprintTasks = [], isLoading: isLoadingSprintTasks } = useQuery({
+    queryKey: ["sprint-tasks", viewTasksSprint?.id],
+    queryFn: () => sprintsApi.getTasks(viewTasksSprint!.id),
+    enabled: !!viewTasksSprint,
   });
 
   const createMut = useMutation({
@@ -218,6 +230,14 @@ export default function SprintsPage() {
                         Cerrar
                       </Button>
                     )}
+                    <Tooltip title="Ver tareas">
+                      <IconButton
+                        size="small"
+                        onClick={() => setViewTasksSprint(sprint)}
+                      >
+                        <Eye size={16} />
+                      </IconButton>
+                    </Tooltip>
                     <Tooltip title="Editar">
                       <IconButton
                         size="small"
@@ -392,6 +412,61 @@ export default function SprintsPage() {
             Cerrar sin mover tareas
           </Button>
         </DialogContent>
+      </Dialog>
+
+      {/* Dialog ver tareas del sprint */}
+      <Dialog
+        open={!!viewTasksSprint}
+        onClose={() => setViewTasksSprint(null)}
+        maxWidth="sm"
+        fullWidth
+      >
+        <DialogTitle>
+          Tareas de "{viewTasksSprint?.name}" ({sprintTasks.length})
+        </DialogTitle>
+        <DialogContent>
+          {isLoadingSprintTasks ? (
+            <Stack alignItems="center" sx={{ py: 3 }}>
+              <CircularProgress size={32} />
+            </Stack>
+          ) : sprintTasks.length === 0 ? (
+            <Typography variant="body2" color="text.secondary">
+              No hay tareas en este sprint.
+            </Typography>
+          ) : (
+            <List dense>
+              {sprintTasks.map((task: Task) => (
+                <ListItem
+                  key={task.id}
+                  sx={{ px: 0 }}
+                  secondaryAction={
+                    <Stack direction="row" spacing={1} alignItems="center">
+                      <Chip
+                        label={PRIORITY_LABELS[task.priority]}
+                        size="small"
+                        variant="outlined"
+                      />
+                    </Stack>
+                  }
+                >
+                  <ListItemText
+                    primary={task.title}
+                    secondary={
+                      <Chip
+                        label={STATE_LABELS[task.state]}
+                        size="small"
+                        sx={{ mt: 0.5 }}
+                      />
+                    }
+                  />
+                </ListItem>
+              ))}
+            </List>
+          )}
+        </DialogContent>
+        <DialogActions>
+          <Button onClick={() => setViewTasksSprint(null)}>Cerrar</Button>
+        </DialogActions>
       </Dialog>
     </Box>
   );

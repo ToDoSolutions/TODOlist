@@ -26,6 +26,17 @@ const BurndownPage = lazy(() => import("./pages/BurndownPage"));
 const CapacityPage = lazy(() => import("./pages/CapacityPage"));
 const OkrsPage = lazy(() => import("./pages/OkrsPage"));
 const AiAssistantPage = lazy(() => import("./pages/AiAssistantPage"));
+const ProjectsPage = lazy(() => import("./pages/ProjectsPage"));
+const GitHubPage = lazy(() => import("./pages/GitHubPage"));
+const NotificationsPage = lazy(() => import("./pages/NotificationsPage"));
+const TimeEntriesPage = lazy(() => import("./pages/TimeEntriesPage"));
+const TaskTemplatesPage = lazy(() => import("./pages/TaskTemplatesPage"));
+const CustomFieldsPage = lazy(() => import("./pages/CustomFieldsPage"));
+const WebhooksPage = lazy(() => import("./pages/WebhooksPage"));
+const FeatureFlagsPage = lazy(() => import("./pages/FeatureFlagsPage"));
+const TeamsPage = lazy(() => import("./pages/TeamsPage"));
+const OfflineSyncPage = lazy(() => import("./pages/OfflineSyncPage"));
+const EncryptionPage = lazy(() => import("./pages/EncryptionPage"));
 
 function Loading() {
   return (
@@ -101,6 +112,17 @@ export default function App() {
             <Route path="capacity" element={<CapacityPage />} />
             <Route path="okrs" element={<OkrsPage />} />
             <Route path="ai-assistant" element={<AiAssistantPage />} />
+            <Route path="projects" element={<ProjectsPage />} />
+            <Route path="github" element={<GitHubPage />} />
+            <Route path="notifications" element={<NotificationsPage />} />
+            <Route path="time-entries" element={<TimeEntriesPage />} />
+            <Route path="templates" element={<TaskTemplatesPage />} />
+            <Route path="custom-fields" element={<CustomFieldsPage />} />
+            <Route path="webhooks" element={<WebhooksPage />} />
+            <Route path="feature-flags" element={<FeatureFlagsPage />} />
+            <Route path="teams" element={<TeamsPage />} />
+            <Route path="offline-sync" element={<OfflineSyncPage />} />
+            <Route path="encryption" element={<EncryptionPage />} />
           </Route>
           <Route path="*" element={<Navigate to="/app" replace />} />
         </Routes>

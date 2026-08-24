@@ -20,10 +20,16 @@ import {
   MenuItem,
   InputLabel,
   FormControl,
+  List,
+  ListItem,
+  ListItemText,
+  CircularProgress,
 } from "@mui/material";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
-import { Layers, Plus, Trash2, Pencil } from "lucide-react";
+import { Layers, Plus, Trash2, Pencil, Eye } from "lucide-react";
 import { epicsApi, type Epic } from "../api/resources";
+import type { Task } from "../types";
+import { STATE_LABELS, PRIORITY_LABELS } from "../types";
 import { notify } from "../notify";
 
 const EPIC_STATES: Epic["state"][] = ["planned", "in_progress", "completed", "cancelled"];
@@ -51,11 +57,18 @@ export default function EpicsPage() {
   const [dialogOpen, setDialogOpen] = useState(false);
   const [editOpen, setEditOpen] = useState(false);
   const [editingId, setEditingId] = useState<number | null>(null);
+  const [viewTasksEpic, setViewTasksEpic] = useState<Epic | null>(null);
   const [form, setForm] = useState<EpicForm>(emptyForm);
 
   const { data: epics = [], isLoading } = useQuery({
     queryKey: ["epics"],
     queryFn: epicsApi.list,
+  });
+
+  const { data: epicTasks = [], isLoading: isLoadingEpicTasks } = useQuery({
+    queryKey: ["epic-tasks", viewTasksEpic?.id],
+    queryFn: () => epicsApi.getTasks(viewTasksEpic!.id),
+    enabled: !!viewTasksEpic,
   });
 
   const createMut = useMutation({
@@ -183,6 +196,11 @@ export default function EpicsPage() {
                       <Typography variant="caption" color="text.secondary">
                         {epic.progress_done}/{epic.progress_total} ({pct}%)
                       </Typography>
+                      <Tooltip title="Ver tareas">
+                        <IconButton size="small" onClick={() => setViewTasksEpic(epic)}>
+                          <Eye size={16} />
+                        </IconButton>
+                      </Tooltip>
                       <Tooltip title="Editar">
                         <IconButton size="small" onClick={() => openEdit(epic)}>
                           <Pencil size={16} />
@@ -315,6 +333,59 @@ export default function EpicsPage() {
           >
             Guardar
           </Button>
+        </DialogActions>
+      </Dialog>
+
+      {/* Dialog ver tareas de la épica */}
+      <Dialog
+        open={!!viewTasksEpic}
+        onClose={() => setViewTasksEpic(null)}
+        maxWidth="sm"
+        fullWidth
+      >
+        <DialogTitle>
+          Tareas de "{viewTasksEpic?.title}" ({epicTasks.length})
+        </DialogTitle>
+        <DialogContent>
+          {isLoadingEpicTasks ? (
+            <Stack alignItems="center" sx={{ py: 3 }}>
+              <CircularProgress size={32} />
+            </Stack>
+          ) : epicTasks.length === 0 ? (
+            <Typography variant="body2" color="text.secondary">
+              No hay tareas en esta épica.
+            </Typography>
+          ) : (
+            <List dense>
+              {epicTasks.map((task: Task) => (
+                <ListItem
+                  key={task.id}
+                  sx={{ px: 0 }}
+                  secondaryAction={
+                    <Chip
+                      label={PRIORITY_LABELS[task.priority]}
+                      size="small"
+                      variant="outlined"
+                    />
+                  }
+                >
+                  <ListItemText
+                    primary={task.title}
+                    secondary={
+                      <Chip
+                        label={STATE_LABELS[task.state]}
+                        size="small"
+                        sx={{ mt: 0.5 }}
+                      />
+                    }
+                  />
+                </ListItem>
+              ))}
+            </List>
+          )}
+        </DialogContent>
+        <DialogActions>
+          <Button onClick={() => setViewTasksEpic(null)}>Cerrar</Button>
         </DialogActions>
       </Dialog>
     </Box>

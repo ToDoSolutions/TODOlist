@@ -138,10 +138,10 @@ describe("AppLayout - render sin crash", () => {
       <AppLayout />
     );
     // Esperar a que el texto "Proyectos" aparezca
-    const proyectosText = await screen.findByText(/Proyectos/i, undefined, {
+    const proyectosText = await screen.findAllByText(/Proyectos/i, undefined, {
       timeout: 3000,
     });
-    expect(proyectosText).toBeDefined();
+    expect(proyectosText.length).toBeGreaterThan(0);
     expect(container.innerHTML).toContain("TODOlist");
   });
 

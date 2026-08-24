@@ -26,7 +26,7 @@ import { tasksApi } from "../api/resources";
 import { STATE_LABELS, STATE_COLORS, TYPE_LABELS, TYPE_COLORS } from "../types";
 
 export default function DashboardPage() {
-  const { data: dashboard, isLoading: loadingDash } = useQuery({
+  const { data: dashboard, isLoading: loadingDash, isError: errorDash } = useQuery({
     queryKey: ["metrics-dashboard"],
     queryFn: tasksApi.metricsDashboard,
   });
@@ -50,6 +50,14 @@ export default function DashboardPage() {
     return (
       <Box display="flex" justifyContent="center" py={10}>
         <CircularProgress />
+      </Box>
+    );
+  }
+
+  if (errorDash) {
+    return (
+      <Box maxWidth={1000} mx="auto" mt={4}>
+        <Alert severity="error">No se pudieron cargar las métricas.</Alert>
       </Box>
     );
   }

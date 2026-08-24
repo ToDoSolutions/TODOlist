@@ -56,6 +56,12 @@ import {
   ChevronRight,
   Settings,
   LayoutDashboard,
+  Bell,
+  Clock,
+  FileText,
+  Webhook,
+  Smartphone,
+  Lock,
 } from "lucide-react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { projectsApi, tasksApi } from "../api/resources";
@@ -230,15 +236,9 @@ export default function AppLayout() {
                 <Badge badgeContent={overdueCount} color="error" />
               )}
             </ListItemButton>
-            <ListItemButton
-              selected={location.pathname === "/app/tags"}
-              onClick={() => navigate("/app/tags")}
-            >
-              <ListItemIcon>
-                <TagIcon size={20} />
-              </ListItemIcon>
-              <ListItemText primary="Etiquetas" />
-            </ListItemButton>
+            <NavItem icon={<Folder size={20} />} label="Proyectos" path="/app/projects" current={location.pathname} navigate={navigate} />
+            <NavItem icon={<TagIcon size={20} />} label="Etiquetas" path="/app/tags" current={location.pathname} navigate={navigate} />
+            <NavItem icon={<Bell size={20} />} label="Notificaciones" path="/app/notifications" current={location.pathname} navigate={navigate} />
           </List>
 
           {/* --- Sección: Planificación --- */}
@@ -254,6 +254,8 @@ export default function AppLayout() {
               <NavItem icon={<BarChart3 size={20} />} label="Gantt" path="/app/gantt" current={location.pathname} navigate={navigate} />
               <NavItem icon={<TrendingDown size={20} />} label="Burndown" path="/app/burndown" current={location.pathname} navigate={navigate} />
               <NavItem icon={<Users size={20} />} label="Capacity" path="/app/capacity" current={location.pathname} navigate={navigate} />
+              <NavItem icon={<Clock size={20} />} label="Time Tracking" path="/app/time-entries" current={location.pathname} navigate={navigate} />
+              <NavItem icon={<FileText size={20} />} label="Plantillas" path="/app/templates" current={location.pathname} navigate={navigate} />
             </List>
           )}
 
@@ -279,9 +281,10 @@ export default function AppLayout() {
           />
           {!collapsedSections.integrations && (
             <List>
-              <NavItem icon={<Github size={20} />} label="GitHub" path="/app/integrations" current={location.pathname} navigate={navigate} />
+              <NavItem icon={<Github size={20} />} label="GitHub" path="/app/github" current={location.pathname} navigate={navigate} />
               <NavItem icon={<MessageSquare size={20} />} label="Chat (Slack/Discord)" path="/app/integrations" current={location.pathname} navigate={navigate} />
               <NavItem icon={<Zap size={20} />} label="Automatizaciones" path="/app/automations" current={location.pathname} navigate={navigate} />
+              <NavItem icon={<Webhook size={20} />} label="Webhooks" path="/app/webhooks" current={location.pathname} navigate={navigate} />
             </List>
           )}
 
@@ -293,9 +296,14 @@ export default function AppLayout() {
           />
           {!collapsedSections.system && (
             <List>
+              <NavItem icon={<Users size={20} />} label="Equipos" path="/app/teams" current={location.pathname} navigate={navigate} />
+              <NavItem icon={<Settings size={20} />} label="Campos personalizados" path="/app/custom-fields" current={location.pathname} navigate={navigate} />
+              <NavItem icon={<Flag size={20} />} label="Feature Flags" path="/app/feature-flags" current={location.pathname} navigate={navigate} />
               <NavItem icon={<ScrollText size={20} />} label="Auditoría" path="/app/audit" current={location.pathname} navigate={navigate} />
               <NavItem icon={<Key size={20} />} label="API Keys" path="/app/api-keys" current={location.pathname} navigate={navigate} />
               <NavItem icon={<Shield size={20} />} label="Seguridad" path="/app/security" current={location.pathname} navigate={navigate} />
+              <NavItem icon={<Smartphone size={20} />} label="Offline Sync" path="/app/offline-sync" current={location.pathname} navigate={navigate} />
+              <NavItem icon={<Lock size={20} />} label="Encriptación E2E" path="/app/encryption" current={location.pathname} navigate={navigate} />
               <NavItem icon={<UserIcon size={20} />} label="Mi perfil" path="/app/profile" current={location.pathname} navigate={navigate} />
             </List>
           )}
