@@ -15,6 +15,7 @@ from .views import (
     github_webhook,
     webhook_deliveries,
     webhook_retry_dead_letter,
+    oauth_providers,
 )
 
 router = DefaultRouter()
@@ -30,6 +31,7 @@ router.register(r"github/checks", GitHubCheckRunViewSet, basename="github-check"
 
 urlpatterns = [
     path("auth/github/start/", github_oauth_start, name="github_oauth_start"),
+    path("auth/oauth-providers/", oauth_providers, name="oauth_providers"),
     path("auth/github/callback/", github_oauth_callback, name="github_oauth_callback"),
     path("webhooks/github/", github_webhook, name="github_webhook"),
     path("webhooks/deliveries/", webhook_deliveries, name="webhook_deliveries"),

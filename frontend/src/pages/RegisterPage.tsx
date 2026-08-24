@@ -4,17 +4,32 @@ import { z } from "zod";
 import {
   Box,
   Button,
-  Card,
-  CardContent,
   Link,
   TextField,
   Typography,
   Alert,
+  IconButton,
+  InputAdornment,
+  Fade,
+  useTheme,
+  useMediaQuery,
 } from "@mui/material";
+import {
+  User,
+  Mail,
+  Lock,
+  Eye,
+  EyeOff,
+  CheckCircle2,
+  Zap,
+  BarChart3,
+  Calendar,
+} from "lucide-react";
 import { useNavigate, Link as RouterLink } from "react-router-dom";
 import { useAuth } from "../auth/AuthContext";
 import { notify } from "../notify";
 import { useState } from "react";
+import { motion } from "framer-motion";
 
 const schema = z
   .object({
@@ -33,7 +48,11 @@ type FormValues = z.infer<typeof schema>;
 export default function RegisterPage() {
   const { register: registerUser } = useAuth();
   const navigate = useNavigate();
+  const theme = useTheme();
+  const isDesktop = useMediaQuery(theme.breakpoints.up("md"));
   const [serverError, setServerError] = useState("");
+  const [showPassword, setShowPassword] = useState(false);
+  const [showPassword2, setShowPassword2] = useState(false);
 
   const {
     register,
@@ -45,44 +64,175 @@ export default function RegisterPage() {
     setServerError("");
     try {
       await registerUser(values.email, values.username, values.password);
-      notify.success("Cuenta creada");
+      notify.success("Cuenta creada correctamente");
       navigate("/app");
     } catch (e: any) {
       const data = e.response?.data;
       const msg =
         typeof data === "string"
           ? data
-          : data?.email?.[0] || data?.username?.[0] || "No se pudo registrar.";
+          : data?.email?.[0] || data?.username?.[0] || "No se pudo registrar. Inténtalo de nuevo.";
       setServerError(msg);
       notify.error(msg);
     }
   };
 
+  const features = [
+    { icon: CheckCircle2, text: "Gestión de tareas y proyectos" },
+    { icon: Zap, text: "Automatizaciones y reglas" },
+    { icon: BarChart3, text: "Dashboards y métricas" },
+    { icon: Calendar, text: "Sprints, épicas y Gantt" },
+  ];
+
   return (
-    <Box
-      display="flex"
-      minHeight="100vh"
-      alignItems="center"
-      justifyContent="center"
-      sx={{ bgcolor: "background.default" }}
-    >
-      <Card sx={{ maxWidth: 420, width: "100%", mx: 2 }}>
-        <CardContent sx={{ p: 4 }}>
-          <Typography variant="h5" mb={2} fontWeight={700}>
+    <Box sx={{ minHeight: "100vh", display: "flex", bgcolor: "background.default" }}>
+      {/* Panel izquierdo — Branding */}
+      {isDesktop && (
+        <Box
+          sx={{
+            flex: "1 1 55%",
+            display: "flex",
+            flexDirection: "column",
+            justifyContent: "center",
+            position: "relative",
+            overflow: "hidden",
+            background: (theme) =>
+              `linear-gradient(135deg, #00BFA6 0%, ${theme.palette.primary.main} 50%, ${theme.palette.primary.dark} 100%)`,
+          }}
+        >
+          <Box
+            component={motion.div}
+            animate={{ rotate: -360 }}
+            transition={{ duration: 80, repeat: Infinity, ease: "linear" }}
+            sx={{
+              position: "absolute",
+              bottom: "-15%",
+              left: "-10%",
+              width: 350,
+              height: 350,
+              borderRadius: "50%",
+              background: "rgba(255,255,255,0.06)",
+            }}
+          />
+          <Box
+            component={motion.div}
+            animate={{ y: [0, 20, 0] }}
+            transition={{ duration: 7, repeat: Infinity, ease: "easeInOut" }}
+            sx={{
+              position: "absolute",
+              top: "15%",
+              right: "8%",
+              width: 100,
+              height: 100,
+              borderRadius: "30%",
+              background: "rgba(255,255,255,0.08)",
+            }}
+          />
+
+          <Box sx={{ position: "relative", zIndex: 1, px: 8, maxWidth: 600 }}>
+            <motion.div
+              initial={{ opacity: 0, y: 20 }}
+              animate={{ opacity: 1, y: 0 }}
+              transition={{ duration: 0.6 }}
+            >
+              <Typography sx={{ color: "#fff", fontSize: "2rem", fontWeight: 800, mb: 3 }}>
+                TODOlist
+              </Typography>
+              <Typography
+                sx={{
+                  color: "#fff",
+                  fontSize: "2.5rem",
+                  fontWeight: 700,
+                  lineHeight: 1.2,
+                  letterSpacing: "-0.02em",
+                  mb: 2,
+                }}
+              >
+                Empieza gratis.
+                <br />
+                Sin tarjeta de crédito.
+              </Typography>
+              <Typography sx={{ color: "rgba(255,255,255,0.8)", fontSize: "1.125rem", mb: 5 }}>
+                Únete a miles de equipos que ya organizan su trabajo con TODOlist.
+              </Typography>
+            </motion.div>
+
+            <Box sx={{ display: "flex", flexDirection: "column", gap: 2 }}>
+              {features.map((f, i) => (
+                <motion.div
+                  key={f.text}
+                  initial={{ opacity: 0, x: -20 }}
+                  animate={{ opacity: 1, x: 0 }}
+                  transition={{ duration: 0.5, delay: 0.3 + i * 0.1 }}
+                >
+                  <Box sx={{ display: "flex", alignItems: "center", gap: 1.5 }}>
+                    <f.icon size={22} color="#fff" />
+                    <Typography sx={{ color: "rgba(255,255,255,0.9)", fontSize: "1rem" }}>
+                      {f.text}
+                    </Typography>
+                  </Box>
+                </motion.div>
+              ))}
+            </Box>
+          </Box>
+        </Box>
+      )}
+
+      {/* Panel derecho — Formulario */}
+      <Box
+        sx={{
+          flex: "1 1 45%",
+          display: "flex",
+          flexDirection: "column",
+          justifyContent: "center",
+          alignItems: "center",
+          px: { xs: 3, sm: 6 },
+          py: 4,
+        }}
+      >
+        <motion.div
+          initial={{ opacity: 0, y: 20 }}
+          animate={{ opacity: 1, y: 0 }}
+          transition={{ duration: 0.5 }}
+          style={{ width: "100%", maxWidth: 400 }}
+        >
+          {!isDesktop && (
+            <Typography sx={{ fontSize: "1.5rem", fontWeight: 800, mb: 3, color: "primary.main" }}>
+              TODOlist
+            </Typography>
+          )}
+
+          <Typography variant="h4" fontWeight={700} sx={{ mb: 1, letterSpacing: "-0.02em" }}>
             Crear cuenta
           </Typography>
+          <Typography variant="body2" color="text.secondary" sx={{ mb: 4 }}>
+            Regístrate para empezar a organizar tu trabajo
+          </Typography>
+
           {serverError && (
-            <Alert severity="error" sx={{ mb: 2 }}>
-              {serverError}
-            </Alert>
+            <Fade in={!!serverError}>
+              <Alert severity="error" sx={{ mb: 3, borderRadius: 3 }}>
+                {serverError}
+              </Alert>
+            </Fade>
           )}
+
           <Box component="form" onSubmit={handleSubmit(onSubmit)} noValidate>
             <TextField
               label="Nombre de usuario"
               fullWidth
               margin="normal"
+              autoComplete="username"
+              autoFocus
               error={!!errors.username}
               helperText={errors.username?.message}
+              InputProps={{
+                startAdornment: (
+                  <InputAdornment position="start">
+                    <User size={18} color={theme.palette.text.secondary} />
+                  </InputAdornment>
+                ),
+              }}
               {...register("username")}
             />
             <TextField
@@ -92,44 +242,94 @@ export default function RegisterPage() {
               autoComplete="email"
               error={!!errors.email}
               helperText={errors.email?.message}
+              InputProps={{
+                startAdornment: (
+                  <InputAdornment position="start">
+                    <Mail size={18} color={theme.palette.text.secondary} />
+                  </InputAdornment>
+                ),
+              }}
               {...register("email")}
             />
             <TextField
               label="Contraseña"
-              type="password"
+              type={showPassword ? "text" : "password"}
               fullWidth
               margin="normal"
+              autoComplete="new-password"
               error={!!errors.password}
               helperText={errors.password?.message}
+              InputProps={{
+                startAdornment: (
+                  <InputAdornment position="start">
+                    <Lock size={18} color={theme.palette.text.secondary} />
+                  </InputAdornment>
+                ),
+                endAdornment: (
+                  <InputAdornment position="end">
+                    <IconButton
+                      onClick={() => setShowPassword(!showPassword)}
+                      edge="end"
+                      size="small"
+                      aria-label="mostrar contraseña"
+                    >
+                      {showPassword ? <EyeOff size={18} /> : <Eye size={18} />}
+                    </IconButton>
+                  </InputAdornment>
+                ),
+              }}
               {...register("password")}
             />
             <TextField
               label="Repetir contraseña"
-              type="password"
+              type={showPassword2 ? "text" : "password"}
               fullWidth
               margin="normal"
+              autoComplete="new-password"
               error={!!errors.password2}
               helperText={errors.password2?.message}
+              InputProps={{
+                startAdornment: (
+                  <InputAdornment position="start">
+                    <Lock size={18} color={theme.palette.text.secondary} />
+                  </InputAdornment>
+                ),
+                endAdornment: (
+                  <InputAdornment position="end">
+                    <IconButton
+                      onClick={() => setShowPassword2(!showPassword2)}
+                      edge="end"
+                      size="small"
+                      aria-label="mostrar contraseña"
+                    >
+                      {showPassword2 ? <EyeOff size={18} /> : <Eye size={18} />}
+                    </IconButton>
+                  </InputAdornment>
+                ),
+              }}
               {...register("password2")}
             />
+
             <Button
               type="submit"
               fullWidth
               variant="contained"
-              sx={{ mt: 2 }}
+              size="large"
+              sx={{ mt: 3, mb: 2, py: 1.5, fontSize: "0.95rem" }}
               disabled={isSubmitting}
             >
-              Registrarme
+              {isSubmitting ? "Creando cuenta..." : "Registrarme"}
             </Button>
           </Box>
-          <Typography variant="body2" mt={2} textAlign="center">
+
+          <Typography variant="body2" mt={4} textAlign="center" color="text.secondary">
             ¿Ya tienes cuenta?{" "}
-            <Link component={RouterLink} to="/login">
+            <Link component={RouterLink} to="/login" fontWeight={600}>
               Inicia sesión
             </Link>
           </Typography>
-        </CardContent>
-      </Card>
+        </motion.div>
+      </Box>
     </Box>
   );
 }

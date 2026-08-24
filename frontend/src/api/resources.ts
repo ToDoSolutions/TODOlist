@@ -452,6 +452,10 @@ export const githubApi = {
         { code, state }
       )
       .then((r) => r.data),
+  getProviders: () =>
+    api
+      .get<{ github: boolean; google: boolean }>("/auth/oauth-providers/")
+      .then((r) => r.data),
 
   // Instalaciones
   listInstallations: () =>

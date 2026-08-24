@@ -372,6 +372,16 @@ class GitHubCheckRunViewSet(
 
 @api_view(["GET"])
 @permission_classes([AllowAny])
+def oauth_providers(request):
+    """Retorna qué providers OAuth están configurados."""
+    return Response({
+        "github": bool(settings.GITHUB_APP_CLIENT_ID),
+        "google": bool(getattr(settings, "SOCIALACCOUNT_PROVIDERS", {}).get("google", {}).get("APP", {}).get("client_id")),
+    })
+
+
+@api_view(["GET"])
+@permission_classes([AllowAny])
 def github_oauth_start(request):
     """Inicia el flujo OAuth de GitHub: redirige a la URL de autorización."""
     frontend_url = settings.DJANGO_FRONTEND_URL

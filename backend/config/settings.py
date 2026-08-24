@@ -104,16 +104,24 @@ TEMPLATES = [
 WSGI_APPLICATION = "config.wsgi.application"
 
 # Database
-DATABASES = {
-    "default": {
-        "ENGINE": "django.db.backends.postgresql",
-        "NAME": env("POSTGRES_DB", default="todolist"),
-        "USER": env("POSTGRES_USER", default="todolist"),
-        "PASSWORD": env("POSTGRES_PASSWORD", default="todolist"),
-        "HOST": env("POSTGRES_HOST", default="db"),
-        "PORT": env("POSTGRES_PORT", default="5432"),
+if env.bool("USE_SQLITE", default=False):
+    DATABASES = {
+        "default": {
+            "ENGINE": "django.db.backends.sqlite3",
+            "NAME": BASE_DIR / "db.sqlite3",
+        }
     }
-}
+else:
+    DATABASES = {
+        "default": {
+            "ENGINE": "django.db.backends.postgresql",
+            "NAME": env("POSTGRES_DB", default="todolist"),
+            "USER": env("POSTGRES_USER", default="todolist"),
+            "PASSWORD": env("POSTGRES_PASSWORD", default="todolist"),
+            "HOST": env("POSTGRES_HOST", default="db"),
+            "PORT": env("POSTGRES_PORT", default="5432"),
+        }
+    }
 
 # Custom user model
 AUTH_USER_MODEL = "users.User"
@@ -207,28 +215,35 @@ DJANGO_FRONTEND_URL = env("DJANGO_FRONTEND_URL")
 CELERY_BROKER_URL = f"redis://{env('REDIS_HOST', default='redis')}:6379/0"
 CELERY_RESULT_BACKEND = f"redis://{env('REDIS_HOST', default='redis')}:6379/0"
 
-# Caching con Redis
+# Caching con Redis (o LocMem en dev sin Redis)
 REDIS_HOST = env("REDIS_HOST", default="redis")
-CACHES = {
-    "default": {
-        "BACKEND": "django_redis.cache.RedisCache",
-        "LOCATION": f"redis://{REDIS_HOST}:6379/1",
-        "OPTIONS": {
-            "CLIENT_CLASS": "django_redis.client.DefaultClient",
-        },
-        "KEY_PREFIX": "todolist",
-        "TIMEOUT": 300,  # 5 minutos por defecto
+USE_REDIS = not env.bool("USE_SQLITE", default=False)
+if USE_REDIS:
+    CACHES = {
+        "default": {
+            "BACKEND": "django_redis.cache.RedisCache",
+            "LOCATION": f"redis://{REDIS_HOST}:6379/1",
+            "OPTIONS": {
+                "CLIENT_CLASS": "django_redis.client.DefaultClient",
+            },
+            "KEY_PREFIX": "todolist",
+            "TIMEOUT": 300,  # 5 minutos por defecto
+        }
     }
-}
+else:
+    CACHES = {
+        "default": {
+            "BACKEND": "django.core.cache.backends.locmem.LocMemCache",
+            "LOCATION": "todolist-dev",
+        }
+    }
 
 # Channels (WebSocket)
 ASGI_APPLICATION = "config.asgi.application"
 CHANNEL_LAYERS = {
     "default": {
-        "BACKEND": "channels_redis.core.RedisChannelLayer",
-        "CONFIG": {
-            "hosts": [(REDIS_HOST, 6379)],
-        },
+        "BACKEND": "channels_redis.core.RedisChannelLayer" if USE_REDIS else "channels.layers.InMemoryChannelLayer",
+        "CONFIG": {"hosts": [(REDIS_HOST, 6379)]} if USE_REDIS else {},
     },
 }
 
