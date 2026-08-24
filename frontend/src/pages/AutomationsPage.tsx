@@ -182,7 +182,7 @@ export default function AutomationsPage() {
         </Box>
       ) : ruleList.length === 0 ? (
         <Paper variant="outlined" sx={{ p: 6, textAlign: "center" }}>
-          <Zap size={48} color="#ccc" />
+          <Zap size={48} color="text.disabled" />
           <Typography color="text.secondary" mt={1}>
             No hay automatizaciones. Crea tu primera regla para automatizar tu flujo.
           </Typography>
@@ -418,3 +418,4 @@ export default function AutomationsPage() {
     </Box>
   );
 }
+

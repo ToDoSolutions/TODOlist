@@ -272,7 +272,7 @@ export default function GitHubPage() {
             <LoadingBox />
           ) : instList.length === 0 ? (
             <EmptyState
-              icon={<Github size={48} color="#ccc" />}
+              icon={<Github size={48} color="text.disabled" />}
               message="No hay instalaciones. Instala la GitHub App en tu cuenta u organización para empezar."
             />
           ) : (
@@ -366,7 +366,7 @@ export default function GitHubPage() {
             <LoadingBox />
           ) : repoList.length === 0 ? (
             <EmptyState
-              icon={<Github size={48} color="#ccc" />}
+              icon={<Github size={48} color="text.disabled" />}
               message="No hay repos descubiertos. Ve a la pestaña Instalaciones y pulsa «Descubrir repos»."
             />
           ) : (
@@ -505,7 +505,7 @@ export default function GitHubPage() {
               <LoadingBox />
             ) : issueList.length === 0 ? (
               <EmptyState
-                icon={<Github size={40} color="#ccc" />}
+                icon={<Github size={40} color="text.disabled" />}
                 message="Este repo no tiene issues con el estado seleccionado."
               />
             ) : (
@@ -619,7 +619,7 @@ export default function GitHubPage() {
             <LoadingBox />
           ) : linkList.length === 0 ? (
             <EmptyState
-              icon={<Link2 size={40} color="#ccc" />}
+              icon={<Link2 size={40} color="text.disabled" />}
               message="No hay links creados. Crea uno para vincular una tarea con un issue de GitHub."
             />
           ) : (
@@ -817,3 +817,4 @@ export default function GitHubPage() {
     </Box>
   );
 }
+

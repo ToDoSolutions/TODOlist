@@ -141,7 +141,7 @@ export default function FeatureFlagsPage() {
         </Box>
       ) : flagList.length === 0 ? (
         <Paper variant="outlined" sx={{ p: 6, textAlign: "center" }}>
-          <Flag size={48} color="#ccc" />
+          <Flag size={48} color="text.disabled" />
           <Typography color="text.secondary" mt={1}>
             No hay feature flags. Crea uno para empezar.
           </Typography>
@@ -330,3 +330,4 @@ export default function FeatureFlagsPage() {
     </Box>
   );
 }
+

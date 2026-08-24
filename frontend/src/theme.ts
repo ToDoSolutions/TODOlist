@@ -19,6 +19,18 @@ const lightPalette = {
     disabled: "#9CA3AF",
   },
   divider: "rgba(0,0,0,0.08)",
+  // M3 extended roles
+  primaryContainer: { main: "#E0E7FF", contrastText: "#1A237E" },
+  secondaryContainer: { main: "#FCE4EC", contrastText: "#880E4F" },
+  tertiaryContainer: { main: "#E0F7FA", contrastText: "#004D40" },
+  errorContainer: { main: "#FFEBEE", contrastText: "#B71C1C" },
+  surfaceVariant: { main: "#EEF0F6" },
+  surfaceContainer: { main: "#F0F2F8" },
+  surfaceContainerHigh: { main: "#E8EAF0" },
+  surfaceContainerHighest: { main: "#E2E5EC" },
+  outline: { main: "#B0BAC8" },
+  outlineVariant: { main: "#D4DAE6" },
+  scrim: { main: "rgba(0,0,0,0.5)" },
 };
 
 const darkPalette = {
@@ -39,6 +51,18 @@ const darkPalette = {
     disabled: "#5C6680",
   },
   divider: "rgba(255,255,255,0.08)",
+  // M3 extended roles — tonal surfaces for dark mode
+  primaryContainer: { main: "#1A237E", contrastText: "#C5CAE9" },
+  secondaryContainer: { main: "#880E4F", contrastText: "#F8BBD0" },
+  tertiaryContainer: { main: "#004D40", contrastText: "#B2DFDB" },
+  errorContainer: { main: "#B71C1C", contrastText: "#FFCDD2" },
+  surfaceVariant: { main: "#1B213E" },
+  surfaceContainer: { main: "#161B38" },
+  surfaceContainerHigh: { main: "#1F2545" },
+  surfaceContainerHighest: { main: "#262C4A" },
+  outline: { main: "#5C6680" },
+  outlineVariant: { main: "#2A3050" },
+  scrim: { main: "rgba(0,0,0,0.6)" },
 };
 
 // Tipografía M3
@@ -115,6 +139,24 @@ export function createAppTheme(dark: boolean): Theme {
       },
     },
     components: {
+      MuiCssBaseline: {
+        styleOverrides: {
+          // Foco visible accesible — WCAG 2.2
+          ":focus-visible": {
+            outline: `2px solid ${dark ? "#7B97FF" : "#3D5BD9"}`,
+            outlineOffset: 2,
+          },
+          // Respetar preferencia de reducción de movimiento
+          "@media (prefers-reduced-motion: reduce)": {
+            "*": {
+              animationDuration: "0.01ms !important",
+              animationIterationCount: "1 !important",
+              transitionDuration: "0.01ms !important",
+              scrollBehavior: "auto !important",
+            },
+          },
+        },
+      },
       MuiButton: {
         defaultProps: { disableElevation: true },
         styleOverrides: {
@@ -122,6 +164,7 @@ export function createAppTheme(dark: boolean): Theme {
             borderRadius: 10,
             paddingInline: 20,
             paddingBlock: 10,
+            minHeight: 40,
             transition: "all 0.2s cubic-bezier(0.4, 0, 0.2, 1)",
           },
           contained: {
@@ -163,6 +206,15 @@ export function createAppTheme(dark: boolean): Theme {
       MuiChip: {
         styleOverrides: {
           root: { borderRadius: 8, fontWeight: 500 },
+        },
+      },
+      MuiIconButton: {
+        styleOverrides: {
+          root: {
+            // Touch target mínimo 44x44 para accesibilidad móvil
+            minHeight: 40,
+            minWidth: 40,
+          },
         },
       },
       MuiAppBar: {

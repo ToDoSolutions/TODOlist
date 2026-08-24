@@ -153,7 +153,7 @@ export default function WebhooksPage() {
         </Box>
       ) : webhookList.length === 0 ? (
         <Paper variant="outlined" sx={{ p: 6, textAlign: "center" }}>
-          <Send size={48} color="#ccc" />
+          <Send size={48} color="text.disabled" />
           <Typography color="text.secondary" mt={1}>
             No hay webhooks configurados. Crea uno para empezar.
           </Typography>
@@ -307,3 +307,4 @@ export default function WebhooksPage() {
     </Box>
   );
 }
+

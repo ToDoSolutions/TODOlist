@@ -108,7 +108,7 @@ export default function ApiKeysPage() {
         </Box>
       ) : keyList.length === 0 ? (
         <Paper variant="outlined" sx={{ p: 6, textAlign: "center" }}>
-          <Key size={48} color="#ccc" />
+          <Key size={48} color="text.disabled" />
           <Typography color="text.secondary" mt={1}>
             No tienes API keys. Crea una para empezar a usar la API.
           </Typography>
@@ -242,3 +242,4 @@ export default function ApiKeysPage() {
     </Box>
   );
 }
+

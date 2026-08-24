@@ -147,7 +147,7 @@ export default function CustomFieldsPage() {
         </Box>
       ) : fieldList.length === 0 ? (
         <Paper variant="outlined" sx={{ p: 6, textAlign: "center" }}>
-          <Settings size={48} color="#ccc" />
+          <Settings size={48} color="text.disabled" />
           <Typography color="text.secondary" mt={1}>
             No hay campos personalizados. Crea uno para empezar.
           </Typography>
@@ -370,3 +370,4 @@ export default function CustomFieldsPage() {
     </Box>
   );
 }
+

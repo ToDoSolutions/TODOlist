@@ -19,6 +19,7 @@ import {
   Select,
   FormControl,
   InputLabel,
+  Tooltip,
 } from "@mui/material";
 import { Trash2, Plus, Send, Link2 } from "lucide-react";
 import { Controller, useForm } from "react-hook-form";
@@ -326,6 +327,7 @@ export default function TaskDialog({
                     <TextField
                       size="small"
                       fullWidth
+                      label="Subtarea"
                       placeholder="Añadir subtarea…"
                       value={subtaskTitle}
                       onChange={(e) => setSubtaskTitle(e.target.value)}
@@ -336,11 +338,13 @@ export default function TaskDialog({
                         }
                       }}
                     />
-                    <IconButton
-                      onClick={() => subtaskTitle.trim() && addSubtask.mutate(subtaskTitle.trim())}
-                    >
-                      <Plus size={18} />
-                    </IconButton>
+                    <Tooltip title="Añadir subtarea">
+                      <IconButton
+                        onClick={() => subtaskTitle.trim() && addSubtask.mutate(subtaskTitle.trim())}
+                      >
+                        <Plus size={18} />
+                      </IconButton>
+                    </Tooltip>
                   </Stack>
                   {(task.subtasks || []).map((s) => (
                     <Stack key={s.id} direction="row" alignItems="center" spacing={1}>
@@ -358,9 +362,11 @@ export default function TaskDialog({
                       >
                         {s.title}
                       </Typography>
-                      <IconButton size="small" onClick={() => removeSubtask.mutate(s.id)}>
-                        <Trash2 size={14} />
-                      </IconButton>
+                      <Tooltip title="Eliminar subtarea">
+                        <IconButton size="small" onClick={() => removeSubtask.mutate(s.id)}>
+                          <Trash2 size={14} />
+                        </IconButton>
+                      </Tooltip>
                     </Stack>
                   ))}
                 </Box>
@@ -374,15 +380,18 @@ export default function TaskDialog({
                     <TextField
                       size="small"
                       fullWidth
+                      label="Comentario"
                       placeholder="Escribe un comentario…"
                       value={commentBody}
                       onChange={(e) => setCommentBody(e.target.value)}
                     />
-                    <IconButton
-                      onClick={() => commentBody.trim() && addComment.mutate(commentBody.trim())}
-                    >
-                      <Send size={18} />
-                    </IconButton>
+                    <Tooltip title="Enviar comentario">
+                      <IconButton
+                        onClick={() => commentBody.trim() && addComment.mutate(commentBody.trim())}
+                      >
+                        <Send size={18} />
+                      </IconButton>
+                    </Tooltip>
                   </Stack>
                   {(task.comments || []).map((c) => (
                     <Box key={c.id} sx={{ mb: 1 }}>

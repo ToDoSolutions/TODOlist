@@ -183,7 +183,7 @@ export default function TeamsPage() {
             </Box>
           ) : teamList.length === 0 ? (
             <Paper variant="outlined" sx={{ p: 6, textAlign: "center" }}>
-              <Users size={48} color="#ccc" />
+              <Users size={48} color="text.disabled" />
               <Typography color="text.secondary" mt={1}>
                 No tienes equipos. Crea uno para empezar a colaborar.
               </Typography>
@@ -290,7 +290,7 @@ export default function TeamsPage() {
             </Box>
           ) : mentionList.length === 0 ? (
             <Paper variant="outlined" sx={{ p: 6, textAlign: "center" }}>
-              <AtSign size={48} color="#ccc" />
+              <AtSign size={48} color="text.disabled" />
               <Typography color="text.secondary" mt={1}>
                 No tienes menciones recientes.
               </Typography>
@@ -376,7 +376,7 @@ export default function TeamsPage() {
 
           {!selectedProjectId ? (
             <Paper variant="outlined" sx={{ p: 6, textAlign: "center" }}>
-              <Users size={48} color="#ccc" />
+              <Users size={48} color="text.disabled" />
               <Typography color="text.secondary" mt={1}>
                 Selecciona un proyecto para ver sus miembros.
               </Typography>
@@ -389,7 +389,7 @@ export default function TeamsPage() {
             <Alert severity="error">Error al cargar los miembros del proyecto.</Alert>
           ) : projectMemberList.length === 0 ? (
             <Paper variant="outlined" sx={{ p: 6, textAlign: "center" }}>
-              <Users size={48} color="#ccc" />
+              <Users size={48} color="text.disabled" />
               <Typography color="text.secondary" mt={1}>
                 Este proyecto no tiene miembros todavía.
               </Typography>
@@ -539,3 +539,4 @@ export default function TeamsPage() {
     </Box>
   );
 }
+

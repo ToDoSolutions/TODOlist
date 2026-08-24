@@ -249,6 +249,7 @@ export default function TasksPage({ projectId, title }: TasksPageProps) {
           <TextField
             size="small"
             placeholder="Buscar…"
+            aria-label="Buscar tareas"
             value={params.get("q") || ""}
             onChange={(e) => setParam("q", e.target.value)}
             sx={{ minWidth: 220 }}
@@ -350,16 +351,16 @@ export default function TasksPage({ projectId, title }: TasksPageProps) {
             exclusive
             onChange={(_, v) => v && setParam("view", v)}
           >
-            <ToggleButton value="list">
+            <ToggleButton value="list" aria-label="Vista de lista">
               <ListIcon size={16} />
             </ToggleButton>
-            <ToggleButton value="table">
+            <ToggleButton value="table" aria-label="Vista de tabla">
               <TableIcon size={16} />
             </ToggleButton>
-            <ToggleButton value="kanban">
+            <ToggleButton value="kanban" aria-label="Vista kanban">
               <Columns size={16} />
             </ToggleButton>
-            <ToggleButton value="calendar">
+            <ToggleButton value="calendar" aria-label="Vista de calendario">
               <Calendar size={16} />
             </ToggleButton>
           </ToggleButtonGroup>
@@ -401,9 +402,11 @@ export default function TasksPage({ projectId, title }: TasksPageProps) {
           <Button size="small" color="inherit" startIcon={<Trash2 size={14} />} onClick={handleBulkDelete}>
             Eliminar
           </Button>
-          <IconButton size="small" color="inherit" onClick={clearSelection}>
-            <X size={16} />
-          </IconButton>
+          <Tooltip title="Limpiar selección">
+            <IconButton size="small" color="inherit" onClick={clearSelection} aria-label="Limpiar selección">
+              <X size={16} />
+            </IconButton>
+          </Tooltip>
         </Paper>
       )}
 
