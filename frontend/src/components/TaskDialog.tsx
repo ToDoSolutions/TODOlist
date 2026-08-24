@@ -16,8 +16,11 @@ import {
   Divider,
   Autocomplete,
   Alert,
+  Select,
+  FormControl,
+  InputLabel,
 } from "@mui/material";
-import { Trash2, Plus, Send } from "lucide-react";
+import { Trash2, Plus, Send, Link2 } from "lucide-react";
 import { Controller, useForm } from "react-hook-form";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { projectsApi, tagsApi, tasksApi } from "../api/resources";
@@ -27,8 +30,11 @@ import {
   TaskInput,
   TaskPriority,
   TaskState,
+  TaskRelation,
+  RelationType,
   STATE_LABELS,
   PRIORITY_LABELS,
+  RELATION_LABELS,
 } from "../types";
 import { format } from "date-fns";
 
@@ -61,6 +67,8 @@ export default function TaskDialog({
   const [subtaskTitle, setSubtaskTitle] = useState("");
   const [commentBody, setCommentBody] = useState("");
   const [serverError, setServerError] = useState("");
+  const [relTaskId, setRelTaskId] = useState("");
+  const [relType, setRelType] = useState<RelationType>("blocks");
 
   const { data: projectsData } = useQuery({
     queryKey: ["projects"],
@@ -161,6 +169,28 @@ export default function TaskDialog({
       qc.invalidateQueries({ queryKey: ["tasks"] });
       qc.invalidateQueries({ queryKey: ["projects"] });
       onSaved();
+    },
+  });
+
+  const { data: relationsData } = useQuery({
+    queryKey: ["task-relations", task?.id],
+    queryFn: () => tasksApi.getRelations(task!.id),
+    enabled: !!task?.id,
+  });
+  const relations: TaskRelation[] = Array.isArray(relationsData) ? relationsData : [];
+
+  const addRelation = useMutation({
+    mutationFn: () =>
+      tasksApi.addRelation(task!.id, Number(relTaskId), relType),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ["task-relations", task?.id] });
+      qc.invalidateQueries({ queryKey: ["tasks"] });
+      setRelTaskId("");
+      setRelType("blocks");
+    },
+    onError: (e: any) => {
+      const msg = e.response?.data?.detail || "No se pudo añadir la relación.";
+      notify.error(msg);
     },
   });
 
@@ -362,6 +392,79 @@ export default function TaskDialog({
                       <Typography variant="body2">{c.body}</Typography>
                     </Box>
                   ))}
+                </Box>
+
+                <Divider />
+                <Box>
+                  <Stack direction="row" alignItems="center" spacing={1} mb={1}>
+                    <Link2 size={18} />
+                    <Typography variant="subtitle2">Dependencias</Typography>
+                  </Stack>
+                  {relations.length > 0 && (
+                    <Stack spacing={1} mb={1}>
+                      {relations.map((r) => {
+                        const isSource = r.source === task.id;
+                        const relatedTitle = isSource ? r.target_title : r.source_title;
+                        const relatedId = isSource ? r.target : r.source;
+                        return (
+                          <Stack
+                            key={r.id}
+                            direction="row"
+                            alignItems="center"
+                            spacing={1}
+                          >
+                            <Typography variant="body2" sx={{ flex: 1 }}>
+                              #{relatedId} · {relatedTitle}
+                            </Typography>
+                            <Chip
+                              size="small"
+                              label={RELATION_LABELS[r.relation_type]}
+                              color={
+                                r.relation_type === "blocks"
+                                  ? "error"
+                                  : r.relation_type === "depends_on"
+                                  ? "warning"
+                                  : "default"
+                              }
+                            />
+                          </Stack>
+                        );
+                      })}
+                    </Stack>
+                  )}
+                  <Stack direction="row" spacing={1} alignItems="center">
+                    <TextField
+                      size="small"
+                      label="ID tarea"
+                      type="number"
+                      value={relTaskId}
+                      onChange={(e) => setRelTaskId(e.target.value)}
+                      sx={{ width: 120 }}
+                    />
+                    <FormControl size="small" sx={{ minWidth: 180 }}>
+                      <InputLabel>Tipo</InputLabel>
+                      <Select
+                        label="Tipo"
+                        value={relType}
+                        onChange={(e) =>
+                          setRelType(e.target.value as RelationType)
+                        }
+                      >
+                        <MenuItem value="blocks">Bloquea</MenuItem>
+                        <MenuItem value="depends_on">Bloqueada por</MenuItem>
+                        <MenuItem value="related">Relacionada con</MenuItem>
+                      </Select>
+                    </FormControl>
+                    <Button
+                      size="small"
+                      variant="outlined"
+                      startIcon={<Plus size={16} />}
+                      disabled={!relTaskId || addRelation.isPending}
+                      onClick={() => addRelation.mutate()}
+                    >
+                      Añadir
+                    </Button>
+                  </Stack>
                 </Box>
               </>
             )}

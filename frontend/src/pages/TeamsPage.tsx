@@ -31,7 +31,7 @@ import {
 } from "@mui/material";
 import { Users, Plus, Trash2, UserPlus, AtSign } from "lucide-react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
-import { collaborationApi } from "../api/resources";
+import { collaborationApi, projectsApi } from "../api/resources";
 import { notify } from "../notify";
 
 export default function TeamsPage() {
@@ -44,6 +44,11 @@ export default function TeamsPage() {
   const [expandedTeam, setExpandedTeam] = useState<number | null>(null);
   const [addMemberTeamId, setAddMemberTeamId] = useState<number | null>(null);
   const [memberForm, setMemberForm] = useState({ userId: "", role: "member" });
+
+  // --- Project members tab state ---
+  const [selectedProjectId, setSelectedProjectId] = useState<number | "">("");
+  const [inviteOpen, setInviteOpen] = useState(false);
+  const [inviteForm, setInviteForm] = useState({ email: "", role: "member" });
 
   const { data: teams, isLoading: teamsLoading } = useQuery({
     queryKey: ["teams"],
@@ -89,9 +94,33 @@ export default function TeamsPage() {
     },
   });
 
+  // --- Project members queries ---
+  const { data: projects, isLoading: projectsLoading } = useQuery({
+    queryKey: ["projects"],
+    queryFn: projectsApi.list,
+  });
+
+  const projectMembersQuery = useQuery({
+    queryKey: ["project-members", selectedProjectId],
+    queryFn: () => collaborationApi.projectMembers.list(selectedProjectId as number),
+    enabled: !!selectedProjectId,
+  });
+
+  const inviteMemberMut = useMutation({
+    mutationFn: ({ projectId, email, role }: { projectId: number; email: string; role: string }) =>
+      collaborationApi.projectMembers.invite(projectId, { email, role }),
+    onSuccess: () => {
+      notify.success("Invitación enviada");
+      qc.invalidateQueries({ queryKey: ["project-members", selectedProjectId] });
+      setInviteOpen(false);
+    },
+  });
+
   const teamList = (teams as any)?.results ?? (teams as any) ?? [];
   const mentionList = (mentions as any)?.results ?? (mentions as any) ?? [];
   const memberList = (membersQuery.data as any)?.results ?? (membersQuery.data as any) ?? [];
+  const projectList = (projects as any) ?? [];
+  const projectMemberList = (projectMembersQuery.data as any)?.results ?? (projectMembersQuery.data as any) ?? [];
 
   const handleCreate = () => {
     if (!createForm.name) return;
@@ -107,6 +136,15 @@ export default function TeamsPage() {
     });
   };
 
+  const handleInviteMember = () => {
+    if (!selectedProjectId || !inviteForm.email) return;
+    inviteMemberMut.mutate({
+      projectId: Number(selectedProjectId),
+      email: inviteForm.email,
+      role: inviteForm.role,
+    });
+  };
+
   return (
     <Box maxWidth={900} mx="auto">
       <Stack direction="row" alignItems="center" spacing={1} mb={3}>
@@ -117,6 +155,7 @@ export default function TeamsPage() {
       <Tabs value={tab} onChange={(_, v) => setTab(v)} sx={{ mb: 2 }}>
         <Tab icon={<Users size={16} />} iconPosition="start" label="Equipos" />
         <Tab icon={<AtSign size={16} />} iconPosition="start" label="Menciones" />
+        <Tab icon={<UserPlus size={16} />} iconPosition="start" label="Miembros de Proyecto" />
       </Tabs>
 
       {/* ===================== TAB 1: Equipos ===================== */}
@@ -299,6 +338,95 @@ export default function TeamsPage() {
         </Box>
       )}
 
+      {/* ===================== TAB 3: Miembros de Proyecto ===================== */}
+      {tab === 2 && (
+        <Box>
+          <Stack direction="row" alignItems="center" spacing={2} mb={2}>
+            <FormControl size="small" sx={{ minWidth: 260 }}>
+              <InputLabel>Proyecto</InputLabel>
+              <Select
+                value={selectedProjectId}
+                label="Proyecto"
+                onChange={(e) => setSelectedProjectId(e.target.value as number | "")}
+              >
+                <MenuItem value="">
+                  <em>Selecciona un proyecto</em>
+                </MenuItem>
+                {projectList.map((p: any) => (
+                  <MenuItem key={p.id} value={p.id}>{p.name}</MenuItem>
+                ))}
+              </Select>
+            </FormControl>
+            <Box flexGrow={1} />
+            <Button
+              variant="contained"
+              startIcon={<UserPlus size={18} />}
+              disabled={!selectedProjectId}
+              onClick={() => { setInviteForm({ email: "", role: "member" }); setInviteOpen(true); }}
+            >
+              Invitar miembro
+            </Button>
+          </Stack>
+
+          {!selectedProjectId ? (
+            <Paper variant="outlined" sx={{ p: 6, textAlign: "center" }}>
+              <Users size={48} color="#ccc" />
+              <Typography color="text.secondary" mt={1}>
+                Selecciona un proyecto para ver sus miembros.
+              </Typography>
+            </Paper>
+          ) : projectMembersQuery.isLoading ? (
+            <Box display="flex" justifyContent="center" py={5}>
+              <CircularProgress />
+            </Box>
+          ) : projectMembersQuery.isError ? (
+            <Alert severity="error">Error al cargar los miembros del proyecto.</Alert>
+          ) : projectMemberList.length === 0 ? (
+            <Paper variant="outlined" sx={{ p: 6, textAlign: "center" }}>
+              <Users size={48} color="#ccc" />
+              <Typography color="text.secondary" mt={1}>
+                Este proyecto no tiene miembros todavía.
+              </Typography>
+            </Paper>
+          ) : (
+            <TableContainer component={Paper} variant="outlined">
+              <Table size="small">
+                <TableHead>
+                  <TableRow>
+                    <TableCell>Usuario</TableCell>
+                    <TableCell>Rol</TableCell>
+                    <TableCell>Fecha de ingreso</TableCell>
+                  </TableRow>
+                </TableHead>
+                <TableBody>
+                  {projectMemberList.map((m: any) => (
+                    <TableRow key={m.id}>
+                      <TableCell>
+                        <Typography variant="body2" fontWeight={600}>
+                          {m.user_display || m.user_email || m.email || `Usuario #${m.user}`}
+                        </Typography>
+                      </TableCell>
+                      <TableCell>
+                        <Chip
+                          size="small"
+                          label={m.role || "member"}
+                          variant="outlined"
+                        />
+                      </TableCell>
+                      <TableCell>
+                        <Typography variant="body2" color="text.secondary">
+                          {m.joined_at || m.created_at ? new Date(m.joined_at || m.created_at).toLocaleDateString() : "—"}
+                        </Typography>
+                      </TableCell>
+                    </TableRow>
+                  ))}
+                </TableBody>
+              </Table>
+            </TableContainer>
+          )}
+        </Box>
+      )}
+
       {/* ===================== Dialog: Crear equipo ===================== */}
       <Dialog open={createOpen} onClose={() => setCreateOpen(false)} maxWidth="sm" fullWidth>
         <DialogTitle>Crear equipo</DialogTitle>
@@ -360,6 +488,45 @@ export default function TeamsPage() {
           <Button onClick={() => setAddMemberTeamId(null)}>Cancelar</Button>
           <Button variant="contained" onClick={handleAddMember} disabled={!memberForm.userId || addMemberMut.isPending}>
             Añadir
+          </Button>
+        </DialogActions>
+      </Dialog>
+
+      {/* ===================== Dialog: Invitar miembro a proyecto ===================== */}
+      <Dialog open={inviteOpen} onClose={() => setInviteOpen(false)} maxWidth="sm" fullWidth>
+        <DialogTitle>Invitar miembro</DialogTitle>
+        <DialogContent>
+          <Stack spacing={2} sx={{ mt: 1 }}>
+            <TextField
+              label="Email o nombre de usuario"
+              value={inviteForm.email}
+              onChange={(e) => setInviteForm({ ...inviteForm, email: e.target.value })}
+              fullWidth
+              size="small"
+              helperText="Introduce el email o username del usuario a invitar"
+            />
+            <FormControl fullWidth size="small">
+              <InputLabel>Rol</InputLabel>
+              <Select
+                value={inviteForm.role}
+                label="Rol"
+                onChange={(e) => setInviteForm({ ...inviteForm, role: e.target.value })}
+              >
+                <MenuItem value="admin">Administrador</MenuItem>
+                <MenuItem value="member">Miembro</MenuItem>
+                <MenuItem value="viewer">Lector</MenuItem>
+              </Select>
+            </FormControl>
+          </Stack>
+        </DialogContent>
+        <DialogActions>
+          <Button onClick={() => setInviteOpen(false)}>Cancelar</Button>
+          <Button
+            variant="contained"
+            onClick={handleInviteMember}
+            disabled={!inviteForm.email || inviteMemberMut.isPending}
+          >
+            Invitar
           </Button>
         </DialogActions>
       </Dialog>

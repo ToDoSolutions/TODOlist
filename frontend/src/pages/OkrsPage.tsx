@@ -114,6 +114,19 @@ export default function OkrsPage() {
     onError: () => notify.error("No se pudo actualizar el valor"),
   });
 
+  const [editKrDialog, setEditKrDialog] = useState<any>(null);
+  const [editKrForm, setEditKrForm] = useState({ title: "", target_value: 100, current_value: 0, unit: "%" });
+  const updateKr = useMutation({
+    mutationFn: ({ id, data }: { id: number; data: any }) => okrsApi.updateKeyResult(id, data),
+    onSuccess: () => { queryClient.invalidateQueries({ queryKey: ["objectives"] }); setEditKrDialog(null); notify.success("Key result actualizado"); },
+    onError: () => notify.error("No se pudo actualizar el key result"),
+  });
+
+  const openEditKr = (kr: any) => {
+    setEditKrForm({ title: kr.title, target_value: kr.target_value, current_value: kr.current_value, unit: kr.unit || "%" });
+    setEditKrDialog(kr);
+  };
+
   const resetObjForm = () => { setObjForm({ title: "", description: "", quarter: "Q1", year: new Date().getFullYear(), status: "on_track" }); setEditingObj(null); };
   const resetKrForm = () => { setKrForm({ title: "", target_value: 100, current_value: 0, unit: "%" }); };
 
@@ -218,6 +231,11 @@ export default function OkrsPage() {
                         <Tooltip title="Actualizar valor">
                           <IconButton size="small" onClick={() => { setUpdateDialogKr(kr); setUpdateForm({ new_value: kr.current_value, note: "" }); }}>
                             <TrendingUp size={14} />
+                          </IconButton>
+                        </Tooltip>
+                        <Tooltip title="Editar KR">
+                          <IconButton size="small" onClick={() => openEditKr(kr)}>
+                            <Pencil size={14} />
                           </IconButton>
                         </Tooltip>
                         <Tooltip title="Eliminar KR">
@@ -325,6 +343,23 @@ export default function OkrsPage() {
         <DialogActions>
           <Button onClick={() => setUpdateDialogKr(null)}>Cancelar</Button>
           <Button variant="contained" startIcon={<Check size={16} />} onClick={submitUpdate}>Actualizar</Button>
+        </DialogActions>
+      </Dialog>
+
+      {/* Edit KR dialog */}
+      <Dialog open={!!editKrDialog} onClose={() => setEditKrDialog(null)} fullWidth maxWidth="xs">
+        <DialogTitle>Editar key result</DialogTitle>
+        <DialogContent>
+          <Stack spacing={2} sx={{ mt: 1 }}>
+            <TextField label="Título" fullWidth value={editKrForm.title} onChange={(e) => setEditKrForm({ ...editKrForm, title: e.target.value })} />
+            <TextField label="Valor objetivo" type="number" fullWidth value={editKrForm.target_value} onChange={(e) => setEditKrForm({ ...editKrForm, target_value: Number(e.target.value) })} />
+            <TextField label="Valor actual" type="number" fullWidth value={editKrForm.current_value} onChange={(e) => setEditKrForm({ ...editKrForm, current_value: Number(e.target.value) })} />
+            <TextField label="Unidad" fullWidth value={editKrForm.unit} onChange={(e) => setEditKrForm({ ...editKrForm, unit: e.target.value })} />
+          </Stack>
+        </DialogContent>
+        <DialogActions>
+          <Button onClick={() => setEditKrDialog(null)}>Cancelar</Button>
+          <Button variant="contained" startIcon={<Check size={16} />} disabled={updateKr.isPending} onClick={() => editKrDialog && updateKr.mutate({ id: editKrDialog.id, data: editKrForm })}>Guardar</Button>
         </DialogActions>
       </Dialog>
     </Box>

@@ -141,9 +141,10 @@ export const collaborationApi = {
   },
   // Project members
   projectMembers: {
-    list: () => api.get("/project-members/").then((r) => r.data),
-    invite: (email: string, projectId: number, role: string) =>
-      api.post("/project-members/invite/", { email, project_id: projectId, role }).then((r) => r.data),
+    list: (projectId: number) =>
+      api.get(`/project-members/?project=${projectId}`).then((r) => r.data),
+    invite: (projectId: number, data: { email: string; role: string }) =>
+      api.post("/project-members/invite/", { email: data.email, project_id: projectId, role: data.role }).then((r) => r.data),
   },
   // Mentions
   mentions: {

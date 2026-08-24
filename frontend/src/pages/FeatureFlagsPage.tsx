@@ -85,10 +85,7 @@ export default function FeatureFlagsPage() {
   });
 
   const deleteMut = useMutation({
-    mutationFn: (id: number) =>
-      (featureFlagsApi as any).delete
-        ? (featureFlagsApi as any).delete(id)
-        : Promise.reject(new Error("delete not implemented")),
+    mutationFn: (id: number) => featureFlagsApi.remove(id),
     onSuccess: () => {
       notify.info("Feature flag eliminado");
       qc.invalidateQueries({ queryKey: ["feature-flags"] });

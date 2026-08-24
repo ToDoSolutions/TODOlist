@@ -68,10 +68,7 @@ export default function CustomFieldsPage() {
   });
 
   const deleteMut = useMutation({
-    mutationFn: (id: number) =>
-      (customFieldsApi as any).delete
-        ? (customFieldsApi as any).delete(id)
-        : Promise.reject(new Error("delete not implemented")),
+    mutationFn: (id: number) => customFieldsApi.remove(id),
     onSuccess: () => {
       notify.info("Campo eliminado");
       qc.invalidateQueries({ queryKey: ["custom-fields"] });

@@ -6,16 +6,32 @@ import {
   IconButton,
   Box,
   Checkbox,
+  Collapse,
+  Tooltip,
+  Select,
+  MenuItem,
+  FormControl,
+  CircularProgress,
 } from "@mui/material";
-import { Calendar, Flag, Trash2 } from "lucide-react";
+import {
+  Calendar,
+  Flag,
+  Trash2,
+  FolderInput,
+  History,
+  ChevronDown,
+  ChevronRight,
+} from "lucide-react";
+import { useState } from "react";
 import { format, isPast, isToday } from "date-fns";
 import { es } from "date-fns/locale";
-import { useMutation, useQueryClient } from "@tanstack/react-query";
-import { tasksApi } from "../api/resources";
+import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
+import { tasksApi, sprintsApi } from "../api/resources";
 import { notify } from "../notify";
 import {
   Task,
   TaskState,
+  Activity,
   STATE_LABELS,
   STATE_COLORS,
   PRIORITY_LABELS,
@@ -29,6 +45,8 @@ interface Props {
 
 export default function TaskListItem({ task, onEdit }: Props) {
   const qc = useQueryClient();
+  const [showSprintSelect, setShowSprintSelect] = useState(false);
+  const [showActivities, setShowActivities] = useState(false);
 
   const toggleComplete = useMutation({
     mutationFn: () =>
@@ -52,6 +70,28 @@ export default function TaskListItem({ task, onEdit }: Props) {
       qc.invalidateQueries({ queryKey: ["projects"] });
     },
     onError: () => notify.error("No se pudo eliminar la tarea"),
+  });
+
+  const { data: sprints = [] } = useQuery({
+    queryKey: ["sprints"],
+    queryFn: sprintsApi.list,
+    enabled: showSprintSelect,
+  });
+
+  const moveToSprint = useMutation({
+    mutationFn: (sprintId: number) => tasksApi.moveToSprint(task.id, sprintId),
+    onSuccess: () => {
+      notify.success("Tarea movida al sprint");
+      qc.invalidateQueries({ queryKey: ["tasks"] });
+      setShowSprintSelect(false);
+    },
+    onError: () => notify.error("No se pudo mover la tarea"),
+  });
+
+  const { data: activities, isLoading: activitiesLoading } = useQuery({
+    queryKey: ["task-activities", task.id],
+    queryFn: () => tasksApi.getActivities(task.id),
+    enabled: !!showActivities,
   });
 
   const due = task.due_date ? new Date(task.due_date) : null;
@@ -129,18 +169,100 @@ export default function TaskListItem({ task, onEdit }: Props) {
             )}
           </Stack>
         </Box>
-        <IconButton
-          size="small"
-          color="error"
-          onClick={(e) => {
-            e.stopPropagation();
-            if (confirm("¿Eliminar esta tarea?")) deleteTask.mutate();
-          }}
-          sx={{ opacity: 0.5, "&:hover": { opacity: 1 } }}
-        >
-          <Trash2 size={16} />
-        </IconButton>
+        <Stack direction="row" spacing={0.5} alignItems="center">
+          <Tooltip title="Mover a sprint">
+            <IconButton
+              size="small"
+              onClick={(e) => {
+                e.stopPropagation();
+                setShowSprintSelect((v) => !v);
+              }}
+              sx={{ opacity: 0.5, "&:hover": { opacity: 1 } }}
+            >
+              <FolderInput size={16} />
+            </IconButton>
+          </Tooltip>
+          <Tooltip title="Actividad">
+            <IconButton
+              size="small"
+              onClick={(e) => {
+                e.stopPropagation();
+                setShowActivities((v) => !v);
+              }}
+              sx={{ opacity: 0.5, "&:hover": { opacity: 1 } }}
+            >
+              <History size={16} />
+            </IconButton>
+          </Tooltip>
+          <IconButton
+            size="small"
+            color="error"
+            onClick={(e) => {
+              e.stopPropagation();
+              if (confirm("¿Eliminar esta tarea?")) deleteTask.mutate();
+            }}
+            sx={{ opacity: 0.5, "&:hover": { opacity: 1 } }}
+          >
+            <Trash2 size={16} />
+          </IconButton>
+        </Stack>
       </Stack>
+
+      {showSprintSelect && (
+        <Box mt={1} onClick={(e) => e.stopPropagation()}>
+          <FormControl size="small" fullWidth>
+            <Select
+              value=""
+              displayEmpty
+              onChange={(e) => {
+                const val = e.target.value;
+                if (val) moveToSprint.mutate(Number(val));
+              }}
+              renderValue={() =>
+                moveToSprint.isPending
+                  ? "Moviendo..."
+                  : "Selecciona un sprint"
+              }
+            >
+              {sprints.length === 0 && (
+                <MenuItem disabled>No hay sprints</MenuItem>
+              )}
+              {sprints.map((s) => (
+                <MenuItem key={s.id} value={s.id}>
+                  {s.name}
+                </MenuItem>
+              ))}
+            </Select>
+          </FormControl>
+        </Box>
+      )}
+
+      <Collapse in={showActivities}>
+        <Box mt={1} onClick={(e) => e.stopPropagation()}>
+          <Stack direction="row" spacing={0.5} alignItems="center" mb={0.5}>
+            {showActivities ? <ChevronDown size={14} /> : <ChevronRight size={14} />}
+            <Typography variant="caption" fontWeight={600}>
+              Actividad
+            </Typography>
+          </Stack>
+          {activitiesLoading ? (
+            <CircularProgress size={16} />
+          ) : activities && activities.length > 0 ? (
+            <Stack spacing={0.5}>
+              {activities.map((a: Activity) => (
+                <Typography key={a.id} variant="caption" color="text.secondary">
+                  {a.action} · {a.actor_email || "sistema"} ·{" "}
+                  {format(new Date(a.created_at), "dd MMM HH:mm", { locale: es })}
+                </Typography>
+              ))}
+            </Stack>
+          ) : (
+            <Typography variant="caption" color="text.secondary">
+              Sin actividad registrada
+            </Typography>
+          )}
+        </Box>
+      </Collapse>
     </Paper>
   );
 }
