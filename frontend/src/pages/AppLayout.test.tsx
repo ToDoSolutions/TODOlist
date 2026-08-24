@@ -85,6 +85,12 @@ vi.mock("../api/resources", () => ({
       list: vi.fn().mockResolvedValue({ results: [] }),
     },
   },
+  apiKeysApi: {
+    list: vi.fn().mockResolvedValue([]),
+    create: vi.fn(),
+    revoke: vi.fn(),
+    delete: vi.fn(),
+  },
 }));
 
 // Mock notistack

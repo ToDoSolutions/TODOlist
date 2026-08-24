@@ -51,6 +51,7 @@ INSTALLED_APPS = [
     "apps.notifications",
     "apps.automations",
     "apps.collaboration",
+    "drf_spectacular",
 ]
 
 MIDDLEWARE = [
@@ -125,6 +126,7 @@ DEFAULT_AUTO_FIELD = "django.db.models.BigAutoField"
 REST_FRAMEWORK = {
     "DEFAULT_AUTHENTICATION_CLASSES": (
         "rest_framework_simplejwt.authentication.JWTAuthentication",
+        "apps.users.api_auth.APIKeyAuthentication",
     ),
     "DEFAULT_PERMISSION_CLASSES": (
         "rest_framework.permissions.IsAuthenticated",
@@ -137,6 +139,37 @@ REST_FRAMEWORK = {
     "DEFAULT_PAGINATION_CLASS": "rest_framework.pagination.PageNumberPagination",
     "PAGE_SIZE": 50,
     "MAX_PAGE_SIZE": 100,
+    "DEFAULT_THROTTLE_CLASSES": (
+        "apps.users.api_auth.BurstRateThrottle",
+        "apps.users.api_auth.AuthenticatedRateThrottle",
+    ),
+    "DEFAULT_THROTTLE_RATES": {
+        "burst": "60/min",
+        "authenticated": "300/hour",
+        "api_key": "1000/hour",
+    },
+    "DEFAULT_SCHEMA_CLASS": "drf_spectacular.openapi.AutoSchema",
+}
+
+SPECTACULAR_SETTINGS = {
+    "TITLE": "TODOlist API",
+    "DESCRIPTION": "API REST para gestión de tareas, proyectos, sprints y integración con GitHub.",
+    "VERSION": "1.0.0",
+    "SERVE_INCLUDE_SCHEMA": False,
+    "COMPONENT_SPLIT_REQUEST": True,
+    "TAGS": [
+        {"name": "tasks", "description": "Tareas"},
+        {"name": "projects", "description": "Proyectos"},
+        {"name": "sprints", "description": "Sprints"},
+        {"name": "epics", "description": "Épicas"},
+        {"name": "tags", "description": "Etiquetas"},
+        {"name": "integrations", "description": "Integraciones"},
+        {"name": "notifications", "description": "Notificaciones"},
+        {"name": "automations", "description": "Automatizaciones"},
+        {"name": "collaboration", "description": "Colaboración"},
+        {"name": "metrics", "description": "Métricas"},
+        {"name": "auth", "description": "Autenticación"},
+    ],
 }
 
 from datetime import timedelta
@@ -155,6 +188,20 @@ DJANGO_FRONTEND_URL = env("DJANGO_FRONTEND_URL")
 # Celery
 CELERY_BROKER_URL = f"redis://{env('REDIS_HOST', default='redis')}:6379/0"
 CELERY_RESULT_BACKEND = f"redis://{env('REDIS_HOST', default='redis')}:6379/0"
+
+# Caching con Redis
+REDIS_HOST = env("REDIS_HOST", default="redis")
+CACHES = {
+    "default": {
+        "BACKEND": "django_redis.cache.RedisCache",
+        "LOCATION": f"redis://{REDIS_HOST}:6379/1",
+        "OPTIONS": {
+            "CLIENT_CLASS": "django_redis.client.DefaultClient",
+        },
+        "KEY_PREFIX": "todolist",
+        "TIMEOUT": 300,  # 5 minutos por defecto
+    }
+}
 CELERY_ACCEPT_CONTENT = ["json"]
 CELERY_TASK_SERIALIZER = "json"
 CELERY_RESULT_SERIALIZER = "json"

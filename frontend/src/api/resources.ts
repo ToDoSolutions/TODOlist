@@ -156,6 +156,16 @@ export const collaborationApi = {
   },
 };
 
+export const apiKeysApi = {
+  list: () => api.get("/api-keys/").then((r) => r.data),
+  create: (data: { name: string; scopes?: string[] }) =>
+    api.post("/api-keys/", data).then((r) => r.data),
+  revoke: (id: number) =>
+    api.post(`/api-keys/${id}/revoke/`).then((r) => r.data),
+  delete: (id: number) =>
+    api.delete(`/api-keys/${id}/`).then((r) => r.data),
+};
+
 // --- Sprints ---
 
 export interface Sprint {

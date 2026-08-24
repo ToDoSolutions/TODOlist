@@ -7,6 +7,11 @@ from rest_framework_simplejwt.views import (
     TokenObtainPairView,
     TokenRefreshView,
 )
+from drf_spectacular.views import (
+    SpectacularAPIView,
+    SpectacularSwaggerView,
+    SpectacularRedocView,
+)
 
 from apps.users.views import RegisterView, MeView
 
@@ -19,6 +24,9 @@ urlpatterns = [
     path("api/auth/register/", RegisterView.as_view(), name="auth_register"),
     path("api/auth/me/", MeView.as_view(), name="auth_me"),
 
+    # API Keys
+    path("api/", include("apps.users.api_urls")),
+
     # Resources
     path("api/", include("apps.projects.urls")),
     path("api/", include("apps.tasks.urls")),
@@ -29,6 +37,11 @@ urlpatterns = [
     path("api/", include("apps.notifications.urls")),
     path("api/", include("apps.automations.urls")),
     path("api/", include("apps.collaboration.urls")),
+
+    # OpenAPI docs
+    path("api/schema/", SpectacularAPIView.as_view(), name="api_schema"),
+    path("api/docs/", SpectacularSwaggerView.as_view(url_name="api_schema"), name="api_docs"),
+    path("api/redoc/", SpectacularRedocView.as_view(url_name="api_schema"), name="api_redoc"),
 ]
 
 if settings.DEBUG:

@@ -26,6 +26,15 @@ MIGRATION_MODULES = DisableMigrations()
 # Sin throttling ni paginación para tests más simples
 REST_FRAMEWORK["DEFAULT_PAGINATION_CLASS"] = None
 REST_FRAMEWORK["PAGE_SIZE"] = None
+REST_FRAMEWORK["DEFAULT_THROTTLE_CLASSES"] = ()
+
+# Cache en memoria para tests (sin Redis)
+CACHES = {
+    "default": {
+        "BACKEND": "django.core.cache.backends.locmem.LocMemCache",
+        "LOCATION": "test",
+    }
+}
 
 # Email backend en memoria
 EMAIL_BACKEND = "django.core.mail.backends.locmem.EmailBackend"

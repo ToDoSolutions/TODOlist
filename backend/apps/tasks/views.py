@@ -58,7 +58,7 @@ class TaskViewSet(TaskCreateUpdateViewSetMixin, viewsets.ModelViewSet):
     def get_queryset(self):
         qs = Task.objects.for_user(self.request.user).select_related(
             "project", "sprint", "epic", "parent"
-        )
+        ).prefetch_related("tags", "subtasks")
         due_before = self.request.query_params.get("due_before")
         due_after = self.request.query_params.get("due_after")
         if due_before:
@@ -184,23 +184,47 @@ class TaskViewSet(TaskCreateUpdateViewSetMixin, viewsets.ModelViewSet):
     @action(detail=False, methods=["get"])
     def metrics_flow(self, request):
         """Métricas de flujo: lead time, cycle time, throughput, WIP."""
+        from django.core.cache import cache
         days = int(request.query_params.get("days", 30))
-        return Response(get_flow_metrics(request.user, days))
+        cache_key = f"metrics_flow:{request.user.id}:{days}"
+        data = cache.get(cache_key)
+        if data is None:
+            data = get_flow_metrics(request.user, days)
+            cache.set(cache_key, data, timeout=120)  # 2 min
+        return Response(data)
 
     @action(detail=False, methods=["get"])
     def metrics_backlog(self, request):
         """Salud del backlog."""
-        return Response(get_backlog_health(request.user))
+        from django.core.cache import cache
+        cache_key = f"metrics_backlog:{request.user.id}"
+        data = cache.get(cache_key)
+        if data is None:
+            data = get_backlog_health(request.user)
+            cache.set(cache_key, data, timeout=120)
+        return Response(data)
 
     @action(detail=False, methods=["get"])
     def metrics_dashboard(self, request):
         """Dashboard general: resumen ejecutivo."""
-        return Response(get_dashboard_summary(request.user))
+        from django.core.cache import cache
+        cache_key = f"metrics_dashboard:{request.user.id}"
+        data = cache.get(cache_key)
+        if data is None:
+            data = get_dashboard_summary(request.user)
+            cache.set(cache_key, data, timeout=60)  # 1 min
+        return Response(data)
 
     @action(detail=False, methods=["get"])
     def metrics_prs(self, request):
         """Métricas de pull requests."""
-        return Response(get_pr_metrics(request.user))
+        from django.core.cache import cache
+        cache_key = f"metrics_prs:{request.user.id}"
+        data = cache.get(cache_key)
+        if data is None:
+            data = get_pr_metrics(request.user)
+            cache.set(cache_key, data, timeout=120)
+        return Response(data)
 
 
 class SubtaskViewSet(viewsets.ModelViewSet):

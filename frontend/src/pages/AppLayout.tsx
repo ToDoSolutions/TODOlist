@@ -41,6 +41,7 @@ import {
   BarChart3,
   Zap,
   ScrollText,
+  Key,
 } from "lucide-react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { projectsApi, tasksApi } from "../api/resources";
@@ -248,6 +249,15 @@ export default function AppLayout() {
                 <ScrollText size={20} />
               </ListItemIcon>
               <ListItemText primary="Auditoría" />
+            </ListItemButton>
+            <ListItemButton
+              selected={location.pathname === "/app/api-keys"}
+              onClick={() => navigate("/app/api-keys")}
+            >
+              <ListItemIcon>
+                <Key size={20} />
+              </ListItemIcon>
+              <ListItemText primary="API Keys" />
             </ListItemButton>
           </List>
           <Divider />
