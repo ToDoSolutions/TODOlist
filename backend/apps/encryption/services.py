@@ -45,11 +45,6 @@ def add_key_share(encrypted_task, user, encrypted_key, user_public_key):
     )
 
 
-def list_encrypted_tasks(user):
-    """Lista tareas cifradas del usuario."""
-    return EncryptedTask.objects.filter(owner=user)
-
-
 def list_shared_encrypted_tasks(user):
     """Lista tareas cifradas compartidas con el usuario."""
     shares = EncryptedKeyShare.objects.filter(user=user).select_related("encrypted_task")

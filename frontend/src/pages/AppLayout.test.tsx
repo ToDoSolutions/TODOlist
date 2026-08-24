@@ -105,7 +105,6 @@ vi.mock("../api/resources", () => ({
     setup: vi.fn(),
     confirm: vi.fn(),
     disable: vi.fn(),
-    verify: vi.fn(),
   },
 }));
 

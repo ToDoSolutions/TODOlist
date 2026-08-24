@@ -81,43 +81,6 @@ class TestTwoFactor:
         resp = authed_client.delete("/api/auth/2fa/", {"code": "000000"}, format="json")
         assert resp.status_code == 400
 
-    def test_verificar_codigo_valido(self, authed_client, user):
-        """Verificar un código TOTP válido."""
-        authed_client.post("/api/auth/2fa/", {"action": "setup"}, format="json")
-        tf = user.twofactor
-        totp = pyotp.TOTP(tf.secret)
-        authed_client.post("/api/auth/2fa/", {"action": "confirm", "code": totp.now()}, format="json")
-        code = totp.now()
-        resp = authed_client.post("/api/auth/2fa/verify/", {"code": code}, format="json")
-        assert resp.status_code == 200
-        assert resp.data["valid"] is True
-
-    def test_verificar_codigo_invalido(self, authed_client, user):
-        """Verificar un código inválido retorna valid=False."""
-        authed_client.post("/api/auth/2fa/", {"action": "setup"}, format="json")
-        tf = user.twofactor
-        totp = pyotp.TOTP(tf.secret)
-        authed_client.post("/api/auth/2fa/", {"action": "confirm", "code": totp.now()}, format="json")
-        resp = authed_client.post("/api/auth/2fa/verify/", {"code": "000000"}, format="json")
-        assert resp.status_code == 200
-        assert resp.data["valid"] is False
-
-    def test_backup_codes(self, authed_client, user):
-        """Los códigos de backup funcionan y se consumen."""
-        authed_client.post("/api/auth/2fa/", {"action": "setup"}, format="json")
-        tf = user.twofactor
-        totp = pyotp.TOTP(tf.secret)
-        resp = authed_client.post("/api/auth/2fa/", {"action": "confirm", "code": totp.now()}, format="json")
-        backup_codes = resp.data["backup_codes"]
-        # Usar un código de backup
-        resp = authed_client.post("/api/auth/2fa/verify/", {"code": backup_codes[0]}, format="json")
-        assert resp.status_code == 200
-        assert resp.data["valid"] is True
-        assert resp.data.get("used_backup") is True
-        # El código ya no debe funcionar
-        resp = authed_client.post("/api/auth/2fa/verify/", {"code": backup_codes[0]}, format="json")
-        assert resp.data["valid"] is False
-
     def test_setup_sin_2fa_previo(self, authed_client, user):
         """Setup crea el registro si no existe."""
         assert not TwoFactorSecret.objects.filter(user=user).exists()

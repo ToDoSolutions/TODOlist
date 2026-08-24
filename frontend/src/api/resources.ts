@@ -56,7 +56,6 @@ export const tasksApi = {
         const d = r.data;
         return Array.isArray(d) ? d : d.results;
       }),
-  get: (id: number) => api.get<Task>(`/tasks/${id}/`).then((r) => r.data),
   create: (t: TaskInput) => api.post<Task>("/tasks/", t).then((r) => r.data),
   update: (id: number, t: Partial<TaskInput>) =>
     api.patch<Task>(`/tasks/${id}/`, t).then((r) => r.data),
@@ -115,8 +114,6 @@ export const notificationsApi = {
 
 export const automationsApi = {
   list: () => api.get("/automation-rules/").then((r) => r.data),
-  get: (id: number) =>
-    api.get(`/automation-rules/${id}/`).then((r) => r.data),
   create: (data: any) =>
     api.post("/automation-rules/", data).then((r) => r.data),
   update: (id: number, data: any) =>
@@ -176,8 +173,6 @@ export const twofactorApi = {
     api.post("/auth/2fa/", { action: "confirm", code }).then((r) => r.data),
   disable: (code: string) =>
     api.delete("/auth/2fa/", { data: { code } }).then((r) => r.data),
-  verify: (code: string) =>
-    api.post("/auth/2fa/verify/", { code }).then((r) => r.data),
 };
 
 export const timeEntriesApi = {
@@ -251,8 +246,6 @@ export const okrsApi = {
   createObjective: (data: any) => api.post("/objectives/", data).then((r) => r.data),
   updateObjective: (id: number, data: any) => api.patch(`/objectives/${id}/`, data).then((r) => r.data),
   deleteObjective: (id: number) => api.delete(`/objectives/${id}/`).then((r) => r.data),
-  getProgress: (id: number) => api.get(`/objectives/${id}/progress/`).then((r) => r.data),
-  listKeyResults: () => api.get("/key-results/").then((r) => r.data),
   createKeyResult: (data: any) => api.post("/key-results/", data).then((r) => r.data),
   updateKeyResult: (id: number, data: any) => api.patch(`/key-results/${id}/`, data).then((r) => r.data),
   deleteKeyResult: (id: number) => api.delete(`/key-results/${id}/`).then((r) => r.data),
@@ -298,7 +291,6 @@ export const advancedMetricsApi = {
   gantt: () => api.get("/tasks/gantt/").then((r) => r.data),
   burndown: (sprintId: number) => api.get(`/tasks/burndown/?sprint_id=${sprintId}`).then((r) => r.data),
   capacity: () => api.get("/tasks/capacity/").then((r) => r.data),
-  auditDashboard: () => api.get("/tasks/audit_dashboard/").then((r) => r.data),
 };
 
 // Offline sync
@@ -345,7 +337,6 @@ export const sprintsApi = {
       const d = r.data;
       return Array.isArray(d) ? d : d.results;
     }),
-  get: (id: number) => api.get<Sprint>(`/sprints/${id}/`).then((r) => r.data),
   create: (s: Partial<Sprint>) =>
     api.post<Sprint>("/sprints/", s).then((r) => r.data),
   update: (id: number, s: Partial<Sprint>) =>
@@ -362,7 +353,6 @@ export const sprintsApi = {
         next_sprint_id: nextSprintId,
       })
       .then((r) => r.data),
-  getActive: () => api.get<Sprint | null>(`/sprints/active/`).then((r) => r.data),
 };
 
 // --- Epics ---
@@ -388,7 +378,6 @@ export const epicsApi = {
       const d = r.data;
       return Array.isArray(d) ? d : d.results;
     }),
-  get: (id: number) => api.get<Epic>(`/epics/${id}/`).then((r) => r.data),
   create: (e: Partial<Epic>) =>
     api.post<Epic>("/epics/", e).then((r) => r.data),
   update: (id: number, e: Partial<Epic>) =>
@@ -591,7 +580,6 @@ export const recurrenceRulesApi = {
       return Array.isArray(d) ? d : (d as any).results || [];
     }),
   create: (data: any) => api.post<any>("/recurrence-rules/", data).then((r) => r.data),
-  update: (id: number, data: any) => api.patch<any>(`/recurrence-rules/${id}/`, data).then((r) => r.data),
   remove: (id: number) => api.delete(`/recurrence-rules/${id}/`),
 };
 
@@ -622,5 +610,4 @@ export const chatLogsApi = {
     const d = r.data;
     return Array.isArray(d) ? d : (d as any).results || [];
   }),
-  forIntegration: (id: number) => api.get<any[]>(`/chat-integrations/${id}/logs/`).then((r) => r.data),
 };

@@ -104,21 +104,3 @@ def twofactor_manage(request):
             {"error": "Código inválido"},
             status=status.HTTP_400_BAD_REQUEST,
         )
-
-
-@api_view(["POST"])
-@permission_classes([IsAuthenticated])
-def twofactor_verify(request):
-    """Verifica un código TOTP (para login con 2FA o verificación periódica)."""
-    code = request.data.get("code", "")
-    try:
-        tf = request.user.twofactor
-        if not tf.is_enabled:
-            return Response({"valid": False, "error": "2FA no activado"})
-        if tf.verify_totp(code):
-            return Response({"valid": True})
-        if tf.use_backup_code(code):
-            return Response({"valid": True, "used_backup": True})
-        return Response({"valid": False, "error": "Código inválido"})
-    except TwoFactorSecret.DoesNotExist:
-        return Response({"valid": False, "error": "2FA no configurado"})

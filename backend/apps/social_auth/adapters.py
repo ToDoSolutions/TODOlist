@@ -28,8 +28,5 @@ class CustomSocialAccountAdapter(DefaultSocialAccountAdapter):
         user = super().populate_user(request, sociallogin, data)
         extra = sociallogin.account.extra_data
         if "name" in extra and not user.username:
-            user.username = extra.get("name", extra.get("login", email))
-        if "avatar_url" in extra or "picture" in extra:
-            # Guardar URL del avatar para uso futuro
-            pass
+            user.username = extra.get("name", extra.get("login", user.email))
         return user

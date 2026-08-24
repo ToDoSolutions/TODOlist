@@ -37,33 +37,3 @@ def is_enabled(key: str, user=None) -> bool:
             return _hash_percentage(key, user.pk) < flag.enabled_percentage
 
     return False
-
-
-def enable(key: str) -> FeatureFlag:
-    """Activa un flag globalmente."""
-    flag = FeatureFlag.objects.get(key=key)
-    flag.is_enabled = True
-    flag.save(update_fields=["is_enabled", "updated_at"])
-    return flag
-
-
-def disable(key: str) -> FeatureFlag:
-    """Desactiva un flag globalmente."""
-    flag = FeatureFlag.objects.get(key=key)
-    flag.is_enabled = False
-    flag.save(update_fields=["is_enabled", "updated_at"])
-    return flag
-
-
-def enable_for_user(key: str, user) -> FeatureFlag:
-    """Habilita un flag para un usuario específico."""
-    flag = FeatureFlag.objects.get(key=key)
-    flag.enabled_users.add(user)
-    return flag
-
-
-def disable_for_user(key: str, user) -> FeatureFlag:
-    """Deshabilita un flag para un usuario específico."""
-    flag = FeatureFlag.objects.get(key=key)
-    flag.enabled_users.remove(user)
-    return flag
