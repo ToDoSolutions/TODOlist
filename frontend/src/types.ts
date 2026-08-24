@@ -53,6 +53,8 @@ export interface Project {
   color: string;
   is_archived: boolean;
   tasks_count: number;
+  sprints_count?: number;
+  epics_count?: number;
   created_at: string;
   updated_at: string;
 }

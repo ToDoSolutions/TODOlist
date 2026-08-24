@@ -192,6 +192,16 @@ export default function ProjectsPage() {
                         label={`${project.tasks_count ?? 0} tareas`}
                         variant="outlined"
                       />
+                      <Chip
+                        size="small"
+                        label={`${project.sprints_count ?? 0} sprints`}
+                        variant="outlined"
+                      />
+                      <Chip
+                        size="small"
+                        label={`${project.epics_count ?? 0} épicas`}
+                        variant="outlined"
+                      />
                       {project.is_archived && (
                         <Chip size="small" label="Archivado" color="default" />
                       )}

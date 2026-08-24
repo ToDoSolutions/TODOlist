@@ -36,8 +36,10 @@ import {
   ArrowRight,
   Pencil,
   Eye,
+  Folder,
 } from "lucide-react";
-import { sprintsApi, type Sprint } from "../api/resources";
+import { useNavigate } from "react-router-dom";
+import { sprintsApi, projectsApi, type Sprint } from "../api/resources";
 import type { Task } from "../types";
 import { STATE_LABELS, PRIORITY_LABELS } from "../types";
 import { notify } from "../notify";
@@ -49,7 +51,9 @@ function formatDate(d: Date) {
 
 export default function SprintsPage() {
   const qc = useQueryClient();
-  const { project } = useProject();
+  const navigate = useNavigate();
+  const projectCtx = useProject();
+  const { project } = projectCtx;
   const [dialogOpen, setDialogOpen] = useState(false);
   const [closeDialog, setCloseDialog] = useState<Sprint | null>(null);
   const [editDialog, setEditDialog] = useState<Sprint | null>(null);
@@ -71,6 +75,15 @@ export default function SprintsPage() {
     queryKey: ["sprints"],
     queryFn: sprintsApi.list,
   });
+
+  const { data: projectsData } = useQuery({
+    queryKey: ["projects"],
+    queryFn: projectsApi.list,
+  });
+  const projects = Array.isArray(projectsData)
+    ? projectsData
+    : (projectsData as any)?.results || [];
+  const projectMap: Map<number, string> = new Map(projects.map((p: any) => [p.id, p.name] as [number, string]));
 
   const { data: sprintTasks = [], isLoading: isLoadingSprintTasks } = useQuery({
     queryKey: ["sprint-tasks", viewTasksSprint?.id],
@@ -185,6 +198,14 @@ export default function SprintsPage() {
                 <Box flex={1}>
                   <Stack direction="row" alignItems="center" spacing={1} mb={1}>
                     <Typography variant="h6">{sprint.name}</Typography>
+                    {sprint.project && projectMap.get(sprint.project) && (
+                      <Chip
+                        icon={<Folder size={14} />}
+                        label={String(projectMap.get(sprint.project))}
+                        size="small"
+                        variant="outlined"
+                      />
+                    )}
                     <Chip
                       label={stateLabels[sprint.state]}
                       color={stateColors[sprint.state]}
@@ -427,6 +448,25 @@ export default function SprintsPage() {
           Tareas de "{viewTasksSprint?.name}" ({sprintTasks.length})
         </DialogTitle>
         <DialogContent>
+          <Button
+            variant="outlined"
+            fullWidth
+            sx={{ mb: 2 }}
+            onClick={() => {
+              if (viewTasksSprint?.project) {
+                projectCtx.setProject({
+                  id: viewTasksSprint.project,
+                  name: String(projectMap.get(viewTasksSprint.project) || ""),
+                  color: "#1976d2",
+                });
+                navigate(`/app/project/${viewTasksSprint.project}`);
+              } else {
+                navigate("/app");
+              }
+            }}
+          >
+            Ver en bandeja de tareas
+          </Button>
           {isLoadingSprintTasks ? (
             <Stack alignItems="center" sx={{ py: 3 }}>
               <CircularProgress size={32} />

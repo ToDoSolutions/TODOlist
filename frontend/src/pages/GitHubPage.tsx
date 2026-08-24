@@ -43,6 +43,7 @@ import {
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import {
   githubApi,
+  tasksApi,
   type GitHubInstallation,
   type GitHubRepo,
   type GitHubIssue,
@@ -205,6 +206,15 @@ export default function GitHubPage() {
   const repoList: GitHubRepo[] = Array.isArray(repos) ? repos : (repos as any)?.results || [];
   const issueList: GitHubIssue[] = Array.isArray(issues) ? issues : (issues as any)?.results || [];
   const linkList: GitHubIssueLink[] = Array.isArray(links) ? links : (links as any)?.results || [];
+
+  const { data: tasksData } = useQuery({
+    queryKey: ["tasks-for-github-links"],
+    queryFn: () => tasksApi.list(),
+  });
+  const taskTitleMap = new Map(
+    (Array.isArray(tasksData) ? tasksData : (tasksData as any)?.results || [])
+      .map((t: any) => [t.id, t.title])
+  );
 
   /* ---------- render ---------- */
 
@@ -632,6 +642,11 @@ export default function GitHubPage() {
                         <Typography variant="body2" fontWeight={600}>
                           #{link.task}
                         </Typography>
+                        {taskTitleMap.has(link.task) && (
+                          <Typography variant="caption" color="text.secondary">
+                            {String(taskTitleMap.get(link.task))}
+                          </Typography>
+                        )}
                       </TableCell>
                       <TableCell>
                         <Typography variant="body2">{link.repo_full_name}</Typography>

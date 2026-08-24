@@ -52,6 +52,7 @@ export default function CustomFieldsPage() {
     queryFn: projectsApi.list,
   });
   const projects = Array.isArray(projectsData) ? projectsData : (projectsData as any)?.results || [];
+  const projectMap = new Map(projects.map((p: any) => [p.id, p.name]));
 
   const { data: fields, isLoading } = useQuery({
     queryKey: ["custom-fields"],
@@ -166,6 +167,14 @@ export default function CustomFieldsPage() {
                       color="primary"
                       variant="outlined"
                     />
+                    {f.project && (
+                      <Chip
+                        size="small"
+                        label={String(projectMap.get(f.project) || `Proyecto #${f.project}`)}
+                        sx={{ height: 20, fontSize: 11 }}
+                        variant="outlined"
+                      />
+                    )}
                   </Stack>
                   {(f.type === "select" || f.type === "multiselect") && (
                     <Stack direction="row" spacing={0.5} mt={1} flexWrap="wrap" useFlexGap>

@@ -1,4 +1,5 @@
 import { useState } from "react";
+import { useNavigate } from "react-router-dom";
 import {
   Box,
   Button,
@@ -26,7 +27,7 @@ import {
   CircularProgress,
 } from "@mui/material";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
-import { Layers, Plus, Trash2, Pencil, Eye } from "lucide-react";
+import { Layers, Plus, Trash2, Pencil, Eye, Folder } from "lucide-react";
 import { epicsApi, projectsApi, type Epic } from "../api/resources";
 import type { Task } from "../types";
 import { STATE_LABELS, PRIORITY_LABELS } from "../types";
@@ -57,7 +58,9 @@ const emptyForm: EpicForm = {
 
 export default function EpicsPage() {
   const qc = useQueryClient();
-  const { project: ctxProject } = useProject();
+  const navigate = useNavigate();
+  const projectCtx = useProject();
+  const { project: ctxProject } = projectCtx;
   const [dialogOpen, setDialogOpen] = useState(false);
   const [editOpen, setEditOpen] = useState(false);
   const [editingId, setEditingId] = useState<number | null>(null);
@@ -76,6 +79,10 @@ export default function EpicsPage() {
   const projects = Array.isArray(projectsData)
     ? projectsData
     : (projectsData as any)?.results || [];
+
+  const projectMap = new Map<number, string>(
+    projects.map((p: any) => [p.id, p.name as string]),
+  );
 
   const { data: epicTasks = [], isLoading: isLoadingEpicTasks } = useQuery({
     queryKey: ["epic-tasks", viewTasksEpic?.id],
@@ -196,6 +203,15 @@ export default function EpicsPage() {
                         color={stateColors[epic.state]}
                         size="small"
                       />
+                      {epic.project != null && projectMap.has(epic.project) && (
+                        <Chip
+                          icon={<Folder size={14} />}
+                          label={projectMap.get(epic.project)}
+                          size="small"
+                          variant="outlined"
+                          sx={{ color: epic.color || undefined, borderColor: epic.color || undefined }}
+                        />
+                      )}
                     </Stack>
                     {epic.description && (
                       <Typography variant="body2" color="text.secondary" mb={1}>
@@ -406,6 +422,26 @@ export default function EpicsPage() {
           Tareas de "{viewTasksEpic?.title}" ({epicTasks.length})
         </DialogTitle>
         <DialogContent>
+          <Box mb={2}>
+            <Button
+              variant="outlined"
+              size="small"
+              onClick={() => {
+                if (viewTasksEpic?.project) {
+                  projectCtx.setProject({
+                    id: viewTasksEpic.project,
+                    name: projectMap.get(viewTasksEpic.project) || "",
+                    color: viewTasksEpic.color || "#1976d2",
+                  });
+                  navigate(`/app/project/${viewTasksEpic.project}`);
+                } else {
+                  navigate("/app");
+                }
+              }}
+            >
+              Ver en bandeja de tareas
+            </Button>
+          </Box>
           {isLoadingEpicTasks ? (
             <Stack alignItems="center" sx={{ py: 3 }}>
               <CircularProgress size={32} />

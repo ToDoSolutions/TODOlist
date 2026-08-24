@@ -40,6 +40,8 @@ export interface TaskFilters {
   priority?: number;
   project?: number;
   tags?: number;
+  sprint?: number;
+  epic?: number;
   due_before?: string;
   due_after?: string;
   search?: string;

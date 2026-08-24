@@ -24,6 +24,7 @@ import {
   Target,
 } from "lucide-react";
 import { useState } from "react";
+import { useNavigate } from "react-router-dom";
 import { format, isPast, isToday } from "date-fns";
 import { es } from "date-fns/locale";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
@@ -46,6 +47,7 @@ interface Props {
 
 export default function TaskListItem({ task, onEdit }: Props) {
   const qc = useQueryClient();
+  const navigate = useNavigate();
   const [showSprintSelect, setShowSprintSelect] = useState(false);
   const [showActivities, setShowActivities] = useState(false);
 
@@ -160,7 +162,11 @@ export default function TaskListItem({ task, onEdit }: Props) {
                 variant="outlined"
                 icon={<Target size={12} />}
                 label={task.sprint_name}
-                sx={{ height: 20, fontSize: 11, bgcolor: "primary.light", borderColor: "primary.main" }}
+                onClick={(e) => {
+                  e.stopPropagation();
+                  navigate("/app/sprints");
+                }}
+                sx={{ height: 20, fontSize: 11, bgcolor: "primary.light", borderColor: "primary.main", cursor: "pointer" }}
               />
             )}
             {due && (

@@ -30,7 +30,7 @@ import {
   Divider,
 } from "@mui/material";
 import { Plus, Pencil, Trash2, Clock, Timer, BarChart3 } from "lucide-react";
-import { timeEntriesApi, tasksApi } from "../api/resources";
+import { timeEntriesApi, tasksApi, projectsApi } from "../api/resources";
 import { notify } from "../notify";
 import type { Task } from "../types";
 
@@ -112,6 +112,17 @@ export default function TimeEntriesPage() {
     queryFn: () => tasksApi.list(),
   });
   const tasks: Task[] = Array.isArray(tasksData) ? tasksData : [];
+
+  const { data: projectsData } = useQuery({
+    queryKey: ["projects-for-timeentries"],
+    queryFn: projectsApi.list,
+  });
+  const projectMap = useMemo(() => {
+    const m = new Map<number, string>();
+    const list = Array.isArray(projectsData) ? projectsData : (projectsData as any)?.results || [];
+    list.forEach((p: any) => m.set(p.id, p.name));
+    return m;
+  }, [projectsData]);
 
   // Map of task id -> task title (prefer task list, fall back to entry's task_title)
   const taskTitleMap = useMemo(() => {
@@ -387,7 +398,7 @@ export default function TimeEntriesPage() {
                       alignItems="center"
                     >
                       <Typography variant="body2">
-                        Proyecto #{p.projectId}
+                        {projectMap.get(p.projectId) || `Proyecto #${p.projectId}`}
                       </Typography>
                       <Chip
                         size="small"

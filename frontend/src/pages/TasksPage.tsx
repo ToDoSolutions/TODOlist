@@ -27,7 +27,7 @@ import {
   Snackbar,
 } from "@mui/material";
 import { Plus, List as ListIcon, Columns, Search, Calendar, Table as TableIcon, Trash2, Edit3, FolderInput, Bookmark, X, Sparkles } from "lucide-react";
-import { tasksApi, TaskFilters, bulkOpsApi, savedSearchesApi, sprintsApi, searchApi } from "../api/resources";
+import { tasksApi, TaskFilters, bulkOpsApi, savedSearchesApi, sprintsApi, epicsApi, searchApi } from "../api/resources";
 import { tagsApi } from "../api/resources";
 import {
   Task,
@@ -73,6 +73,8 @@ export default function TasksPage({ projectId, title }: TasksPageProps) {
       state: params.get("state") || undefined,
       priority: params.get("priority") ? Number(params.get("priority")) : undefined,
       tags: params.get("tag") ? Number(params.get("tag")) : undefined,
+      sprint: params.get("sprint") ? Number(params.get("sprint")) : undefined,
+      epic: params.get("epic") ? Number(params.get("epic")) : undefined,
       search: params.get("q") || undefined,
       ordering: params.get("ordering") || "-created_at",
     }),
@@ -96,6 +98,12 @@ export default function TasksPage({ projectId, title }: TasksPageProps) {
     queryFn: () => sprintsApi.list(),
   });
   const sprints: any[] = Array.isArray(sprintsData) ? sprintsData : (sprintsData as any)?.results || [];
+
+  const { data: epicsData } = useQuery({
+    queryKey: ["epics"],
+    queryFn: epicsApi.list,
+  });
+  const epics: any[] = Array.isArray(epicsData) ? epicsData : (epicsData as any)?.results || [];
 
   const { data: savedSearches } = useQuery({
     queryKey: ["saved-searches"],
@@ -205,6 +213,8 @@ export default function TasksPage({ projectId, title }: TasksPageProps) {
     if (params.get("state")) filters.state = params.get("state");
     if (params.get("priority")) filters.priority = params.get("priority");
     if (params.get("tag")) filters.tag = params.get("tag");
+    if (params.get("sprint")) filters.sprint = params.get("sprint");
+    if (params.get("epic")) filters.epic = params.get("epic");
     if (params.get("q")) filters.search = params.get("q");
     saveSearchMut.mutate({ name: searchName, filters: JSON.stringify(filters) });
   };
@@ -216,6 +226,8 @@ export default function TasksPage({ projectId, title }: TasksPageProps) {
       if (f.state) next.set("state", f.state);
       if (f.priority) next.set("priority", f.priority);
       if (f.tag) next.set("tag", f.tag);
+      if (f.sprint) next.set("sprint", f.sprint);
+      if (f.epic) next.set("epic", f.epic);
       if (f.search) next.set("q", f.search);
       setParams(next);
     } catch { notify.error("Filtros inválidos"); }
@@ -298,6 +310,36 @@ export default function TasksPage({ projectId, title }: TasksPageProps) {
             {tags.map((t) => (
               <MenuItem key={t.id} value={t.id}>
                 {t.name}
+              </MenuItem>
+            ))}
+          </TextField>
+          <TextField
+            select
+            size="small"
+            label="Sprint"
+            value={params.get("sprint") || ""}
+            onChange={(e) => setParam("sprint", e.target.value)}
+            sx={{ minWidth: 150 }}
+          >
+            <MenuItem value="">Todos</MenuItem>
+            {sprints.map((s) => (
+              <MenuItem key={s.id} value={s.id}>
+                {s.name}
+              </MenuItem>
+            ))}
+          </TextField>
+          <TextField
+            select
+            size="small"
+            label="Épica"
+            value={params.get("epic") || ""}
+            onChange={(e) => setParam("epic", e.target.value)}
+            sx={{ minWidth: 150 }}
+          >
+            <MenuItem value="">Todas</MenuItem>
+            {epics.map((e) => (
+              <MenuItem key={e.id} value={e.id}>
+                {e.title}
               </MenuItem>
             ))}
           </TextField>
