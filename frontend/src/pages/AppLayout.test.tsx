@@ -91,6 +91,13 @@ vi.mock("../api/resources", () => ({
     revoke: vi.fn(),
     delete: vi.fn(),
   },
+  twofactorApi: {
+    status: vi.fn().mockResolvedValue({ is_enabled: false }),
+    setup: vi.fn(),
+    confirm: vi.fn(),
+    disable: vi.fn(),
+    verify: vi.fn(),
+  },
 }));
 
 // Mock notistack

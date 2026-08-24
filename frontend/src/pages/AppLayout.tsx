@@ -42,12 +42,14 @@ import {
   Zap,
   ScrollText,
   Key,
+  Shield,
 } from "lucide-react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { projectsApi, tasksApi } from "../api/resources";
 import { useAuth } from "../auth/AuthContext";
 import { notify } from "../notify";
 import NotificationBell from "../components/NotificationBell";
+import PwaInstallPrompt from "../components/PwaInstallPrompt";
 import { isPast, isToday } from "date-fns";
 
 const drawerWidth = 260;
@@ -259,6 +261,15 @@ export default function AppLayout() {
               </ListItemIcon>
               <ListItemText primary="API Keys" />
             </ListItemButton>
+            <ListItemButton
+              selected={location.pathname === "/app/security"}
+              onClick={() => navigate("/app/security")}
+            >
+              <ListItemIcon>
+                <Shield size={20} />
+              </ListItemIcon>
+              <ListItemText primary="Seguridad" />
+            </ListItemButton>
           </List>
           <Divider />
           <Box sx={{ px: 2, py: 1, display: "flex", alignItems: "center" }}>
@@ -298,6 +309,8 @@ export default function AppLayout() {
       <Box component="main" sx={{ flexGrow: 1, p: 3, mt: 8 }}>
         <Outlet />
       </Box>
+
+      <PwaInstallPrompt />
 
       <Dialog open={projectDialog} onClose={() => setProjectDialog(false)} fullWidth maxWidth="xs">
         <DialogTitle>Nuevo proyecto</DialogTitle>

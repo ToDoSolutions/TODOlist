@@ -71,3 +71,40 @@ class APIKey(models.Model):
             return api_key
         except APIKey.DoesNotExist:
             return None
+
+
+class TwoFactorSecret(models.Model):
+    """Secreto TOTP para autenticación de dos factores."""
+
+    user = models.OneToOneField(
+        User, on_delete=models.CASCADE, related_name="twofactor"
+    )
+    secret = models.CharField(max_length=64)
+    is_enabled = models.BooleanField(default=False)
+    backup_codes = models.JSONField(default=list, blank=True)
+    enabled_at = models.DateTimeField(null=True, blank=True)
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    def __str__(self):
+        return f"2FA for {self.user.email} ({'enabled' if self.is_enabled else 'disabled'})"
+
+    def generate_backup_codes(self, count=10):
+        """Genera códigos de backup de un solo uso."""
+        import secrets as _secrets
+        self.backup_codes = [_secrets.token_hex(4).upper() for _ in range(count)]
+        self.save(update_fields=["backup_codes"])
+        return self.backup_codes
+
+    def use_backup_code(self, code):
+        """Verifica y consume un código de backup. Retorna True si era válido."""
+        if code.upper() in self.backup_codes:
+            self.backup_codes.remove(code.upper())
+            self.save(update_fields=["backup_codes"])
+            return True
+        return False
+
+    def verify_totp(self, code):
+        """Verifica un código TOTP."""
+        import pyotp
+        totp = pyotp.TOTP(self.secret)
+        return totp.verify(code, valid_window=1)

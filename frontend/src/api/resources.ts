@@ -166,6 +166,17 @@ export const apiKeysApi = {
     api.delete(`/api-keys/${id}/`).then((r) => r.data),
 };
 
+export const twofactorApi = {
+  status: () => api.get("/auth/2fa/").then((r) => r.data),
+  setup: () => api.post("/auth/2fa/", { action: "setup" }).then((r) => r.data),
+  confirm: (code: string) =>
+    api.post("/auth/2fa/", { action: "confirm", code }).then((r) => r.data),
+  disable: (code: string) =>
+    api.delete("/auth/2fa/", { data: { code } }).then((r) => r.data),
+  verify: (code: string) =>
+    api.post("/auth/2fa/verify/", { code }).then((r) => r.data),
+};
+
 // --- Sprints ---
 
 export interface Sprint {

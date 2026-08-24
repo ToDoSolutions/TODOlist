@@ -20,6 +20,7 @@ const DashboardPage = lazy(() => import("./pages/DashboardPage"));
 const AutomationsPage = lazy(() => import("./pages/AutomationsPage"));
 const AuditPage = lazy(() => import("./pages/AuditPage"));
 const ApiKeysPage = lazy(() => import("./pages/ApiKeysPage"));
+const SecurityPage = lazy(() => import("./pages/SecurityPage"));
 
 function Loading() {
   return (
@@ -89,6 +90,7 @@ export default function App() {
             <Route path="automations" element={<AutomationsPage />} />
             <Route path="audit" element={<AuditPage />} />
             <Route path="api-keys" element={<ApiKeysPage />} />
+            <Route path="security" element={<SecurityPage />} />
           </Route>
           <Route path="*" element={<Navigate to="/app" replace />} />
         </Routes>

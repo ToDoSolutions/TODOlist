@@ -8,6 +8,10 @@ import App from "./App";
 import ErrorBoundary from "./ErrorBoundary";
 import { setSnackbarApi } from "./notify";
 import { theme } from "./theme";
+import { registerSW } from "virtual:pwa-register";
+
+// Registrar service worker para PWA
+registerSW({ immediate: true });
 
 const queryClient = new QueryClient({
   defaultOptions: {
