@@ -487,14 +487,15 @@ class Command(BaseCommand):
             ("Notificar tareas vencidas", "Cuando una tarea vence, crear notificación", "task_overdue", "create_notification", {"message": "Tarea vencida"}),
             ("Subtareas a in_progress", "Cuando una tarea se completa, mover subtareas a in_progress", "task_completed", "subtasks_in_progress", {}),
         ]
-        count = 0
+        created = []
         for name, desc, trigger, action, params in rules:
-            AutomationRule.objects.get_or_create(
+            rule, _ = AutomationRule.objects.get_or_create(
                 name=name, owner=user,
                 defaults={"description": desc, "trigger": trigger, "action": action, "action_params": params, "enabled": True},
             )
-            count += 1
-        self.stdout.write(f"  Automatizaciones: {count}")
+            created.append(rule)
+        self.stdout.write(f"  Automatizaciones: {len(created)}")
+        return created
 
     def _create_okrs(self, user):
         today = timezone.now().date()
