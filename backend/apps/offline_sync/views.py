@@ -5,8 +5,8 @@ from rest_framework.response import Response
 from django.utils import timezone
 
 from .services import register_device, apply_sync_operations, get_changes_since
-from .models import SyncDevice
-from .serializers import SyncDeviceSerializer
+from .models import SyncDevice, SyncOperation
+from .serializers import SyncDeviceSerializer, SyncOperationSerializer
 
 
 @api_view(["POST"])
@@ -54,3 +54,12 @@ def pull_changes_view(request):
         )
 
     return Response(changes)
+
+
+@api_view(["GET"])
+@permission_classes([IsAuthenticated])
+def list_operations_view(request):
+    """Lista el historial de operaciones de sync del usuario."""
+    qs = SyncOperation.objects.filter(user=request.user).select_related("device").order_by("-created_at")[:100]
+    serializer = SyncOperationSerializer(qs, many=True)
+    return Response(serializer.data)

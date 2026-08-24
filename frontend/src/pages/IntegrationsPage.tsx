@@ -1,8 +1,8 @@
 import { useState } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
-import { chatIntegrationsApi } from "../api/resources";
-import { Box, Typography, CircularProgress, Paper, Button, TextField, Dialog, DialogTitle, DialogContent, DialogActions, Chip, IconButton, Switch, FormControlLabel } from "@mui/material";
-import { Trash2, Send, Pencil } from "lucide-react";
+import { chatIntegrationsApi, chatLogsApi } from "../api/resources";
+import { Box, Typography, CircularProgress, Paper, Button, TextField, Dialog, DialogTitle, DialogContent, DialogActions, Chip, IconButton, Switch, FormControlLabel, Table, TableBody, TableCell, TableContainer, TableHead, TableRow, Collapse, Stack } from "@mui/material";
+import { Trash2, Send, Pencil, MessageSquare, ChevronDown, ChevronRight } from "lucide-react";
 import { notify } from "../notify";
 
 export default function IntegrationsPage() {
@@ -13,6 +13,7 @@ export default function IntegrationsPage() {
   const [provider, setProvider] = useState("slack");
   const [webhookUrl, setWebhookUrl] = useState("");
   const [events, setEvents] = useState("task_created,task_completed");
+  const [expandedLogs, setExpandedLogs] = useState<number | null>(null);
 
   const { data, isLoading } = useQuery({ queryKey: ["chat-integrations"], queryFn: chatIntegrationsApi.list });
   const integrations = data?.results || data || [];
@@ -45,6 +46,12 @@ export default function IntegrationsPage() {
     },
     onError: () => notify.error("Error al probar integración"),
   });
+
+  const { data: logsData } = useQuery({
+    queryKey: ["chat-logs"],
+    queryFn: chatLogsApi.list,
+  });
+  const allLogs = logsData || [];
 
   const updateMutation = useMutation({
     mutationFn: ({ id, data }: { id: number; data: any }) => chatIntegrationsApi.update(id, data),
@@ -152,6 +159,68 @@ export default function IntegrationsPage() {
           <Button variant="contained" onClick={submitEdit}>Guardar</Button>
         </DialogActions>
       </Dialog>
+
+      {/* ===================== Chat message logs ===================== */}
+      <Box mt={4}>
+        <Stack direction="row" alignItems="center" spacing={1} mb={2}>
+          <MessageSquare size={20} color="#1976d2" />
+          <Typography variant="subtitle1" fontWeight={600}>Historial de mensajes</Typography>
+        </Stack>
+        {allLogs.length === 0 ? (
+          <Paper variant="outlined" sx={{ p: 4, textAlign: "center" }}>
+            <Typography color="text.secondary">No hay mensajes enviados.</Typography>
+          </Paper>
+        ) : (
+          <TableContainer component={Paper} variant="outlined">
+            <Table size="small">
+              <TableHead>
+                <TableRow>
+                  <TableCell>Integración</TableCell>
+                  <TableCell>Evento</TableCell>
+                  <TableCell>Estado</TableCell>
+                  <TableCell>Código</TableCell>
+                  <TableCell>Fecha</TableCell>
+                  <TableCell>Error</TableCell>
+                </TableRow>
+              </TableHead>
+              <TableBody>
+                {allLogs.map((log: any) => (
+                  <TableRow key={log.id}>
+                    <TableCell>
+                      <Typography variant="body2">#{log.integration}</Typography>
+                    </TableCell>
+                    <TableCell>
+                      <Chip size="small" label={log.event} variant="outlined" />
+                    </TableCell>
+                    <TableCell>
+                      <Chip
+                        size="small"
+                        label={log.success ? "OK" : "Falló"}
+                        sx={{
+                          height: 18, fontSize: 10,
+                          bgcolor: log.success ? "success.main" : "error.main",
+                          color: "#fff",
+                        }}
+                      />
+                    </TableCell>
+                    <TableCell>{log.status_code || "—"}</TableCell>
+                    <TableCell>
+                      <Typography variant="body2" color="text.secondary">
+                        {log.created_at ? new Date(log.created_at).toLocaleString("es-ES") : "—"}
+                      </Typography>
+                    </TableCell>
+                    <TableCell>
+                      <Typography variant="body2" color="error.main" noWrap sx={{ maxWidth: 200 }}>
+                        {log.error || "—"}
+                      </Typography>
+                    </TableCell>
+                  </TableRow>
+                ))}
+              </TableBody>
+            </Table>
+          </TableContainer>
+        )}
+      </Box>
     </Box>
   );
 }

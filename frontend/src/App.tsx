@@ -38,6 +38,7 @@ const FeatureFlagsPage = lazy(() => import("./pages/FeatureFlagsPage"));
 const TeamsPage = lazy(() => import("./pages/TeamsPage"));
 const OfflineSyncPage = lazy(() => import("./pages/OfflineSyncPage"));
 const EncryptionPage = lazy(() => import("./pages/EncryptionPage"));
+const RecurrenceRulesPage = lazy(() => import("./pages/RecurrenceRulesPage"));
 
 function Loading() {
   return (
@@ -125,6 +126,7 @@ export default function App() {
             <Route path="teams" element={<TeamsPage />} />
             <Route path="offline-sync" element={<OfflineSyncPage />} />
             <Route path="encryption" element={<EncryptionPage />} />
+            <Route path="recurrence-rules" element={<RecurrenceRulesPage />} />
           </Route>
           <Route path="*" element={<Navigate to="/app" replace />} />
         </Routes>

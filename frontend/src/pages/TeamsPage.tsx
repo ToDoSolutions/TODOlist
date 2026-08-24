@@ -29,9 +29,9 @@ import {
   TableRow,
   Collapse,
 } from "@mui/material";
-import { Users, Plus, Trash2, UserPlus, AtSign } from "lucide-react";
+import { Users, Plus, Trash2, UserPlus, AtSign, Mail } from "lucide-react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
-import { collaborationApi, projectsApi } from "../api/resources";
+import { collaborationApi, projectsApi, invitationsApi } from "../api/resources";
 import { notify } from "../notify";
 
 export default function TeamsPage() {
@@ -112,7 +112,30 @@ export default function TeamsPage() {
     onSuccess: () => {
       notify.success("Invitación enviada");
       qc.invalidateQueries({ queryKey: ["project-members", selectedProjectId] });
+      qc.invalidateQueries({ queryKey: ["invitations"] });
       setInviteOpen(false);
+    },
+  });
+
+  // --- Invitations ---
+  const { data: invitationsData, isLoading: invitationsLoading } = useQuery({
+    queryKey: ["invitations"],
+    queryFn: invitationsApi.list,
+  });
+  const invitationList = (invitationsData as any)?.results ?? (invitationsData as any) ?? [];
+
+  const acceptInvMut = useMutation({
+    mutationFn: (id: number) => invitationsApi.accept(id),
+    onSuccess: () => {
+      notify.success("Invitación aceptada");
+      qc.invalidateQueries({ queryKey: ["invitations"] });
+    },
+  });
+  const declineInvMut = useMutation({
+    mutationFn: (id: number) => invitationsApi.decline(id),
+    onSuccess: () => {
+      notify.info("Invitación rechazada");
+      qc.invalidateQueries({ queryKey: ["invitations"] });
     },
   });
 
@@ -162,6 +185,7 @@ export default function TeamsPage() {
         <Tab icon={<Users size={16} />} iconPosition="start" label="Equipos" />
         <Tab icon={<AtSign size={16} />} iconPosition="start" label="Menciones" />
         <Tab icon={<UserPlus size={16} />} iconPosition="start" label="Miembros de Proyecto" />
+        <Tab icon={<Mail size={16} />} iconPosition="start" label="Invitaciones" />
       </Tabs>
 
       {/* ===================== TAB 1: Equipos ===================== */}
@@ -423,6 +447,78 @@ export default function TeamsPage() {
                         <Typography variant="body2" color="text.secondary">
                           {m.joined_at || m.created_at ? new Date(m.joined_at || m.created_at).toLocaleDateString() : "—"}
                         </Typography>
+                      </TableCell>
+                    </TableRow>
+                  ))}
+                </TableBody>
+              </Table>
+            </TableContainer>
+          )}
+        </Box>
+      )}
+
+      {/* ===================== TAB 4: Invitaciones ===================== */}
+      {tab === 3 && (
+        <Box>
+          {invitationsLoading ? (
+            <Box display="flex" justifyContent="center" py={5}>
+              <CircularProgress />
+            </Box>
+          ) : invitationList.length === 0 ? (
+            <Paper variant="outlined" sx={{ p: 6, textAlign: "center" }}>
+              <Mail size={48} color="text.disabled" />
+              <Typography color="text.secondary" mt={1}>
+                No tienes invitaciones.
+              </Typography>
+            </Paper>
+          ) : (
+            <TableContainer component={Paper} variant="outlined">
+              <Table size="small">
+                <TableHead>
+                  <TableRow>
+                    <TableCell>Email</TableCell>
+                    <TableCell>Rol</TableCell>
+                    <TableCell>Estado</TableCell>
+                    <TableCell>Fecha</TableCell>
+                    <TableCell>Acciones</TableCell>
+                  </TableRow>
+                </TableHead>
+                <TableBody>
+                  {invitationList.map((inv: any) => (
+                    <TableRow key={inv.id}>
+                      <TableCell>
+                        <Typography variant="body2" fontWeight={600}>{inv.email}</Typography>
+                      </TableCell>
+                      <TableCell>
+                        <Chip size="small" label={inv.role || "member"} variant="outlined" />
+                      </TableCell>
+                      <TableCell>
+                        <Chip
+                          size="small"
+                          label={inv.status}
+                          sx={{
+                            height: 18, fontSize: 10,
+                            bgcolor: inv.status === "pending" ? "warning.main" : inv.status === "accepted" ? "success.main" : "error.main",
+                            color: "#fff",
+                          }}
+                        />
+                      </TableCell>
+                      <TableCell>
+                        <Typography variant="body2" color="text.secondary">
+                          {inv.created_at ? new Date(inv.created_at).toLocaleDateString() : "—"}
+                        </Typography>
+                      </TableCell>
+                      <TableCell>
+                        {inv.status === "pending" && (
+                          <Stack direction="row" spacing={1}>
+                            <Button size="small" variant="outlined" onClick={() => acceptInvMut.mutate(inv.id)} disabled={acceptInvMut.isPending}>
+                              Aceptar
+                            </Button>
+                            <Button size="small" color="error" variant="outlined" onClick={() => declineInvMut.mutate(inv.id)} disabled={declineInvMut.isPending}>
+                              Rechazar
+                            </Button>
+                          </Stack>
+                        )}
                       </TableCell>
                     </TableRow>
                   ))}

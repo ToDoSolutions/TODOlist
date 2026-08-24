@@ -562,3 +562,65 @@ export const githubApi = {
       return Array.isArray(d) ? d : (d as any).results || [];
     }),
 };
+
+// --- Attachments ---
+
+export const attachmentsApi = {
+  list: (taskId?: number) =>
+    api.get<any[]>("/attachments/", { params: taskId ? { task: taskId } : {} }).then((r) => {
+      const d = r.data;
+      return Array.isArray(d) ? d : (d as any).results || [];
+    }),
+  upload: (taskId: number, file: File) => {
+    const formData = new FormData();
+    formData.append("file", file);
+    formData.append("task", String(taskId));
+    return api.post<any>("/attachments/", formData, {
+      headers: { "Content-Type": "multipart/form-data" },
+    }).then((r) => r.data);
+  },
+  remove: (id: number) => api.delete(`/attachments/${id}/`),
+};
+
+// --- Recurrence Rules ---
+
+export const recurrenceRulesApi = {
+  list: () =>
+    api.get<any[]>("/recurrence-rules/").then((r) => {
+      const d = r.data;
+      return Array.isArray(d) ? d : (d as any).results || [];
+    }),
+  create: (data: any) => api.post<any>("/recurrence-rules/", data).then((r) => r.data),
+  update: (id: number, data: any) => api.patch<any>(`/recurrence-rules/${id}/`, data).then((r) => r.data),
+  remove: (id: number) => api.delete(`/recurrence-rules/${id}/`),
+};
+
+// --- Invitations ---
+
+export const invitationsApi = {
+  list: () => api.get<any>("/invitations/").then((r) => {
+    const d = r.data;
+    return Array.isArray(d) ? d : (d as any).results || [];
+  }),
+  accept: (id: number) => api.post(`/invitations/${id}/accept/`).then((r) => r.data),
+  decline: (id: number) => api.post(`/invitations/${id}/decline/`).then((r) => r.data),
+};
+
+// --- Sync Operations ---
+
+export const syncOperationsApi = {
+  list: () => api.get<any[]>("/sync/operations/").then((r) => {
+    const d = r.data;
+    return Array.isArray(d) ? d : (d as any).results || [];
+  }),
+};
+
+// --- Chat Message Logs ---
+
+export const chatLogsApi = {
+  list: () => api.get<any[]>("/chat-logs/").then((r) => {
+    const d = r.data;
+    return Array.isArray(d) ? d : (d as any).results || [];
+  }),
+  forIntegration: (id: number) => api.get<any[]>(`/chat-integrations/${id}/logs/`).then((r) => r.data),
+};

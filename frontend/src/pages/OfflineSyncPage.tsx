@@ -10,13 +10,20 @@ import {
   CircularProgress,
   Alert,
   Divider,
+  Table,
+  TableBody,
+  TableCell,
+  TableContainer,
+  TableHead,
+  TableRow,
 } from "@mui/material";
-import { RefreshCw, Smartphone, Upload, Download } from "lucide-react";
-import { useMutation } from "@tanstack/react-query";
-import { offlineSyncApi } from "../api/resources";
+import { RefreshCw, Smartphone, Upload, Download, History } from "lucide-react";
+import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import { offlineSyncApi, syncOperationsApi } from "../api/resources";
 import { notify } from "../notify";
 
 export default function OfflineSyncPage() {
+  const qc = useQueryClient();
   // --- Device registration ---
   const [deviceName, setDeviceName] = useState("");
   const [registeredDevice, setRegisteredDevice] = useState<any>(null);
@@ -49,9 +56,7 @@ export default function OfflineSyncPage() {
       setLastSync(now);
       const resp = data as any;
       if (resp?.devices) setDevices(resp.devices);
-      if (resp?.accepted !== undefined || resp?.applied !== undefined) {
-        // keep response available for display
-      }
+      qc.invalidateQueries({ queryKey: ["sync-operations"] });
     },
   });
 
@@ -61,6 +66,7 @@ export default function OfflineSyncPage() {
       notify.success("Cambios recibidos");
       setPullResult(data);
       setLastSync(new Date().toISOString());
+      qc.invalidateQueries({ queryKey: ["sync-operations"] });
     },
   });
 
@@ -69,6 +75,12 @@ export default function OfflineSyncPage() {
     const deviceId = `dev-${Date.now()}`;
     registerMut.mutate({ deviceId, deviceName });
   };
+
+  const { data: operationsData, isLoading: opsLoading } = useQuery({
+    queryKey: ["sync-operations"],
+    queryFn: syncOperationsApi.list,
+  });
+  const operations = operationsData || [];
 
   const handlePush = () => {
     let ops: any[];
@@ -254,6 +266,64 @@ export default function OfflineSyncPage() {
           </Paper>
         )}
       </Stack>
+
+      {/* ===================== Sync operations history ===================== */}
+      <Box mt={4}>
+        <Stack direction="row" alignItems="center" spacing={1} mb={2}>
+          <History size={20} color="#1976d2" />
+          <Typography variant="subtitle1" fontWeight={600}>Historial de operaciones</Typography>
+        </Stack>
+        {opsLoading ? (
+          <Box display="flex" justifyContent="center" py={3}>
+            <CircularProgress size={24} />
+          </Box>
+        ) : operations.length === 0 ? (
+          <Paper variant="outlined" sx={{ p: 4, textAlign: "center" }}>
+            <Typography color="text.secondary">No hay operaciones de sync registradas.</Typography>
+          </Paper>
+        ) : (
+          <TableContainer component={Paper} variant="outlined">
+            <Table size="small">
+              <TableHead>
+                <TableRow>
+                  <TableCell>Tipo</TableCell>
+                  <TableCell>Entidad</TableCell>
+                  <TableCell>Entity ID</TableCell>
+                  <TableCell>Estado</TableCell>
+                  <TableCell>Fecha</TableCell>
+                </TableRow>
+              </TableHead>
+              <TableBody>
+                {operations.map((op: any) => (
+                  <TableRow key={op.id}>
+                    <TableCell>
+                      <Chip size="small" label={op.op_type} variant="outlined" />
+                    </TableCell>
+                    <TableCell>{op.entity_type}</TableCell>
+                    <TableCell>{op.entity_id ?? "—"}</TableCell>
+                    <TableCell>
+                      <Chip
+                        size="small"
+                        label={op.status}
+                        sx={{
+                          height: 18, fontSize: 10,
+                          bgcolor: op.status === "applied" ? "success.main" : op.status === "rejected" ? "error.main" : "warning.main",
+                          color: "#fff",
+                        }}
+                      />
+                    </TableCell>
+                    <TableCell>
+                      <Typography variant="body2" color="text.secondary">
+                        {op.created_at ? new Date(op.created_at).toLocaleString("es-ES") : "—"}
+                      </Typography>
+                    </TableCell>
+                  </TableRow>
+                ))}
+              </TableBody>
+            </Table>
+          </TableContainer>
+        )}
+      </Box>
 
       <Divider sx={{ my: 3 }} />
       <Typography variant="caption" color="text.secondary">

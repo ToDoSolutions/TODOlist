@@ -20,11 +20,12 @@ import {
   FormControl,
   InputLabel,
   Tooltip,
+  FormControlLabel,
 } from "@mui/material";
-import { Trash2, Plus, Send, Link2 } from "lucide-react";
+import { Trash2, Plus, Send, Link2, Paperclip, Upload } from "lucide-react";
 import { Controller, useForm } from "react-hook-form";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
-import { projectsApi, tagsApi, tasksApi } from "../api/resources";
+import { projectsApi, tagsApi, tasksApi, attachmentsApi } from "../api/resources";
 import { notify } from "../notify";
 import {
   Task,
@@ -55,6 +56,9 @@ interface FormValues {
   due_date: string;
   project: number | null;
   tags: number[];
+  recurrence_enabled: boolean;
+  recurrence_frequency: string;
+  recurrence_interval: number;
 }
 
 export default function TaskDialog({
@@ -70,6 +74,9 @@ export default function TaskDialog({
   const [serverError, setServerError] = useState("");
   const [relTaskId, setRelTaskId] = useState("");
   const [relType, setRelType] = useState<RelationType>("blocks");
+  const [recurrenceEnabled, setRecurrenceEnabled] = useState(false);
+  const [recFreq, setRecFreq] = useState("weekly");
+  const [recInterval, setRecInterval] = useState(1);
 
   const { data: projectsData } = useQuery({
     queryKey: ["projects"],
@@ -108,6 +115,9 @@ export default function TaskDialog({
         tags: task?.tags || [],
       });
       setServerError("");
+      setRecurrenceEnabled(!!task?.recurrence);
+      setRecFreq(task?.recurrence?.frequency || "weekly");
+      setRecInterval(task?.recurrence?.interval || 1);
     }
   }, [open, task, defaultProjectId, reset]);
 
@@ -121,6 +131,9 @@ export default function TaskDialog({
         due_date: values.due_date ? new Date(values.due_date).toISOString() : null,
         project: values.project,
         tags: values.tags,
+        recurrence_data: recurrenceEnabled
+          ? { frequency: recFreq, interval: recInterval }
+          : undefined,
       };
       if (task) return tasksApi.update(task.id, payload);
       return tasksApi.create(payload);
@@ -193,6 +206,28 @@ export default function TaskDialog({
       const msg = e.response?.data?.detail || "No se pudo añadir la relación.";
       notify.error(msg);
     },
+  });
+
+  const { data: attachmentsData } = useQuery({
+    queryKey: ["task-attachments", task?.id],
+    queryFn: () => attachmentsApi.list(task!.id),
+    enabled: !!task?.id,
+  });
+  const attachments = attachmentsData || [];
+
+  const uploadAttachment = useMutation({
+    mutationFn: ({ taskId, file }: { taskId: number; file: File }) =>
+      attachmentsApi.upload(taskId, file),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ["task-attachments", task?.id] });
+      notify.success("Archivo subido");
+    },
+    onError: () => notify.error("Error al subir archivo"),
+  });
+
+  const removeAttachment = useMutation({
+    mutationFn: (id: number) => attachmentsApi.remove(id),
+    onSuccess: () => qc.invalidateQueries({ queryKey: ["task-attachments", task?.id] }),
   });
 
   return (
@@ -315,6 +350,44 @@ export default function TaskDialog({
                 />
               )}
             />
+
+            <Stack direction="row" spacing={1.5} alignItems="center">
+              <FormControlLabel
+                control={
+                  <Checkbox
+                    checked={recurrenceEnabled}
+                    onChange={(e) => setRecurrenceEnabled(e.target.checked)}
+                  />
+                }
+                label="Tarea recurrente"
+              />
+              {recurrenceEnabled && (
+                <>
+                  <TextField
+                    select
+                    label="Frecuencia"
+                    size="small"
+                    value={recFreq}
+                    onChange={(e) => setRecFreq(e.target.value)}
+                    sx={{ minWidth: 140 }}
+                  >
+                    <MenuItem value="daily">Diaria</MenuItem>
+                    <MenuItem value="weekly">Semanal</MenuItem>
+                    <MenuItem value="monthly">Mensual</MenuItem>
+                    <MenuItem value="yearly">Anual</MenuItem>
+                  </TextField>
+                  <TextField
+                    label="Intervalo"
+                    type="number"
+                    size="small"
+                    value={recInterval}
+                    onChange={(e) => setRecInterval(Number(e.target.value))}
+                    sx={{ width: 100 }}
+                    inputProps={{ min: 1 }}
+                  />
+                </>
+              )}
+            </Stack>
 
             {task && (
               <>
@@ -474,6 +547,48 @@ export default function TaskDialog({
                       Añadir
                     </Button>
                   </Stack>
+                </Box>
+
+                <Divider />
+                <Box>
+                  <Stack direction="row" alignItems="center" spacing={1} mb={1}>
+                    <Paperclip size={18} />
+                    <Typography variant="subtitle2">Adjuntos</Typography>
+                  </Stack>
+                  {attachments.length > 0 && (
+                    <Stack spacing={0.5} mb={1}>
+                      {attachments.map((a: any) => (
+                        <Stack key={a.id} direction="row" alignItems="center" spacing={1}>
+                          <Typography variant="body2" sx={{ flex: 1 }} noWrap>
+                            {a.filename} ({(a.file_size / 1024).toFixed(1)} KB)
+                          </Typography>
+                          <Tooltip title="Eliminar adjunto">
+                            <IconButton size="small" onClick={() => removeAttachment.mutate(a.id)}>
+                              <Trash2 size={14} />
+                            </IconButton>
+                          </Tooltip>
+                        </Stack>
+                      ))}
+                    </Stack>
+                  )}
+                  <Button
+                    size="small"
+                    variant="outlined"
+                    startIcon={<Upload size={16} />}
+                    component="label"
+                    disabled={uploadAttachment.isPending}
+                  >
+                    Subir archivo
+                    <input
+                      type="file"
+                      hidden
+                      onChange={(e) => {
+                        const f = e.target.files?.[0];
+                        if (f && task) uploadAttachment.mutate({ taskId: task.id, file: f });
+                        e.target.value = "";
+                      }}
+                    />
+                  </Button>
                 </Box>
               </>
             )}

@@ -101,6 +101,7 @@ export interface Task {
   subtask_total: number;
   subtasks: Subtask[];
   comments: Comment[];
+  recurrence: { id: number; frequency: string; interval: number; until: string | null; count: number | null; occurrences_generated: number } | null;
   created_at: string;
   updated_at: string;
 }
@@ -121,6 +122,7 @@ export interface TaskInput {
   parent?: number | null;
   sprint?: number | null;
   epic?: number | null;
+  recurrence_data?: { frequency: string; interval: number; until?: string | null; count?: number | null } | null;
 }
 
 export interface Activity {
