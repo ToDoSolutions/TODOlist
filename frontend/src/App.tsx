@@ -37,7 +37,8 @@ function ProjectTasks() {
   const { data: project } = useQuery({
     queryKey: ["projects"],
     queryFn: projectsApi.list,
-    select: (list) => list.find((p) => p.id === id),
+    select: (list: unknown) =>
+      Array.isArray(list) ? list.find((p) => p.id === id) : undefined,
   });
   return <TasksPage projectId={id} title={project?.name || "Proyecto"} />;
 }

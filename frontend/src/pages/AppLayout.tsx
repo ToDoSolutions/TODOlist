@@ -55,15 +55,17 @@ export default function AppLayout() {
   const [projectName, setProjectName] = useState("");
   const [projectColor, setProjectColor] = useState("#1976d2");
 
-  const { data: projects = [] } = useQuery({
+  const { data: projectsData } = useQuery({
     queryKey: ["projects"],
     queryFn: projectsApi.list,
   });
+  const projects = Array.isArray(projectsData) ? projectsData : [];
 
-  const { data: inboxTasks = [] } = useQuery({
+  const { data: inboxTasksData } = useQuery({
     queryKey: ["tasks", { project: undefined }],
     queryFn: () => tasksApi.list({}),
   });
+  const inboxTasks = Array.isArray(inboxTasksData) ? inboxTasksData : [];
 
   const overdueCount = inboxTasks.filter(
     (t) =>

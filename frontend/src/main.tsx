@@ -5,6 +5,8 @@ import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { ThemeProvider, CssBaseline } from "@mui/material";
 import { SnackbarProvider } from "notistack";
 import App from "./App";
+import ErrorBoundary from "./ErrorBoundary";
+import { setSnackbarApi } from "./notify";
 import { theme } from "./theme";
 
 const queryClient = new QueryClient({
@@ -18,11 +20,17 @@ ReactDOM.createRoot(document.getElementById("root")!).render(
     <QueryClientProvider client={queryClient}>
       <ThemeProvider theme={theme}>
         <CssBaseline />
-        <SnackbarProvider maxSnack={3} anchorOrigin={{ vertical: "bottom", horizontal: "right" }}>
-          <BrowserRouter>
-            <App />
-          </BrowserRouter>
-        </SnackbarProvider>
+        <ErrorBoundary>
+          <SnackbarProvider
+            maxSnack={3}
+            anchorOrigin={{ vertical: "bottom", horizontal: "right" }}
+            ref={setSnackbarApi}
+          >
+            <BrowserRouter>
+              <App />
+            </BrowserRouter>
+          </SnackbarProvider>
+        </ErrorBoundary>
       </ThemeProvider>
     </QueryClientProvider>
   </React.StrictMode>

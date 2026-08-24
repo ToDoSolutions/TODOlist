@@ -62,14 +62,16 @@ export default function TaskDialog({
   const [commentBody, setCommentBody] = useState("");
   const [serverError, setServerError] = useState("");
 
-  const { data: projects = [] } = useQuery({
+  const { data: projectsData } = useQuery({
     queryKey: ["projects"],
     queryFn: projectsApi.list,
   });
-  const { data: tags = [] } = useQuery({
+  const projects = Array.isArray(projectsData) ? projectsData : [];
+  const { data: tagsData } = useQuery({
     queryKey: ["tags"],
     queryFn: tagsApi.list,
   });
+  const tags = Array.isArray(tagsData) ? tagsData : [];
 
   const { control, handleSubmit, reset, register } = useForm<FormValues>({
     defaultValues: {

@@ -57,15 +57,17 @@ export default function TasksPage({ projectId, title }: TasksPageProps) {
     [projectId, params]
   );
 
-  const { data: tasks = [], isLoading, error } = useQuery({
+  const { data: tasksData, isLoading, error } = useQuery({
     queryKey: ["tasks", filters],
     queryFn: () => tasksApi.list(filters),
   });
+  const tasks = Array.isArray(tasksData) ? tasksData : [];
 
-  const { data: tags = [] } = useQuery({
+  const { data: tagsData } = useQuery({
     queryKey: ["tags"],
     queryFn: tagsApi.list,
   });
+  const tags = Array.isArray(tagsData) ? tagsData : [];
 
   const setParam = (key: string, value: string | null) => {
     const next = new URLSearchParams(params);

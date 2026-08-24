@@ -10,7 +10,11 @@ import type {
 } from "../types";
 
 export const projectsApi = {
-  list: () => api.get<Project[]>("/projects/").then((r) => r.data),
+  list: () =>
+    api.get<Project[] | Paginated<Project>>("/projects/").then((r) => {
+      const d = r.data;
+      return Array.isArray(d) ? d : d.results;
+    }),
   create: (p: Partial<Project>) => api.post<Project>("/projects/", p).then((r) => r.data),
   update: (id: number, p: Partial<Project>) =>
     api.patch<Project>(`/projects/${id}/`, p).then((r) => r.data),
@@ -18,7 +22,11 @@ export const projectsApi = {
 };
 
 export const tagsApi = {
-  list: () => api.get<Tag[]>("/tags/").then((r) => r.data),
+  list: () =>
+    api.get<Tag[] | Paginated<Tag>>("/tags/").then((r) => {
+      const d = r.data;
+      return Array.isArray(d) ? d : d.results;
+    }),
   create: (t: Partial<Tag>) => api.post<Tag>("/tags/", t).then((r) => r.data),
   update: (id: number, t: Partial<Tag>) =>
     api.patch<Tag>(`/tags/${id}/`, t).then((r) => r.data),

@@ -28,10 +28,11 @@ export default function TagsPage() {
   const [name, setName] = useState("");
   const [color, setColor] = useState("#1976d2");
 
-  const { data: tags = [], isLoading } = useQuery({
+  const { data: tagsData, isLoading } = useQuery({
     queryKey: ["tags"],
     queryFn: tagsApi.list,
   });
+  const tags = Array.isArray(tagsData) ? tagsData : [];
 
   const createMut = useMutation({
     mutationFn: () => tagsApi.create({ name: name.trim(), color }),
