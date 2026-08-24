@@ -10,6 +10,26 @@ export type TaskState =
 
 export type TaskPriority = 0 | 1 | 2 | 3 | 4 | 5;
 
+export type TaskType =
+  | "bug"
+  | "feature"
+  | "improvement"
+  | "task"
+  | "research"
+  | "tech_debt"
+  | "docs"
+  | "ops";
+
+export type TaskSize = "xs" | "s" | "m" | "l" | "xl";
+
+export type RelationType =
+  | "blocks"
+  | "related"
+  | "duplicates"
+  | "replaces"
+  | "depends_on"
+  | "requirement";
+
 export interface User {
   id: number;
   username: string;
@@ -59,11 +79,24 @@ export interface Task {
   description: string;
   state: TaskState;
   priority: TaskPriority;
+  task_type: TaskType;
   due_date: string | null;
+  start_date: string | null;
   completed_at: string | null;
+  story_points: number | null;
+  estimate_hours: number | null;
+  size: TaskSize | "";
   project: number | null;
   tags: number[];
   tags_ids: number[];
+  parent: number | null;
+  parent_title: string | null;
+  sprint: number | null;
+  sprint_name: string | null;
+  epic: number | null;
+  epic_title: string | null;
+  subtask_done: number;
+  subtask_total: number;
   subtasks: Subtask[];
   comments: Comment[];
   created_at: string;
@@ -75,9 +108,38 @@ export interface TaskInput {
   description?: string;
   state?: TaskState;
   priority?: TaskPriority;
+  task_type?: TaskType;
   due_date?: string | null;
+  start_date?: string | null;
+  story_points?: number | null;
+  estimate_hours?: number | null;
+  size?: TaskSize | "";
   project?: number | null;
   tags?: number[];
+  parent?: number | null;
+  sprint?: number | null;
+  epic?: number | null;
+}
+
+export interface Activity {
+  id: number;
+  actor: number | null;
+  actor_email: string;
+  action: string;
+  field: string;
+  old_value: string;
+  new_value: string;
+  created_at: string;
+}
+
+export interface TaskRelation {
+  id: number;
+  source: number;
+  source_title: string;
+  target: number;
+  target_title: string;
+  relation_type: RelationType;
+  created_at: string;
 }
 
 export interface Paginated<T> {
@@ -135,3 +197,42 @@ export const KANBAN_COLUMNS: TaskState[] = [
   "review",
   "completed",
 ];
+
+export const TYPE_LABELS: Record<TaskType, string> = {
+  bug: "Bug",
+  feature: "Funcionalidad",
+  improvement: "Mejora",
+  task: "Tarea",
+  research: "Investigación",
+  tech_debt: "Deuda técnica",
+  docs: "Documentación",
+  ops: "Incidencia operativa",
+};
+
+export const TYPE_COLORS: Record<TaskType, string> = {
+  bug: "#d32f2f",
+  feature: "#1976d2",
+  improvement: "#7b1fa2",
+  task: "#388e3c",
+  research: "#f57c00",
+  tech_debt: "#5d4037",
+  docs: "#0288d1",
+  ops: "#c2185b",
+};
+
+export const SIZE_LABELS: Record<TaskSize, string> = {
+  xs: "XS",
+  s: "S",
+  m: "M",
+  l: "L",
+  xl: "XL",
+};
+
+export const RELATION_LABELS: Record<RelationType, string> = {
+  blocks: "Bloquea",
+  related: "Relacionada con",
+  duplicates: "Duplica",
+  replaces: "Sustituye",
+  depends_on: "Depende de",
+  requirement: "Es requisito de",
+};

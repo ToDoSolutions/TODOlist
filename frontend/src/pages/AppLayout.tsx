@@ -36,6 +36,8 @@ import {
   User as UserIcon,
   Folder,
   Github,
+  Flag,
+  Layers,
 } from "lucide-react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { projectsApi, tasksApi } from "../api/resources";
@@ -196,6 +198,24 @@ export default function AppLayout() {
                 <Github size={20} />
               </ListItemIcon>
               <ListItemText primary="Integraciones" />
+            </ListItemButton>
+            <ListItemButton
+              selected={location.pathname === "/app/sprints"}
+              onClick={() => navigate("/app/sprints")}
+            >
+              <ListItemIcon>
+                <Flag size={20} />
+              </ListItemIcon>
+              <ListItemText primary="Sprints" />
+            </ListItemButton>
+            <ListItemButton
+              selected={location.pathname === "/app/epics"}
+              onClick={() => navigate("/app/epics")}
+            >
+              <ListItemIcon>
+                <Layers size={20} />
+              </ListItemIcon>
+              <ListItemText primary="Épicas" />
             </ListItemButton>
           </List>
           <Divider />

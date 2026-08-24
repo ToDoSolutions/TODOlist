@@ -7,6 +7,8 @@ import type {
   Subtask,
   Comment,
   Paginated,
+  Activity,
+  TaskRelation,
 } from "../types";
 
 export const projectsApi = {
@@ -64,6 +66,124 @@ export const tasksApi = {
   updateSubtask: (id: number, data: Partial<Subtask>) =>
     api.patch<Subtask>(`/subtasks/${id}/`, data).then((r) => r.data),
   removeSubtask: (id: number) => api.delete(`/subtasks/${id}/`),
+  // Actividad, relaciones, sprint
+  getActivities: (id: number) =>
+    api.get<Activity[]>(`/tasks/${id}/activities/`).then((r) => r.data),
+  getRelations: (id: number) =>
+    api.get<TaskRelation[]>(`/tasks/${id}/relations/`).then((r) => r.data),
+  addRelation: (id: number, targetId: number, relationType: string) =>
+    api
+      .post<TaskRelation>(`/tasks/${id}/relations/`, {
+        target: targetId,
+        relation_type: relationType,
+      })
+      .then((r) => r.data),
+  moveToSprint: (id: number, sprintId: number) =>
+    api
+      .post<{ message: string }>(`/tasks/${id}/move_to_sprint/`, {
+        sprint_id: sprintId,
+      })
+      .then((r) => r.data),
+};
+
+// --- Sprints ---
+
+export interface Sprint {
+  id: number;
+  name: string;
+  goal: string;
+  description: string;
+  state: "planned" | "active" | "closed";
+  start_date: string;
+  end_date: string;
+  project: number | null;
+  task_count: number;
+  created_at: string;
+  updated_at: string;
+}
+
+export const sprintsApi = {
+  list: () =>
+    api.get<Paginated<Sprint> | Sprint[]>("/sprints/").then((r) => {
+      const d = r.data;
+      return Array.isArray(d) ? d : d.results;
+    }),
+  get: (id: number) => api.get<Sprint>(`/sprints/${id}/`).then((r) => r.data),
+  create: (s: Partial<Sprint>) =>
+    api.post<Sprint>("/sprints/", s).then((r) => r.data),
+  update: (id: number, s: Partial<Sprint>) =>
+    api.patch<Sprint>(`/sprints/${id}/`, s).then((r) => r.data),
+  remove: (id: number) => api.delete(`/sprints/${id}/`),
+  getTasks: (id: number) =>
+    api.get<Paginated<Task> | Task[]>(`/sprints/${id}/tasks/`).then((r) => {
+      const d = r.data;
+      return Array.isArray(d) ? d : d.results;
+    }),
+  close: (id: number, nextSprintId?: number) =>
+    api
+      .post<{ message: string }>(`/sprints/${id}/close/`, {
+        next_sprint_id: nextSprintId,
+      })
+      .then((r) => r.data),
+  getActive: () => api.get<Sprint | null>(`/sprints/active/`).then((r) => r.data),
+};
+
+// --- Epics ---
+
+export interface Epic {
+  id: number;
+  title: string;
+  description: string;
+  state: "planned" | "in_progress" | "completed" | "cancelled";
+  color: string;
+  start_date: string | null;
+  end_date: string | null;
+  project: number | null;
+  progress_done: number;
+  progress_total: number;
+  created_at: string;
+  updated_at: string;
+}
+
+export const epicsApi = {
+  list: () =>
+    api.get<Paginated<Epic> | Epic[]>("/epics/").then((r) => {
+      const d = r.data;
+      return Array.isArray(d) ? d : d.results;
+    }),
+  get: (id: number) => api.get<Epic>(`/epics/${id}/`).then((r) => r.data),
+  create: (e: Partial<Epic>) =>
+    api.post<Epic>("/epics/", e).then((r) => r.data),
+  update: (id: number, e: Partial<Epic>) =>
+    api.patch<Epic>(`/epics/${id}/`, e).then((r) => r.data),
+  remove: (id: number) => api.delete(`/epics/${id}/`),
+  getTasks: (id: number) =>
+    api.get<Paginated<Task> | Task[]>(`/epics/${id}/tasks/`).then((r) => {
+      const d = r.data;
+      return Array.isArray(d) ? d : d.results;
+    }),
+};
+
+// --- Saved Searches ---
+
+export interface SavedSearch {
+  id: number;
+  name: string;
+  filters: Record<string, any>;
+  is_shared: boolean;
+  created_at: string;
+  updated_at: string;
+}
+
+export const savedSearchesApi = {
+  list: () =>
+    api.get<Paginated<SavedSearch> | SavedSearch[]>("/saved-searches/").then((r) => {
+      const d = r.data;
+      return Array.isArray(d) ? d : d.results;
+    }),
+  create: (s: Partial<SavedSearch>) =>
+    api.post<SavedSearch>("/saved-searches/", s).then((r) => r.data),
+  remove: (id: number) => api.delete(`/saved-searches/${id}/`),
 };
 
 // --- GitHub Integration ---
