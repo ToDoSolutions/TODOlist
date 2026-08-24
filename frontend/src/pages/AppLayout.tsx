@@ -35,6 +35,7 @@ import {
   Tag as TagIcon,
   User as UserIcon,
   Folder,
+  Github,
 } from "lucide-react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { projectsApi, tasksApi } from "../api/resources";
@@ -186,6 +187,15 @@ export default function AppLayout() {
                 <TagIcon size={20} />
               </ListItemIcon>
               <ListItemText primary="Etiquetas" />
+            </ListItemButton>
+            <ListItemButton
+              selected={location.pathname === "/app/integrations"}
+              onClick={() => navigate("/app/integrations")}
+            >
+              <ListItemIcon>
+                <Github size={20} />
+              </ListItemIcon>
+              <ListItemText primary="Integraciones" />
             </ListItemButton>
           </List>
           <Divider />

@@ -12,6 +12,8 @@ const RegisterPage = lazy(() => import("./pages/RegisterPage"));
 const TasksPage = lazy(() => import("./pages/TasksPage"));
 const TagsPage = lazy(() => import("./pages/TagsPage"));
 const ProfilePage = lazy(() => import("./pages/ProfilePage"));
+const IntegrationsPage = lazy(() => import("./pages/IntegrationsPage"));
+const GitHubCallbackPage = lazy(() => import("./pages/GitHubCallbackPage"));
 
 function Loading() {
   return (
@@ -61,6 +63,7 @@ export default function App() {
         <Routes>
           <Route path="/login" element={<PublicOnly><LoginPage /></PublicOnly>} />
           <Route path="/register" element={<PublicOnly><RegisterPage /></PublicOnly>} />
+          <Route path="/auth/github/callback" element={<GitHubCallbackPage />} />
           <Route
             path="/app"
             element={
@@ -73,6 +76,7 @@ export default function App() {
             <Route path="project/:projectId" element={<ProjectTasks />} />
             <Route path="tags" element={<TagsPage />} />
             <Route path="profile" element={<ProfilePage />} />
+            <Route path="integrations" element={<IntegrationsPage />} />
           </Route>
           <Route path="*" element={<Navigate to="/app" replace />} />
         </Routes>

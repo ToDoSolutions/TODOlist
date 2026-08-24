@@ -10,6 +10,12 @@ env = environ.Env(
     DJANGO_ALLOWED_HOSTS=(list, ["localhost", "127.0.0.1", "backend"]),
     DJANGO_CORS_ALLOW_ALL=(bool, True),
     DJANGO_FRONTEND_URL=(str, "http://localhost:5173"),
+    GITHUB_APP_ID=(str, ""),
+    GITHUB_APP_PRIVATE_KEY=(str, ""),
+    GITHUB_APP_CLIENT_ID=(str, ""),
+    GITHUB_APP_CLIENT_SECRET=(str, ""),
+    GITHUB_APP_WEBHOOK_SECRET=(str, ""),
+    GITHUB_APP_NAME=(str, "todolist-app"),
 )
 environ.Env.read_env(os.path.join(BASE_DIR, ".env"))
 
@@ -41,6 +47,7 @@ INSTALLED_APPS = [
     "apps.projects",
     "apps.tasks",
     "apps.tags",
+    "apps.integrations",
 ]
 
 MIDDLEWARE = [
@@ -140,3 +147,28 @@ SIMPLE_JWT = {
 # CORS
 CORS_ALLOW_ALL_ORIGINS = env("DJANGO_CORS_ALLOW_ALL")
 CORS_ALLOWED_ORIGINS = [env("DJANGO_FRONTEND_URL")]
+DJANGO_FRONTEND_URL = env("DJANGO_FRONTEND_URL")
+
+# Celery
+CELERY_BROKER_URL = f"redis://{env('REDIS_HOST', default='redis')}:6379/0"
+CELERY_RESULT_BACKEND = f"redis://{env('REDIS_HOST', default='redis')}:6379/0"
+CELERY_ACCEPT_CONTENT = ["json"]
+CELERY_TASK_SERIALIZER = "json"
+CELERY_RESULT_SERIALIZER = "json"
+CELERY_TIMEZONE = TIME_ZONE
+
+# Celery Beat: tareas periódicas
+CELERY_BEAT_SCHEDULE = {
+    "sync-github-issues": {
+        "task": "apps.integrations.tasks.sync_all_github_issues",
+        "schedule": 300.0,  # cada 5 minutos
+    },
+}
+
+# GitHub App
+GITHUB_APP_ID = env("GITHUB_APP_ID")
+GITHUB_APP_PRIVATE_KEY = env("GITHUB_APP_PRIVATE_KEY")
+GITHUB_APP_CLIENT_ID = env("GITHUB_APP_CLIENT_ID")
+GITHUB_APP_CLIENT_SECRET = env("GITHUB_APP_CLIENT_SECRET")
+GITHUB_APP_WEBHOOK_SECRET = env("GITHUB_APP_WEBHOOK_SECRET")
+GITHUB_APP_NAME = env("GITHUB_APP_NAME")

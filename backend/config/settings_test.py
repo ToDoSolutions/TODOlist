@@ -32,3 +32,16 @@ EMAIL_BACKEND = "django.core.mail.backends.locmem.EmailBackend"
 
 # Sin password validation para tests rápidos
 AUTH_PASSWORD_VALIDATORS = []
+
+# Celery: ejecutar tareas síncronamente en tests
+CELERY_TASK_ALWAYS_EAGER = True
+CELERY_TASK_EAGER_PROPAGATES = True
+CELERY_BROKER_URL = "memory://"
+
+# GitHub: sin credenciales reales en tests
+GITHUB_APP_ID = "test-app-id"
+GITHUB_APP_PRIVATE_KEY = ""
+GITHUB_APP_CLIENT_ID = "test-client-id"
+GITHUB_APP_CLIENT_SECRET = "test-client-secret"
+GITHUB_APP_WEBHOOK_SECRET = "test-webhook-secret"
+

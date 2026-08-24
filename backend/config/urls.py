@@ -23,6 +23,9 @@ urlpatterns = [
     path("api/", include("apps.projects.urls")),
     path("api/", include("apps.tasks.urls")),
     path("api/", include("apps.tags.urls")),
+
+    # Integraciones (GitHub)
+    path("api/", include("apps.integrations.urls")),
 ]
 
 if settings.DEBUG:

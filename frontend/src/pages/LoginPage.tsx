@@ -6,14 +6,17 @@ import {
   Button,
   Card,
   CardContent,
+  Divider,
   Link,
   TextField,
   Typography,
   Alert,
 } from "@mui/material";
+import { Github } from "lucide-react";
 import { useNavigate, Link as RouterLink, useLocation } from "react-router-dom";
 import { useAuth } from "../auth/AuthContext";
 import { notify } from "../notify";
+import { githubApi } from "../api/resources";
 import { useState } from "react";
 
 const schema = z.object({
@@ -24,10 +27,11 @@ const schema = z.object({
 type FormValues = z.infer<typeof schema>;
 
 export default function LoginPage() {
-  const { login } = useAuth();
+  const { login, saveTokens } = useAuth();
   const navigate = useNavigate();
   const location = useLocation();
   const [serverError, setServerError] = useState("");
+  const [githubLoading, setGithubLoading] = useState(false);
 
   const {
     register,
@@ -46,6 +50,21 @@ export default function LoginPage() {
       const msg = e.response?.data?.detail || "No se pudo iniciar sesión.";
       setServerError(msg);
       notify.error(msg);
+    }
+  };
+
+  const handleGitHubLogin = async () => {
+    setGithubLoading(true);
+    setServerError("");
+    try {
+      const { auth_url } = await githubApi.getOAuthUrl();
+      // Redirigir a GitHub para autorización
+      window.location.href = auth_url;
+    } catch (e: any) {
+      const msg = e.response?.data?.error || "No se pudo conectar con GitHub.";
+      setServerError(msg);
+      notify.error(msg);
+      setGithubLoading(false);
     }
   };
 
@@ -97,6 +116,28 @@ export default function LoginPage() {
               Entrar
             </Button>
           </Box>
+
+          <Divider sx={{ my: 2.5 }}>
+            <Typography variant="caption" color="text.secondary">
+              o
+            </Typography>
+          </Divider>
+
+          <Button
+            fullWidth
+            variant="outlined"
+            startIcon={<Github size={20} />}
+            onClick={handleGitHubLogin}
+            disabled={githubLoading}
+            sx={{
+              borderColor: "#333",
+              color: "#333",
+              "&:hover": { borderColor: "#000", bgcolor: "rgba(0,0,0,0.04)" },
+            }}
+          >
+            {githubLoading ? "Conectando..." : "Sign in with GitHub"}
+          </Button>
+
           <Typography variant="body2" mt={2} textAlign="center">
             ¿No tienes cuenta?{" "}
             <Link component={RouterLink} to="/register">

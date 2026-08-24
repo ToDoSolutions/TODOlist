@@ -65,3 +65,114 @@ export const tasksApi = {
     api.patch<Subtask>(`/subtasks/${id}/`, data).then((r) => r.data),
   removeSubtask: (id: number) => api.delete(`/subtasks/${id}/`),
 };
+
+// --- GitHub Integration ---
+
+export interface GitHubInstallation {
+  id: number;
+  installation_id: number;
+  account_login: string;
+  account_type: string;
+  avatar_url: string;
+  github_username: string;
+  created_at: string;
+}
+
+export interface GitHubRepo {
+  id: number;
+  repo_id: number;
+  full_name: string;
+  name: string;
+  owner: string;
+  is_private: boolean;
+  sync_enabled: boolean;
+  default_branch: string;
+  created_at: string;
+}
+
+export interface GitHubIssue {
+  id: number;
+  number: number;
+  title: string;
+  state: string;
+  html_url: string;
+  body: string;
+  labels: string[];
+  already_linked: boolean;
+}
+
+export interface GitHubIssueLink {
+  id: number;
+  task: number;
+  repo: number;
+  repo_full_name: string;
+  issue_number: number;
+  issue_url: string;
+  issue_state: string;
+  last_synced_at: string | null;
+  created_at: string;
+}
+
+export const githubApi = {
+  // OAuth
+  getOAuthUrl: () =>
+    api
+      .get<{ auth_url: string; state: string }>("/auth/github/start/")
+      .then((r) => r.data),
+  oauthCallback: (code: string, state: string) =>
+    api
+      .post<{ access: string; refresh: string; github_username: string }>(
+        "/auth/github/callback/",
+        { code, state }
+      )
+      .then((r) => r.data),
+
+  // Instalaciones
+  listInstallations: () =>
+    api.get<GitHubInstallation[]>("/github/installations/").then((r) => r.data),
+  discoverRepos: () =>
+    api
+      .post<{ total: number; new: number; message: string }>(
+        "/github/installations/discover_repos/"
+      )
+      .then((r) => r.data),
+  removeInstallation: (id: number) =>
+    api.delete(`/github/installations/${id}/`),
+
+  // Repos
+  listRepos: () =>
+    api.get<GitHubRepo[]>("/github/repos/").then((r) => r.data),
+  updateRepo: (id: number, data: Partial<GitHubRepo>) =>
+    api.patch<GitHubRepo>(`/github/repos/${id}/`, data).then((r) => r.data),
+  syncRepo: (id: number) =>
+    api.post<{ message: string }>(`/github/repos/${id}/sync/`).then((r) => r.data),
+  listRepoIssues: (id: number, state = "open") =>
+    api
+      .get<{ results: GitHubIssue[] }>(`/github/repos/${id}/issues/`, {
+        params: { state },
+      })
+      .then((r) => r.data.results),
+  importIssues: (id: number, state = "open", labelFilter = "") =>
+    api
+      .post<{ imported: number; skipped: number; total: number }>(
+        `/github/repos/${id}/import_issues/`,
+        { state, label_filter: labelFilter }
+      )
+      .then((r) => r.data),
+
+  // Links
+  listLinks: () =>
+    api.get<GitHubIssueLink[]>("/github/links/").then((r) => {
+      const d = r.data;
+      return Array.isArray(d) ? d : (d as any).results || [];
+    }),
+  createLinkForTask: (taskId: number, repoId: number) =>
+    api
+      .post<GitHubIssueLink>("/github/links/create_for_task/", {
+        task_id: taskId,
+        repo_id: repoId,
+      })
+      .then((r) => r.data),
+  syncLink: (id: number) =>
+    api.post<{ message: string }>(`/github/links/${id}/sync/`).then((r) => r.data),
+};
