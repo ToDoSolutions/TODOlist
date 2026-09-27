@@ -1,9 +1,9 @@
 """Motor de métricas y estadísticas del flujo de trabajo."""
 from datetime import timedelta
-from django.db.models import Count, Q, Avg
+
 from django.utils import timezone
 
-from apps.tasks.models import Task, TaskActivity, Sprint
+from apps.tasks.models import Sprint, Task, TaskActivity
 
 
 def _percentile(values, p):
@@ -172,7 +172,13 @@ def _calculate_health_score(total, old, no_est, no_due, overdue):
 def get_sprint_metrics(user, sprint_id):
     """Métricas de un sprint específico."""
     try:
-        sprint = Sprint.objects.get(id=sprint_id, owner=user)
+        from django.db.models import Q
+
+        from apps.projects.models import accessible_projects
+        sprint = Sprint.objects.get(
+            Q(owner=user) | Q(project__in=accessible_projects(user)),
+            id=sprint_id,
+        )
     except Sprint.DoesNotExist:
         return None
 
@@ -188,7 +194,10 @@ def get_sprint_metrics(user, sprint_id):
     sp_done = sum(t.story_points or 0 for t in tasks.filter(state="completed"))
 
     # Tareas añadidas después del inicio (scope creep)
-    added_after_start = tasks.filter(created_at__gt=sprint.start_date).count()
+    from datetime import datetime
+    from datetime import time as dtime
+    start_dt = timezone.make_aware(datetime.combine(sprint.start_date, dtime.min)) if sprint.start_date else None
+    added_after_start = tasks.filter(created_at__gt=start_dt).count() if start_dt else 0
 
     return {
         "sprint_name": sprint.name,

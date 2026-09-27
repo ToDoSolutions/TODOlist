@@ -1,12 +1,38 @@
 name: CI
 
-on:
+"on":
   push:
     branches: [main, develop]
   pull_request:
     branches: [main]
 
 jobs:
+  backend-lint:
+    name: Backend Lint & Security
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: backend
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+          cache: pip
+          cache-dependency-path: backend/requirements.txt
+
+      - name: Install linters
+        run: pip install ruff bandit
+
+      - name: Ruff (errores, imports, estilo)
+        run: ruff check apps config --select E9,F,SIM,I001 --exclude "*/migrations/*"
+
+      - name: Bandit (seguridad, media+alta severidad)
+        run: bandit -r apps config -x "*/migrations/*,tests" -lll
+
   backend-tests:
     name: Backend Tests
     runs-on: ubuntu-latest
@@ -93,6 +119,9 @@ jobs:
 
       - name: TypeScript check
         run: npx tsc -b --noEmit
+
+      - name: ESLint
+        run: npx eslint . --max-warnings=9999
 
       - name: Run tests
         run: npx vitest run

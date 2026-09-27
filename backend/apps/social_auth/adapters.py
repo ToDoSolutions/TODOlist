@@ -1,7 +1,5 @@
 """Adapters para django-allauth con JWT."""
-from allauth.account.adapter import DefaultAccountAdapter
 from allauth.socialaccount.adapter import DefaultSocialAccountAdapter
-from django.conf import settings
 
 
 class CustomSocialAccountAdapter(DefaultSocialAccountAdapter):
@@ -16,7 +14,11 @@ class CustomSocialAccountAdapter(DefaultSocialAccountAdapter):
             return  # Ya conectada
 
         email = sociallogin.account.extra_data.get("email")
-        if email:
+        # Solo conectar si el email está verificado por el provider
+        email_verified = sociallogin.account.extra_data.get(
+            "email_verified", sociallogin.account.extra_data.get("verified_email", False)
+        )
+        if email and email_verified:
             try:
                 user = User.objects.get(email=email)
                 sociallogin.connect(request, user)

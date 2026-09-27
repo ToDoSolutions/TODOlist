@@ -25,22 +25,22 @@ import {
   Zap,
   Calendar,
   BarChart3,
+  KeyRound,
 } from "lucide-react";
 import { useNavigate, Link as RouterLink, useLocation } from "react-router-dom";
 import { useAuth } from "../auth/AuthContext";
 import { notify } from "../notify";
-import { githubApi } from "../api/resources";
+import { githubApi, type ApiError } from "../api/resources";
+import { ssoApi, type SsoProvider } from "../api/featEnt";
 import { useState, useEffect } from "react";
 import { motion } from "framer-motion";
+import { useTranslation } from "react-i18next";
+import "../i18n";
 
-const schema = z.object({
-  email: z.string().email("Email no válido"),
-  password: z.string().min(1, "Requerido"),
-});
-
-type FormValues = z.infer<typeof schema>;
+type FormValues = { email: string; password: string };
 
 export default function LoginPage() {
+  const { t } = useTranslation();
   const { login } = useAuth();
   const navigate = useNavigate();
   const location = useLocation();
@@ -49,17 +49,37 @@ export default function LoginPage() {
   const [serverError, setServerError] = useState("");
   const [githubLoading, setGithubLoading] = useState(false);
   const [showPassword, setShowPassword] = useState(false);
+  const [needs2fa, setNeeds2fa] = useState(false);
+  const [totpCode, setTotpCode] = useState("");
   const [providers, setProviders] = useState<{ github: boolean; google: boolean }>({
     github: false,
     google: false,
   });
+  const [ssoProviders, setSsoProviders] = useState<SsoProvider[]>([]);
 
   useEffect(() => {
     githubApi
       .getProviders()
       .then(setProviders)
       .catch(() => {});
+    // Endpoint público AllowAny; no fatal si no existe aún (404) — la
+    // página funciona igual sin botones SSO enterprise.
+    ssoApi
+      .providers()
+      .then(setSsoProviders)
+      .catch(() => {});
   }, []);
+
+  // Botones SSO enterprise: cada provider habilitado que no sea github (que
+  // tiene su propio flujo OAuth) ni el google ya pintado por el bloque legacy.
+  const ssoButtons = ssoProviders.filter(
+    (p) => p.enabled && p.id !== "github" && !(p.id === "google" && providers.google),
+  );
+
+  const schema = z.object({
+    email: z.string().email(t("p.auth.errors.emailInvalid")),
+    password: z.string().min(1, t("p.auth.errors.required")),
+  });
 
   const {
     register,
@@ -70,14 +90,29 @@ export default function LoginPage() {
   const onSubmit = async (values: FormValues) => {
     setServerError("");
     try {
-      await login(values.email, values.password);
-      notify.success("Sesión iniciada");
-      const dest = (location.state as { from?: string })?.from || "/app";
+      await login(values.email, values.password, needs2fa ? totpCode : undefined);
+      notify.success(t("p.auth.login.success"));
+      // Destino post-login: state.from (rutas protegidas) o ?next= (sesión expirada)
+      const nextParam = new URLSearchParams(location.search).get("next");
+      const dest =
+        nextParam && nextParam.startsWith("/")
+          ? nextParam
+          : (location.state as { from?: string })?.from || "/app";
       navigate(dest);
-    } catch (e: any) {
-      const msg = e.response?.data?.detail || "No se pudo iniciar sesión. Revisa tus credenciales.";
-      setServerError(msg);
-      notify.error(msg);
+    } catch (e) {
+      // La cuenta tiene 2FA activo: pedir el código TOTP/backup
+      const err = e as ApiError;
+      if (err.response?.data?.requires_2fa) {
+        setNeeds2fa(true);
+        setServerError("");
+        return;
+      }
+      const msg =
+        err.response?.data?.totp_code ||
+        err.response?.data?.detail ||
+        t("p.auth.errors.loginFailed");
+      setServerError(typeof msg === "string" ? msg : t("p.auth.errors.invalid2fa"));
+      notify.error(typeof msg === "string" ? msg : t("p.auth.errors.invalid2fa"));
     }
   };
 
@@ -87,8 +122,9 @@ export default function LoginPage() {
     try {
       const { auth_url } = await githubApi.getOAuthUrl();
       window.location.href = auth_url;
-    } catch (e: any) {
-      const msg = e.response?.data?.error || "No se pudo conectar con GitHub.";
+    } catch (e) {
+      const err = e as ApiError;
+      const msg = err.response?.data?.error || t("p.auth.errors.githubConnect");
       setServerError(msg);
       notify.error(msg);
       setGithubLoading(false);
@@ -96,10 +132,10 @@ export default function LoginPage() {
   };
 
   const features = [
-    { icon: CheckCircle2, text: "Gestión de tareas y proyectos" },
-    { icon: Zap, text: "Automatizaciones y reglas" },
-    { icon: BarChart3, text: "Dashboards y métricas" },
-    { icon: Calendar, text: "Sprints, épicas y Gantt" },
+    { icon: CheckCircle2, text: t("p.auth.features.tasks") },
+    { icon: Zap, text: t("p.auth.features.automations") },
+    { icon: BarChart3, text: t("p.auth.features.dashboards") },
+    { icon: Calendar, text: t("p.auth.features.sprints") },
   ];
 
   return (
@@ -162,7 +198,7 @@ export default function LoginPage() {
             >
               <Typography
                 sx={{
-                  color: "#fff",
+                  color: "common.white",
                   fontSize: "2rem",
                   fontWeight: 800,
                   letterSpacing: "-0.02em",
@@ -173,7 +209,7 @@ export default function LoginPage() {
               </Typography>
               <Typography
                 sx={{
-                  color: "#fff",
+                  color: "common.white",
                   fontSize: "2.5rem",
                   fontWeight: 700,
                   lineHeight: 1.2,
@@ -181,12 +217,14 @@ export default function LoginPage() {
                   mb: 2,
                 }}
               >
-                Organiza tu trabajo.
+                {t("p.auth.login.heroTitle1")}
                 <br />
-                Impulsa tu productividad.
+                {t("p.auth.login.heroTitle2")}
               </Typography>
-              <Typography sx={{ color: "rgba(255,255,255,0.8)", fontSize: "1.125rem", mb: 5 }}>
-                La plataforma todo-en-uno para gestionar tareas, sprints, equipos y proyectos.
+              <Typography
+                sx={{ color: "rgba(255,255,255,0.8)", fontSize: "1.125rem", mb: 5 }}
+              >
+                {t("p.auth.heroSubtitle")}
               </Typography>
             </motion.div>
 
@@ -199,7 +237,7 @@ export default function LoginPage() {
                   transition={{ duration: 0.5, delay: 0.3 + i * 0.1 }}
                 >
                   <Box sx={{ display: "flex", alignItems: "center", gap: 1.5 }}>
-                    <f.icon size={22} color="#fff" />
+                    <f.icon size={22} style={{ color: theme.palette.common.white }} />
                     <Typography sx={{ color: "rgba(255,255,255,0.9)", fontSize: "1rem" }}>
                       {f.text}
                     </Typography>
@@ -231,16 +269,22 @@ export default function LoginPage() {
         >
           {/* Logo móvil */}
           {!isDesktop && (
-            <Typography sx={{ fontSize: "1.5rem", fontWeight: 800, mb: 3, color: "primary.main" }}>
+            <Typography
+              sx={{ fontSize: "1.5rem", fontWeight: 800, mb: 3, color: "primary.main" }}
+            >
               TODOlist
             </Typography>
           )}
 
-          <Typography variant="h4" fontWeight={700} sx={{ mb: 1, letterSpacing: "-0.02em" }}>
-            Bienvenido de nuevo
+          <Typography
+            variant="h4"
+            fontWeight={700}
+            sx={{ mb: 1, letterSpacing: "-0.02em" }}
+          >
+            {t("p.auth.login.welcomeBack")}
           </Typography>
           <Typography variant="body2" color="text.secondary" sx={{ mb: 4 }}>
-            Inicia sesión para continuar a tu espacio de trabajo
+            {t("p.auth.login.subtitle")}
           </Typography>
 
           {serverError && (
@@ -253,7 +297,7 @@ export default function LoginPage() {
 
           <Box component="form" onSubmit={handleSubmit(onSubmit)} noValidate>
             <TextField
-              label="Email"
+              label={t("p.auth.email")}
               fullWidth
               margin="normal"
               autoComplete="email"
@@ -270,7 +314,7 @@ export default function LoginPage() {
               {...register("email")}
             />
             <TextField
-              label="Contraseña"
+              label={t("p.auth.password")}
               type={showPassword ? "text" : "password"}
               fullWidth
               margin="normal"
@@ -289,7 +333,7 @@ export default function LoginPage() {
                       onClick={() => setShowPassword(!showPassword)}
                       edge="end"
                       size="small"
-                      aria-label="mostrar contraseña"
+                      aria-label={t("p.auth.showPassword")}
                     >
                       {showPassword ? <EyeOff size={18} /> : <Eye size={18} />}
                     </IconButton>
@@ -299,24 +343,55 @@ export default function LoginPage() {
               {...register("password")}
             />
 
+            {needs2fa && (
+              <TextField
+                label={t("p.auth.totpLabel")}
+                fullWidth
+                margin="normal"
+                autoComplete="one-time-code"
+                autoFocus
+                value={totpCode}
+                onChange={(e) => setTotpCode(e.target.value.trim())}
+                helperText={t("p.auth.totpHelper")}
+                InputProps={{
+                  startAdornment: (
+                    <InputAdornment position="start">
+                      <Lock size={18} color={theme.palette.text.secondary} />
+                    </InputAdornment>
+                  ),
+                }}
+              />
+            )}
+
+            <Box textAlign="right" mt={0.5}>
+              <Button
+                component={RouterLink}
+                to="/forgot-password"
+                size="small"
+                sx={{ textTransform: "none" }}
+              >
+                {t("p.auth.forgotPassword")}
+              </Button>
+            </Box>
+
             <Button
               type="submit"
               fullWidth
               variant="contained"
               size="large"
-              sx={{ mt: 3, mb: 2, py: 1.5, fontSize: "0.95rem" }}
+              sx={{ mt: 2, mb: 2, py: 1.5, fontSize: "0.95rem" }}
               disabled={isSubmitting}
             >
-              {isSubmitting ? "Iniciando sesión..." : "Iniciar sesión"}
+              {isSubmitting ? t("p.auth.login.signingIn") : t("p.auth.login.submit")}
             </Button>
           </Box>
 
           {/* OAuth providers — solo si están configurados */}
-          {(providers.github || providers.google) && (
+          {(providers.github || providers.google || ssoButtons.length > 0) && (
             <>
               <Divider sx={{ my: 3 }}>
                 <Typography variant="caption" color="text.secondary">
-                  o continúa con
+                  {t("p.auth.orContinueWith")}
                 </Typography>
               </Divider>
 
@@ -331,7 +406,7 @@ export default function LoginPage() {
                     disabled={githubLoading}
                     sx={{ py: 1.5 }}
                   >
-                    {githubLoading ? "Conectando..." : "GitHub"}
+                    {githubLoading ? t("p.auth.connecting") : "GitHub"}
                   </Button>
                 )}
                 {providers.google && (
@@ -368,24 +443,48 @@ export default function LoginPage() {
                   </Button>
                 )}
               </Box>
+
+              {/* SSO enterprise — redirección de página completa, no XHR */}
+              {ssoButtons.length > 0 && (
+                <Box sx={{ display: "flex", flexDirection: "column", gap: 1.5, mt: 1.5 }}>
+                  {ssoButtons.map((p) => (
+                    <Button
+                      key={p.id}
+                      component="a"
+                      href={p.login_url}
+                      fullWidth
+                      variant="outlined"
+                      size="large"
+                      startIcon={<KeyRound size={18} />}
+                      sx={{ py: 1.5 }}
+                    >
+                      {p.name || t("p.ent.sso.fallback")}
+                    </Button>
+                  ))}
+                </Box>
+              )}
             </>
           )}
 
           <Typography variant="body2" mt={4} textAlign="center" color="text.secondary">
-            ¿No tienes cuenta?{" "}
+            {t("p.auth.noAccount")}{" "}
             <Link component={RouterLink} to="/register" fontWeight={600}>
-              Regístrate gratis
+              {t("p.auth.registerFree")}
             </Link>
           </Typography>
 
           {/* Demo credentials hint */}
           <Alert
             severity="info"
-            sx={{ mt: 3, borderRadius: 3, "& .MuiAlert-message": { fontSize: "0.8125rem" } }}
+            sx={{
+              mt: 3,
+              borderRadius: 3,
+              "& .MuiAlert-message": { fontSize: "0.8125rem" },
+            }}
             icon={false}
           >
             <Typography variant="caption" color="text.secondary">
-              <strong>Cuenta demo:</strong> demo@todolist.local / demo12345
+              <strong>{t("p.auth.demoAccount")}</strong> demo@todolist.com / demo12345
             </Typography>
           </Alert>
         </motion.div>

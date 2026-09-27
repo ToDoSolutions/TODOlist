@@ -1,14 +1,12 @@
 import hashlib
 
-from django.conf import settings
-
 from .models import FeatureFlag
 
 
 def _hash_percentage(key: str, user_id: int) -> int:
     """Devuelve un valor 0-100 determinista basado en key + user_id."""
-    raw = f"{key}:{user_id}".encode("utf-8")
-    digest = hashlib.md5(raw).hexdigest()
+    raw = f"{key}:{user_id}".encode()
+    digest = hashlib.sha256(raw).hexdigest()
     return int(digest, 16) % 100
 
 

@@ -13,8 +13,8 @@ def init_sentry():
 
     try:
         import sentry_sdk
-        from sentry_sdk.integrations.django import DjangoIntegration
         from sentry_sdk.integrations.celery import CeleryIntegration
+        from sentry_sdk.integrations.django import DjangoIntegration
 
         sentry_sdk.init(
             dsn=sentry_dsn,
@@ -25,5 +25,5 @@ def init_sentry():
         logger.info("Sentry initialized successfully")
     except ImportError:
         logger.warning("sentry-sdk not installed, skipping Sentry init")
-    except Exception as e:
-        logger.error(f"Error initializing Sentry: {e}")
+    except Exception:
+        logger.exception("Error initializing Sentry")

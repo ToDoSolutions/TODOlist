@@ -1,4 +1,8 @@
-import { defineConfig, Plugin } from "vite";
+﻿import { fileURLToPath } from "node:url";
+// vitest/config extiende defineConfig con el bloque `test` (tipado, sin `as any`)
+import { defineConfig } from "vitest/config";
+import { Plugin, type Connect } from "vite";
+import type { ServerResponse } from "node:http";
 import react from "@vitejs/plugin-react";
 import { VitePWA } from "vite-plugin-pwa";
 
@@ -9,21 +13,27 @@ function spaFallback(): Plugin {
   return {
     name: "spa-fallback",
     configureServer(server) {
-      server.middlewares.use((req: any, _res: any, next: any) => {
-        const url = (req.url || "").split("?")[0];
-        if (
-          url &&
-          !url.startsWith("/@") &&
-          !url.startsWith("/src") &&
-          !url.startsWith("/node_modules") &&
-          !url.startsWith("/public") &&
-          !url.includes(".") &&
-          url !== "/"
-        ) {
-          req.url = "/index.html";
-        }
-        next();
-      });
+      server.middlewares.use(
+        (
+          req: Connect.IncomingMessage,
+          _res: ServerResponse,
+          next: Connect.NextFunction,
+        ) => {
+          const url = (req.url || "").split("?")[0];
+          if (
+            url &&
+            !url.startsWith("/@") &&
+            !url.startsWith("/src") &&
+            !url.startsWith("/node_modules") &&
+            !url.startsWith("/public") &&
+            !url.includes(".") &&
+            url !== "/"
+          ) {
+            req.url = "/index.html";
+          }
+          next();
+        },
+      );
     },
   };
 }
@@ -33,7 +43,7 @@ export default defineConfig({
     react(),
     spaFallback(),
     VitePWA({
-      registerType: "autoUpdate",
+      registerType: "prompt",
       includeAssets: ["favicon.ico", "robots.txt"],
       manifest: {
         name: "TODOlist",
@@ -66,6 +76,9 @@ export default defineConfig({
       },
       workbox: {
         globPatterns: ["**/*.{js,css,html,ico,png,svg,woff2}"],
+        // push-sw.js es un SW independiente (Web Push) registrado aparte;
+        // no debe quedar dentro del precache del SW principal.
+        globIgnores: ["**/node_modules/**/*", "**/push-sw.js"],
         runtimeCaching: [
           {
             urlPattern: /^https:\/\/fonts\.googleapis\.com\/.*/i,
@@ -105,6 +118,18 @@ export default defineConfig({
   test: {
     globals: true,
     environment: "jsdom",
+    setupFiles: ["./src/test/setup.ts"],
     include: ["src/**/*.test.ts", "src/**/*.test.tsx"],
+    alias: {
+      "virtual:pwa-register/react": fileURLToPath(
+        new URL("./src/test/pwa-register-react-stub.ts", import.meta.url),
+      ),
+    },
+    // Máquina dev lenta + jsdom pesado: evitar timeouts falsos en findBy/waitFor
+    testTimeout: 15000,
+    hookTimeout: 15000,
+    // Limitar paralelismo: 22 ficheros de test a la vez saturan la CPU
+    pool: "forks",
+    maxWorkers: 4,
   },
-} as any);
+});

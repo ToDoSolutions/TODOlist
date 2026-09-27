@@ -1,5 +1,6 @@
 import { Component, ErrorInfo, ReactNode } from "react";
 import { Box, Typography, Button, Paper } from "@mui/material";
+import { captureError } from "./monitoring";
 
 interface Props {
   children: ReactNode;
@@ -21,25 +22,48 @@ export default class ErrorBoundary extends Component<Props, State> {
     return { hasError: true, error };
   }
 
-  componentDidCatch(error: Error, errorInfo: ErrorInfo) {
+  override componentDidCatch(error: Error, errorInfo: ErrorInfo) {
     this.setState({ errorInfo });
-    // eslint-disable-next-line no-console
     console.error("ErrorBoundary caught:", error, errorInfo);
+    captureError(error, { componentStack: errorInfo.componentStack });
   }
 
-  render() {
+  override render() {
     if (this.state.hasError) {
       return (
-        <Box p={3} display="flex" justifyContent="center" minHeight="100vh" alignItems="center">
+        <Box
+          p={3}
+          display="flex"
+          justifyContent="center"
+          minHeight="100vh"
+          alignItems="center"
+        >
           <Paper sx={{ p: 4, maxWidth: 700, width: "100%" }}>
             <Typography variant="h5" color="error" gutterBottom>
               Error en la aplicación
             </Typography>
-            <Typography variant="body1" sx={{ mt: 2, fontFamily: "monospace", whiteSpace: "pre-wrap", wordBreak: "break-word" }}>
+            <Typography
+              variant="body1"
+              sx={{
+                mt: 2,
+                fontFamily: "monospace",
+                whiteSpace: "pre-wrap",
+                wordBreak: "break-word",
+              }}
+            >
               {this.state.error?.toString()}
             </Typography>
             {this.state.errorInfo && (
-              <Typography variant="body2" sx={{ mt: 2, fontFamily: "monospace", whiteSpace: "pre-wrap", wordBreak: "break-word", color: "text.secondary" }}>
+              <Typography
+                variant="body2"
+                sx={{
+                  mt: 2,
+                  fontFamily: "monospace",
+                  whiteSpace: "pre-wrap",
+                  wordBreak: "break-word",
+                  color: "text.secondary",
+                }}
+              >
                 {this.state.errorInfo.componentStack}
               </Typography>
             )}

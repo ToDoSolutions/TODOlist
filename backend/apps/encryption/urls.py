@@ -1,6 +1,7 @@
+from django.urls import include, path
 from rest_framework.routers import DefaultRouter
-from django.urls import path, include
-from .views import UserPublicKeyViewSet, EncryptedTaskViewSet
+
+from .views import EncryptedTaskViewSet, UserPublicKeyViewSet
 
 router = DefaultRouter()
 router.register(r"public-keys", UserPublicKeyViewSet, basename="public-key")

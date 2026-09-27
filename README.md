@@ -23,7 +23,7 @@ calendario + hábitos + objetivos + IA).
 ## Features
 
 ### Core
-- **Autenticación**: registro, login, JWT (access + refresh), 2FA con TOTP
+- **Autenticación**: registro, login, JWT (access + refresh) en cookies httpOnly con CSRF double-submit, 2FA con TOTP
 - **Proyectos**: crear, listar, archivar, compartir con roles
 - **Tareas**: CRUD completo, título, descripción, estado, prioridad, fecha límite,
   story points, tipo (bug, feature, task, etc.), subtareas, comentarios, adjuntos
@@ -123,16 +123,15 @@ TODOlist/
 │   ├── apps/
 │   │   ├── users/         # Auth, 2FA, API keys
 │   │   ├── projects/      # Proyectos
-│   │   ├── tasks/         # Tareas, comentarios, métricas
+│   │   ├── tasks/         # Tareas, sprints, épicas, comentarios, métricas
 │   │   ├── tags/          # Etiquetas
-│   │   ├── sprints/       # Sprints, épicas
 │   │   ├── integrations/  # GitHub, webhooks
 │   │   ├── notifications/ # Notificaciones
 │   │   ├── automations/   # Reglas de automatización
 │   │   ├── collaboration/ # Equipos, menciones, audit
-│   │   └── graphql_app/   # GraphQL endpoint
-│   ├── config/            # Settings, URLs
-│   ├── tests/             # 200+ tests
+│   │   └── graphql_app/   # GraphQL endpoint + WebSocket consumers
+│   ├── config/            # Settings, URLs, ASGI (JWT WS auth)
+│   ├── tests/             # 2220 tests (1936 + 284 contract)
 │   └── Dockerfile
 ├── frontend/              # React + Vite + PWA
 │   ├── src/

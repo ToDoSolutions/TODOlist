@@ -1,14 +1,13 @@
 """Settings para tests: SQLite en memoria, sin Redis ni PG."""
-from config.settings import *  # noqa
-import os
+from config.settings import *
 
 DEBUG = True
-SECRET_KEY = "test-secret-key"
+SECRET_KEY = "test-secret-key-for-pytest-only-64bytes-aaaaaaaaaaaaaaaaaaaaaaaa"
 
 DATABASES = {
     "default": {
         "ENGINE": "django.db.backends.sqlite3",
-        "NAME": ":memory:",
+        "NAME": BASE_DIR / "test.sqlite3",
     }
 }
 

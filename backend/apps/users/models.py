@@ -1,6 +1,7 @@
+import secrets
+
 from django.contrib.auth.models import AbstractUser
 from django.db import models
-import secrets
 
 
 class User(AbstractUser):
@@ -10,6 +11,27 @@ class User(AbstractUser):
     avatar = models.ImageField(upload_to="avatars/", blank=True, null=True)
     timezone = models.CharField(max_length=64, default="UTC")
     locale = models.CharField(max_length=10, default="es")
+    # Token opaco y revocable para el feed iCal (?token=...): los clientes de
+    # calendario (Google/Outlook/Apple) no pueden enviar JWT ni cookies.
+    ical_token = models.CharField(max_length=64, null=True, blank=True, unique=True)
+    # Token opaco y revocable para email-to-task: el provider de inbound
+    # email envía a task-<token>@<dominio> y el payload se convierte en
+    # Task (o Comment si el subject referencia [task-<id>]).
+    inbound_email_token = models.CharField(max_length=64, null=True, blank=True, unique=True)
+    # Marca cuando el usuario confirma su email vía enlace. Social auth y
+    # superusuarios pueden considerarse verificados sin este flag.
+    email_verified = models.BooleanField(default=False)
+    email_verified_at = models.DateTimeField(null=True, blank=True)
+    # Capacidad semanal configurable para workload management
+    # (GET /api/tasks/workload/ la usa en vez del default 40h).
+    weekly_capacity_hours = models.DecimalField(
+        max_digits=5, decimal_places=1, default=40
+    )
+    # Out of office (estilo Asana): marca "ausente" + fecha opcional de
+    # regreso. Se expone en el perfil (/api/auth/me/, /api/users/me/) para
+    # que los compañeros vean la disponibilidad.
+    out_of_office = models.BooleanField(default=False)
+    out_of_office_until = models.DateField(null=True, blank=True)
 
     USERNAME_FIELD = "email"
     REQUIRED_FIELDS = ["username"]
@@ -65,9 +87,16 @@ class APIKey(models.Model):
             )
             if api_key.expires_at and api_key.expires_at < timezone.now():
                 return None
-            # Actualizar last_used_at
-            api_key.last_used_at = timezone.now()
-            api_key.save(update_fields=["last_used_at"])
+            # Actualizar last_used_at con throttle: una escritura por request
+            # genera hot-write + bloat; el dato solo necesita granularidad ~15min
+            from django.conf import settings
+            throttle = getattr(settings, "APIKEY_LAST_USED_THROTTLE_SECONDS", 900)
+            now = timezone.now()
+            if not api_key.last_used_at or (
+                now - api_key.last_used_at
+            ).total_seconds() >= throttle:
+                APIKey.objects.filter(pk=api_key.pk).update(last_used_at=now)
+                api_key.last_used_at = now
             return api_key
         except APIKey.DoesNotExist:
             return None
@@ -89,16 +118,30 @@ class TwoFactorSecret(models.Model):
         return f"2FA for {self.user.email} ({'enabled' if self.is_enabled else 'disabled'})"
 
     def generate_backup_codes(self, count=10):
-        """Genera códigos de backup de un solo uso."""
+        """Genera códigos de backup de un solo uso.
+
+        Devuelve los códigos en claro (se muestran al usuario una sola vez)
+        pero almacena SOLO los hashes SHA-256.
+        """
         import secrets as _secrets
-        self.backup_codes = [_secrets.token_hex(4).upper() for _ in range(count)]
+
+        from .security import hash_backup_code
+        codes = [_secrets.token_hex(5).upper() for _ in range(count)]
+        self.backup_codes = [hash_backup_code(c) for c in codes]
         self.save(update_fields=["backup_codes"])
-        return self.backup_codes
+        return codes
 
     def use_backup_code(self, code):
-        """Verifica y consume un código de backup. Retorna True si era válido."""
-        if code.upper() in self.backup_codes:
-            self.backup_codes.remove(code.upper())
+        """Verifica y consume un código de backup. Retorna True si era válido.
+
+        Solo se aceptan hashes SHA-256 (la migración 0004 rehasa los
+        códigos legacy en claro).
+        """
+        from .security import hash_backup_code
+        normalized = (code or "").strip().upper()
+        hashed = hash_backup_code(normalized)
+        if hashed in self.backup_codes:
+            self.backup_codes.remove(hashed)
             self.save(update_fields=["backup_codes"])
             return True
         return False
@@ -106,5 +149,8 @@ class TwoFactorSecret(models.Model):
     def verify_totp(self, code):
         """Verifica un código TOTP."""
         import pyotp
-        totp = pyotp.TOTP(self.secret)
-        return totp.verify(code, valid_window=1)
+        try:
+            totp = pyotp.TOTP(self.secret)
+            return totp.verify(code, valid_window=1)
+        except Exception:  # noqa: BLE001  # boundary intencional: fallo externo no rompe el flujo
+            return False

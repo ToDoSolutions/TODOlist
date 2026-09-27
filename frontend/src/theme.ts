@@ -1,10 +1,31 @@
-import { createTheme, Theme, Shadows } from "@mui/material/styles";
+import {
+  createTheme,
+  Theme,
+  Shadows,
+  type PaletteOptions,
+  type TypographyVariantsOptions,
+} from "@mui/material/styles";
 
 // Material 3 color scheme — roles semánticos
 const lightPalette = {
-  primary: { main: "#5B7CFA", light: "#7B97FF", dark: "#3D5BD9", contrastText: "#FFFFFF" },
-  secondary: { main: "#FF6B9D", light: "#FF8FB5", dark: "#E04B7D", contrastText: "#FFFFFF" },
-  tertiary: { main: "#00BFA6", light: "#2DD4BF", dark: "#00897B", contrastText: "#FFFFFF" },
+  primary: {
+    main: "#5B7CFA",
+    light: "#7B97FF",
+    dark: "#3D5BD9",
+    contrastText: "#FFFFFF",
+  },
+  secondary: {
+    main: "#FF6B9D",
+    light: "#FF8FB5",
+    dark: "#E04B7D",
+    contrastText: "#FFFFFF",
+  },
+  tertiary: {
+    main: "#00BFA6",
+    light: "#2DD4BF",
+    dark: "#00897B",
+    contrastText: "#FFFFFF",
+  },
   error: { main: "#F44336", light: "#FF7961", dark: "#BA000D", contrastText: "#FFFFFF" },
   warning: { main: "#FF9800", light: "#FFB74D", dark: "#F57C00" },
   info: { main: "#29B6F6", light: "#4FC3F7", dark: "#0288D1" },
@@ -34,9 +55,24 @@ const lightPalette = {
 };
 
 const darkPalette = {
-  primary: { main: "#7B97FF", light: "#9DB0FF", dark: "#5B7CFA", contrastText: "#0A0E27" },
-  secondary: { main: "#FF8FB5", light: "#FFB0CC", dark: "#FF6B9D", contrastText: "#0A0E27" },
-  tertiary: { main: "#2DD4BF", light: "#5EEAD4", dark: "#00BFA6", contrastText: "#0A0E27" },
+  primary: {
+    main: "#7B97FF",
+    light: "#9DB0FF",
+    dark: "#5B7CFA",
+    contrastText: "#0A0E27",
+  },
+  secondary: {
+    main: "#FF8FB5",
+    light: "#FFB0CC",
+    dark: "#FF6B9D",
+    contrastText: "#0A0E27",
+  },
+  tertiary: {
+    main: "#2DD4BF",
+    light: "#5EEAD4",
+    dark: "#00BFA6",
+    contrastText: "#0A0E27",
+  },
   error: { main: "#FF7961", light: "#FF9E8A", dark: "#F44336", contrastText: "#0A0E27" },
   warning: { main: "#FFB74D", light: "#FFCC80", dark: "#FF9800" },
   info: { main: "#4FC3F7", light: "#80D4F9", dark: "#29B6F6" },
@@ -68,9 +104,24 @@ const darkPalette = {
 // Tipografía M3
 const typography = {
   fontFamily: '"Inter", "Roboto", "Helvetica", "Arial", sans-serif',
-  displayLarge: { fontSize: "3.5rem", fontWeight: 700, lineHeight: 1.1, letterSpacing: "-0.02em" },
-  displayMedium: { fontSize: "2.75rem", fontWeight: 700, lineHeight: 1.15, letterSpacing: "-0.02em" },
-  displaySmall: { fontSize: "2.25rem", fontWeight: 600, lineHeight: 1.2, letterSpacing: "-0.01em" },
+  displayLarge: {
+    fontSize: "3.5rem",
+    fontWeight: 700,
+    lineHeight: 1.1,
+    letterSpacing: "-0.02em",
+  },
+  displayMedium: {
+    fontSize: "2.75rem",
+    fontWeight: 700,
+    lineHeight: 1.15,
+    letterSpacing: "-0.02em",
+  },
+  displaySmall: {
+    fontSize: "2.25rem",
+    fontWeight: 600,
+    lineHeight: 1.2,
+    letterSpacing: "-0.01em",
+  },
   h1: { fontSize: "2.5rem", fontWeight: 700, lineHeight: 1.2, letterSpacing: "-0.02em" },
   h2: { fontSize: "2rem", fontWeight: 600, lineHeight: 1.25, letterSpacing: "-0.01em" },
   h3: { fontSize: "1.75rem", fontWeight: 600, lineHeight: 1.3 },
@@ -82,18 +133,128 @@ const typography = {
   subtitle1: { fontSize: "1rem", fontWeight: 500, lineHeight: 1.5 },
   subtitle2: { fontSize: "0.875rem", fontWeight: 500, lineHeight: 1.5 },
   caption: { fontSize: "0.75rem", lineHeight: 1.4, fontWeight: 400 },
-  overline: { fontSize: "0.6875rem", fontWeight: 600, letterSpacing: "0.08em", textTransform: "uppercase" },
-  button: { fontSize: "0.875rem", fontWeight: 600, letterSpacing: "0.01em", textTransform: "none" },
+  overline: {
+    fontSize: "0.6875rem",
+    fontWeight: 600,
+    letterSpacing: "0.08em",
+    textTransform: "uppercase",
+  },
+  button: {
+    fontSize: "0.875rem",
+    fontWeight: 600,
+    letterSpacing: "0.01em",
+    textTransform: "none",
+  },
 };
 
-export function createAppTheme(dark: boolean): Theme {
+type Density = "comfortable" | "standard" | "compact";
+
+// Presets de acento (estilo temas Todoist). "indigo" replica los colores base;
+// el resto cambia primary/secondary manteniendo el resto de roles M3.
+// Los mismos objetos sirven en modo oscuro (los mains ya son legibles sobre
+// superficies oscuras; contrastText elegido acorde).
+export interface AccentPreset {
+  primary: { main: string; light: string; dark: string; contrastText: string };
+  secondary: { main: string; light: string; dark: string; contrastText: string };
+}
+
+export const ACCENTS: Record<string, AccentPreset> = {
+  indigo: {
+    primary: {
+      main: "#5B7CFA",
+      light: "#7B97FF",
+      dark: "#3D5BD9",
+      contrastText: "#FFFFFF",
+    },
+    secondary: {
+      main: "#FF6B9D",
+      light: "#FF8FB5",
+      dark: "#E04B7D",
+      contrastText: "#FFFFFF",
+    },
+  },
+  emerald: {
+    primary: {
+      main: "#10B981",
+      light: "#34D399",
+      dark: "#059669",
+      contrastText: "#FFFFFF",
+    },
+    secondary: {
+      main: "#F59E0B",
+      light: "#FBBF24",
+      dark: "#D97706",
+      contrastText: "#0A0E27",
+    },
+  },
+  rose: {
+    primary: {
+      main: "#F43F5E",
+      light: "#FB7185",
+      dark: "#E11D48",
+      contrastText: "#FFFFFF",
+    },
+    secondary: {
+      main: "#8B5CF6",
+      light: "#A78BFA",
+      dark: "#7C3AED",
+      contrastText: "#FFFFFF",
+    },
+  },
+  amber: {
+    primary: {
+      main: "#F59E0B",
+      light: "#FBBF24",
+      dark: "#D97706",
+      contrastText: "#0A0E27",
+    },
+    secondary: {
+      main: "#6366F1",
+      light: "#818CF8",
+      dark: "#4F46E5",
+      contrastText: "#FFFFFF",
+    },
+  },
+  cyan: {
+    primary: {
+      main: "#06B6D4",
+      light: "#22D3EE",
+      dark: "#0891B2",
+      contrastText: "#0A0E27",
+    },
+    secondary: {
+      main: "#F97316",
+      light: "#FB923C",
+      dark: "#EA580C",
+      contrastText: "#FFFFFF",
+    },
+  },
+};
+
+export const DEFAULT_ACCENT = "indigo";
+
+const DENSITY = {
+  comfortable: { cellPy: 14, cellPx: 16, listPy: 10, toolbar: 64, inputPy: 14 },
+  standard: { cellPy: 8, cellPx: 12, listPy: 6, toolbar: 56, inputPy: 10 },
+  compact: { cellPy: 4, cellPx: 8, listPy: 2, toolbar: 48, inputPy: 6 },
+};
+
+export function createAppTheme(
+  dark: boolean,
+  density: Density = "standard",
+  accent: string = DEFAULT_ACCENT,
+): Theme {
   const palette = dark ? darkPalette : lightPalette;
+  const acc = ACCENTS[accent] ?? ACCENTS[DEFAULT_ACCENT]!;
+  const d = DENSITY[density];
   return createTheme({
     palette: {
       mode: dark ? "dark" : "light",
       ...palette,
-    } as any,
-    typography: typography as any,
+      primary: acc.primary,
+      secondary: acc.secondary,
+    } as PaletteOptions,
+    typography: typography as TypographyVariantsOptions,
     shape: { borderRadius: 12 },
     shadows: [
       "none",
@@ -143,7 +304,7 @@ export function createAppTheme(dark: boolean): Theme {
         styleOverrides: {
           // Foco visible accesible — WCAG 2.2
           ":focus-visible": {
-            outline: `2px solid ${dark ? "#7B97FF" : "#3D5BD9"}`,
+            outline: `2px solid ${dark ? acc.primary.light : acc.primary.dark}`,
             outlineOffset: 2,
           },
           // Respetar preferencia de reducción de movimiento
@@ -239,6 +400,8 @@ export function createAppTheme(dark: boolean): Theme {
             borderRadius: 10,
             marginInline: 8,
             marginBlock: 2,
+            paddingTop: d.listPy,
+            paddingBottom: d.listPy,
             transition: "all 0.15s ease",
             "&.Mui-selected": {
               fontWeight: 600,
@@ -272,6 +435,23 @@ export function createAppTheme(dark: boolean): Theme {
       },
       MuiCircularProgress: {
         defaultProps: { thickness: 4 },
+      },
+      // --- Densidad configurable: afecta a tablas, listas, inputs y toolbars ---
+      MuiTableCell: {
+        styleOverrides: {
+          root: { padding: `${d.cellPy}px ${d.cellPx}px` },
+          head: { padding: `${d.cellPy}px ${d.cellPx}px`, fontWeight: 700 },
+        },
+      },
+      MuiToolbar: {
+        styleOverrides: {
+          root: { minHeight: `${d.toolbar}px !important` },
+        },
+      },
+      MuiInputBase: {
+        styleOverrides: {
+          input: { paddingTop: d.inputPy, paddingBottom: d.inputPy },
+        },
       },
     },
   });

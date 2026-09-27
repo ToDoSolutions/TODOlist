@@ -31,6 +31,11 @@ class AiSuggestion(models.Model):
     input_data = models.JSONField(default=dict, blank=True)
     output_data = models.JSONField(default=dict, blank=True)
     confidence = models.FloatField(default=0.0)
+    status = models.CharField(
+        max_length=20,
+        choices=[("pending", "Pendiente"), ("accepted", "Aceptada"), ("rejected", "Rechazada"), ("applied", "Aplicada")],
+        default="pending",
+    )
     created_at = models.DateTimeField(auto_now_add=True)
 
     class Meta:

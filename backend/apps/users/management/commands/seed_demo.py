@@ -8,37 +8,61 @@ Usage:
 import random
 import uuid
 from datetime import timedelta
-from django.core.management.base import BaseCommand
-from django.utils import timezone
+
 from django.contrib.auth import get_user_model
 from django.contrib.auth.hashers import make_password
+from django.core.management.base import BaseCommand
+from django.utils import timezone
 
-from apps.projects.models import Project
-from apps.tags.models import Tag
-from apps.tasks.models import (
-    Task, Subtask, Comment, Sprint, Epic, TimeEntry,
-    TaskTemplate, CustomField, CustomFieldValue, TaskRelation, TaskActivity,
-    OutgoingWebhook, SavedSearch, RecurrenceRule,
-)
+from apps.ai_assistant.models import AiSuggestion
+from apps.automations.models import AutomationLog, AutomationRule
 from apps.collaboration.models import (
-    Team, TeamMembership, ProjectMember, Invitation, Mention, AuditLog,
+    AuditLog,
+    Invitation,
+    Mention,
+    ProjectMember,
+    Team,
+    TeamMembership,
 )
-from apps.automations.models import AutomationRule, AutomationLog
-from apps.okrs.models import Objective, KeyResult, KeyResultUpdate
-from apps.notifications.models import Notification, NotificationPreference
+from apps.encryption.models import (
+    EncryptedKeyShare,
+    EncryptedTask,
+    UserPublicKey,
+)
 from apps.feature_flags.models import FeatureFlag
 from apps.integrations.models import (
-    GitHubInstallation, GitHubRepo, GitHubIssueLink,
-    GitHubPullRequest, GitHubCommit, GitHubRelease, GitHubCheckRun,
+    GitHubCheckRun,
+    GitHubCommit,
+    GitHubInstallation,
+    GitHubIssueLink,
+    GitHubPullRequest,
+    GitHubRelease,
+    GitHubRepo,
     WebhookDelivery,
 )
 from apps.integrations_chat.models import ChatIntegration, ChatMessageLog
+from apps.notifications.models import Notification
 from apps.offline_sync.models import SyncDevice, SyncOperation
-from apps.encryption.models import (
-    UserPublicKey, EncryptedTask, EncryptedKeyShare,
+from apps.okrs.models import KeyResult, KeyResultUpdate, Objective
+from apps.projects.models import Project
+from apps.tags.models import Tag
+from apps.tasks.models import (
+    Comment,
+    CustomField,
+    CustomFieldValue,
+    Epic,
+    OutgoingWebhook,
+    RecurrenceRule,
+    SavedSearch,
+    Sprint,
+    Subtask,
+    Task,
+    TaskActivity,
+    TaskRelation,
+    TaskTemplate,
+    TimeEntry,
 )
 from apps.users.models import APIKey
-from apps.ai_assistant.models import AiSuggestion
 
 User = get_user_model()
 
@@ -84,7 +108,6 @@ class Command(BaseCommand):
         self._create_feature_flags(user)
         self._create_outgoing_webhooks(user)
         self._create_webhook_deliveries()
-        gh_repos = self._create_github_data(user, tasks)
         self._create_notifications(user, tasks, sprints)
         self._create_invitations(user, projects)
         self._create_mentions(user, tasks, comments, extra_users)
@@ -845,7 +868,6 @@ class Command(BaseCommand):
     # ──────────────────────────────────────────────────────────────
 
     def _create_invitations(self, user, projects):
-        now = timezone.now()
         invites = [
             ("project", projects[0].id, "newdev1@example.com", "member"),
             ("project", projects[1].id, "newdev2@example.com", "admin"),
@@ -871,7 +893,6 @@ class Command(BaseCommand):
     def _create_mentions(self, user, tasks, comments, extra_users):
         if not extra_users or not comments:
             return
-        now = timezone.now()
         mentions = [
             (comments[0], tasks[7], extra_users[0], user),    # Ana mentioned in crash bug
             (comments[2], tasks[17], extra_users[1], user),   # Carlos mentioned in memory leak
@@ -921,7 +942,6 @@ class Command(BaseCommand):
     # ──────────────────────────────────────────────────────────────
 
     def _create_automation_logs(self, automations):
-        now = timezone.now()
         if not automations:
             return
         logs = [
@@ -984,7 +1004,6 @@ class Command(BaseCommand):
                 defaults={"webhook_url": url, "channel": channel, "events": events, "is_active": True},
             )
             # Add some message logs
-            now = timezone.now()
             for i in range(3):
                 ChatMessageLog.objects.create(
                     integration=ci,
@@ -1054,7 +1073,6 @@ class Command(BaseCommand):
         )
 
         # Encrypted tasks
-        now = timezone.now()
         enc_tasks = []
         for i in range(2):
             et = EncryptedTask.objects.create(
@@ -1173,7 +1191,6 @@ class Command(BaseCommand):
     # ──────────────────────────────────────────────────────────────
 
     def _create_ai_suggestions(self, user, tasks):
-        now = timezone.now()
         suggestions = [
             (tasks[7], "priority_suggestion", {"state": "blocked", "age_days": 5},
              {"suggested_priority": 0, "reason": "Tarea bloqueada por más de 3 días"}, 0.92),

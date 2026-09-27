@@ -3,9 +3,9 @@ from rest_framework.decorators import action
 from rest_framework.permissions import IsAuthenticated
 from rest_framework.response import Response
 
+from . import services
 from .models import FeatureFlag
 from .serializers import FeatureFlagSerializer
-from . import services
 
 
 class FeatureFlagViewSet(viewsets.ModelViewSet):
@@ -15,6 +15,13 @@ class FeatureFlagViewSet(viewsets.ModelViewSet):
     permission_classes = [IsAuthenticated]
     queryset = FeatureFlag.objects.all()
     lookup_field = "key"
+
+    def get_permissions(self):
+        # Solo staff puede crear/modificar/eliminar feature flags
+        if self.action in ("create", "update", "partial_update", "destroy"):
+            from rest_framework.permissions import IsAdminUser
+            return [IsAdminUser()]
+        return super().get_permissions()
 
     @action(detail=True, methods=["get"])
     def check(self, request, key=None):

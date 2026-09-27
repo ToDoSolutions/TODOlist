@@ -1,12 +1,13 @@
 """Seed de desarrollo: crea un usuario demo, un proyecto, etiquetas y tareas."""
+from datetime import timedelta
+
 from django.contrib.auth import get_user_model
 from django.core.management.base import BaseCommand
 from django.utils import timezone
-from datetime import timedelta
 
 from apps.projects.models import Project
 from apps.tags.models import Tag
-from apps.tasks.models import Task, Subtask
+from apps.tasks.models import Subtask, Task
 
 User = get_user_model()
 

@@ -14,6 +14,7 @@ class AiSuggestionSerializer(serializers.ModelSerializer):
             "input_data",
             "output_data",
             "confidence",
+            "status",
             "created_at",
         ]
         read_only_fields = ["id", "user", "created_at"]

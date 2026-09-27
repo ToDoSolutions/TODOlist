@@ -26,14 +26,17 @@ wheels/
 local_settings.py
 db.sqlite3
 db.sqlite3-journal
-media/
-staticfiles/
-.coverage
+test.sqlite3
+mutants/
+mutmut_results/
+mutmut_survivors.txt
+.coverage*
 htmlcov/
 .tox/
 .pytest_cache/
 .mypy_cache/
 .ruff_cache/
+.mutmut-cache*
 
 # --- Node / Frontend ---
 node_modules/
@@ -60,6 +63,7 @@ coverage/
 .vscode/
 *.swp
 *.swo
+*.bak
 .DS_Store
 Thumbs.db
 
@@ -68,5 +72,34 @@ Thumbs.db
 .env.*
 !.env.example
 
+# --- Mutmut analysis (temporal) ---
+check_*.py
+check_*.sh
+run_group*.sh
+run_all_groups.sh
+setup_*.cfg
+setup.cfg
+show_*.sh
+test_*.sh
+split_files.py
+list_survivors.py
+merge_results.py
+analyze_survivors.py
+Dockerfile.mutmut
+
 # --- Docker ---
 *.pid
+
+# --- Linting/mutaci�n artefactos locales ---
+backend/lint_results/
+backend/_lint_out/
+backend/test.sqlite3
+backend/test_test.sqlite3
+backend/mutmut_survivors.txt
+backend/.hypothesis/
+backend/.lintenv/
+backend/media/
+
+# --- Playwright e2e ---
+frontend/test-results/
+frontend/playwright-report/

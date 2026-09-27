@@ -1,5 +1,6 @@
 """Serializers para notificaciones."""
 from rest_framework import serializers
+
 from .models import Notification, NotificationPreference
 
 
@@ -19,6 +20,6 @@ class NotificationPreferenceSerializer(serializers.ModelSerializer):
         model = NotificationPreference
         fields = [
             "id", "notification_type", "in_app_enabled",
-            "email_enabled", "digest_enabled",
+            "email_enabled", "digest_enabled", "digest_frequency",
         ]
         read_only_fields = ["id", "notification_type"]

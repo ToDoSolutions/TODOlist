@@ -2,9 +2,42 @@
 Genera JWT, obtiene installation tokens y hace llamadas a la API REST/GraphQL.
 """
 import time
+
 import jwt
 import requests
 from django.conf import settings
+
+# Timeout por defecto para todas las llamadas HTTP a GitHub (evita
+# que un endpoint lento cuelgue workers/threads indefinidamente)
+DEFAULT_HTTP_TIMEOUT = 15
+
+
+def _request(method, url, **kwargs):
+    """HTTP request con traducción de errores a la jerarquía IntegrationError."""
+    from .exceptions import (
+        AuthenticationExpired,
+        ExternalRateLimited,
+        ExternalResourceNotFound,
+        ExternalServiceUnavailable,
+    )
+
+    kwargs.setdefault("timeout", DEFAULT_HTTP_TIMEOUT)
+    try:
+        resp = requests.request(method, url, **kwargs)
+    except requests.RequestException as e:
+        raise ExternalServiceUnavailable(f"GitHub inalcanzable: {e}") from e
+
+    if resp.status_code in (401, 403) and "Bad credentials" in resp.text:
+        raise AuthenticationExpired("Credenciales GitHub rechazadas")
+    if resp.status_code == 403 and "rate limit" in resp.text.lower():
+        raise ExternalRateLimited("Rate limit de GitHub alcanzado")
+    if resp.status_code == 429:
+        raise ExternalRateLimited("Rate limit de GitHub (429)")
+    if resp.status_code == 404:
+        raise ExternalResourceNotFound(f"Recurso no encontrado: {url}")
+    if resp.status_code >= 500:
+        raise ExternalServiceUnavailable(f"GitHub {resp.status_code}: {url}")
+    return resp
 
 
 class GitHubAppClient:
@@ -40,7 +73,7 @@ class GitHubAppClient:
             "Accept": "application/vnd.github+json",
         }
         url = f"{self.BASE_URL}/app/installations/{self.installation_id}/access_tokens"
-        resp = requests.post(url, headers=headers)
+        resp = _request("POST", url, headers=headers)
         resp.raise_for_status()
         self._installation_token = resp.json()["token"]
         return self._installation_token
@@ -57,7 +90,7 @@ class GitHubAppClient:
     def list_issues(self, owner, repo, state="open", per_page=100):
         """Lista issues de un repositorio."""
         url = f"{self.BASE_URL}/repos/{owner}/{repo}/issues"
-        resp = requests.get(
+        resp = _request("GET", 
             url,
             headers=self._headers(),
             params={"state": state, "per_page": per_page},
@@ -68,7 +101,7 @@ class GitHubAppClient:
     def get_issue(self, owner, repo, issue_number):
         """Obtiene un issue específico."""
         url = f"{self.BASE_URL}/repos/{owner}/{repo}/issues/{issue_number}"
-        resp = requests.get(url, headers=self._headers())
+        resp = _request("GET", url, headers=self._headers())
         resp.raise_for_status()
         return resp.json()
 
@@ -78,7 +111,7 @@ class GitHubAppClient:
         data = {"title": title, "body": body}
         if labels:
             data["labels"] = labels
-        resp = requests.post(url, headers=self._headers(), json=data)
+        resp = _request("POST", url, headers=self._headers(), json=data)
         resp.raise_for_status()
         return resp.json()
 
@@ -92,16 +125,73 @@ class GitHubAppClient:
             data["title"] = title
         if body:
             data["body"] = body
-        resp = requests.patch(url, headers=self._headers(), json=data)
+        resp = _request("PATCH", url, headers=self._headers(), json=data)
         resp.raise_for_status()
         return resp.json()
+
+    # --- Pull Requests ---
+
+    def list_pull_requests(self, owner, repo, state="open", per_page=100, sort="updated", direction="desc"):
+        """Lista pull requests de un repositorio."""
+        url = f"{self.BASE_URL}/repos/{owner}/{repo}/pulls"
+        resp = _request("GET", 
+            url,
+            headers=self._headers(),
+            params={
+                "state": state,
+                "per_page": per_page,
+                "sort": sort,
+                "direction": direction,
+            },
+        )
+        resp.raise_for_status()
+        return resp.json()
+
+    # --- Commits ---
+
+    def list_commits(self, owner, repo, per_page=30):
+        """Lista commits recientes de un repositorio."""
+        url = f"{self.BASE_URL}/repos/{owner}/{repo}/commits"
+        resp = _request("GET", 
+            url,
+            headers=self._headers(),
+            params={"per_page": per_page},
+        )
+        resp.raise_for_status()
+        return resp.json()
+
+    # --- Releases ---
+
+    def list_releases(self, owner, repo, per_page=30):
+        """Lista releases de un repositorio."""
+        url = f"{self.BASE_URL}/repos/{owner}/{repo}/releases"
+        resp = _request("GET", 
+            url,
+            headers=self._headers(),
+            params={"per_page": per_page},
+        )
+        resp.raise_for_status()
+        return resp.json()
+
+    # --- Check Runs ---
+
+    def list_check_runs(self, owner, repo, ref=None, per_page=30):
+        """Lista check runs recientes de un repositorio.
+
+        Si se pasa ``ref`` filtra por la rama/commit indicada.
+        """
+        url = f"{self.BASE_URL}/repos/{owner}/{repo}/commits/{ref or 'HEAD'}/check-runs"
+        params = {"per_page": per_page}
+        resp = _request("GET", url, headers=self._headers(), params=params)
+        resp.raise_for_status()
+        return resp.json().get("check_runs", [])
 
     # --- Repos ---
 
     def list_installation_repos(self):
         """Lista repositorios accesibles por la instalación."""
         url = f"{self.BASE_URL}/installation/repositories"
-        resp = requests.get(url, headers=self._headers(), params={"per_page": 100})
+        resp = _request("GET", url, headers=self._headers(), params={"per_page": 100})
         resp.raise_for_status()
         return resp.json().get("repositories", [])
 
@@ -110,7 +200,7 @@ class GitHubAppClient:
     def graphql(self, query, variables=None):
         """Ejecuta una query GraphQL contra la API de GitHub."""
         headers = self._headers()
-        resp = requests.post(
+        resp = _request("POST", 
             self.GRAPHQL_URL,
             headers=headers,
             json={"query": query, "variables": variables or {}},
@@ -151,10 +241,13 @@ class GitHubAppClient:
     @staticmethod
     def verify_webhook_signature(payload_body, signature_header):
         """Verifica la firma HMAC del webhook."""
-        import hmac
         import hashlib
+        import hmac
 
         if not signature_header:
+            return False
+        # Sin secret configurado no hay forma segura de verificar: rechazar
+        if not settings.GITHUB_APP_WEBHOOK_SECRET:
             return False
         secret = settings.GITHUB_APP_WEBHOOK_SECRET.encode()
         expected = "sha256=" + hmac.new(
@@ -188,7 +281,7 @@ class GitHubOAuthClient:
 
     def exchange_code(self, code, redirect_uri):
         """Intercambia el código OAuth por un access token."""
-        resp = requests.post(
+        resp = _request("POST", 
             self.TOKEN_URL,
             headers={"Accept": "application/json"},
             json={
@@ -203,7 +296,7 @@ class GitHubOAuthClient:
 
     def get_user_info(self, access_token):
         """Obtiene información del usuario de GitHub."""
-        resp = requests.get(
+        resp = _request("GET",
             f"{self.API_URL}/user",
             headers={
                 "Authorization": f"token {access_token}",
@@ -212,3 +305,27 @@ class GitHubOAuthClient:
         )
         resp.raise_for_status()
         return resp.json()
+
+    def get_verified_emails(self, access_token):
+        """Obtiene los emails verificados del usuario de GitHub.
+
+        Devuelve un set de emails marcados como verified en /user/emails.
+        Sirve para vincular cuentas OAuth de forma segura: el email público
+        del perfil (/user) puede no estar verificado.
+        """
+        try:
+            resp = _request("GET",
+                f"{self.API_URL}/user/emails",
+                headers={
+                    "Authorization": f"token {access_token}",
+                    "Accept": "application/vnd.github+json",
+                },
+            )
+            resp.raise_for_status()
+            return {
+                e["email"].lower()
+                for e in resp.json()
+                if e.get("verified") and e.get("email")
+            }
+        except Exception:  # noqa: BLE001  # boundary intencional: fallo externo no rompe el flujo
+            return set()

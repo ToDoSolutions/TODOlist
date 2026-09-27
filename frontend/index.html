@@ -6,6 +6,16 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <meta name="description" content="TODOlist — Organiza tareas, sprints, proyectos y equipos en una plataforma todo-en-uno." />
     <meta name="theme-color" content="#5B7CFA" />
+    <!-- CSP: el bundle Vite es self; fonts de Google; API en 127.0.0.1:8000 (dev).
+         En producción el servidor debe emitir el header real; el meta es fallback. -->
+    <meta
+      http-equiv="Content-Security-Policy"
+      content="default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; font-src 'self' https://fonts.gstatic.com; img-src 'self' data: blob:; connect-src 'self' http://127.0.0.1:8000 http://localhost:8000 ws://127.0.0.1:8000 ws://localhost:8000; frame-ancestors 'none'; base-uri 'self'"
+    />
+    <!-- NOTA: Trusted Types queda desactivado: la directiva exigía una política
+         "dompurify" que nunca se registró (DOMPurify no es dependencia) y rompía
+         todo innerHTML en Chromium. Para reactivarlo hay que instalar dompurify
+         y registrar la política en main.tsx antes de montar React. -->
     <link rel="preconnect" href="https://fonts.googleapis.com" />
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet" />

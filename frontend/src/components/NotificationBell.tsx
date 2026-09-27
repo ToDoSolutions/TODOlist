@@ -1,4 +1,5 @@
-import { useState, useRef } from "react";
+import { useState } from "react";
+import { useTranslation } from "react-i18next";
 import {
   IconButton,
   Badge,
@@ -15,38 +16,40 @@ import {
 import { Bell, CheckCheck } from "lucide-react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { notificationsApi } from "../api/resources";
+import type { AppNotification } from "../types";
 
-const TYPE_LABELS: Record<string, string> = {
-  task_assigned: "Asignada",
-  task_due_soon: "Por vencer",
-  task_overdue: "Vencida",
-  task_completed: "Completada",
-  task_commented: "Comentario",
-  task_blocked: "Bloqueada",
-  sprint_started: "Sprint iniciado",
-  sprint_ending: "Sprint por terminar",
-  sprint_closed: "Sprint cerrado",
-  mention: "Mención",
-  pr_opened: "PR abierto",
-  pr_merged: "PR fusionado",
-  pr_review_requested: "Review solicitada",
-  ci_failed: "CI fallida",
-  release_published: "Release",
-  automation_triggered: "Automatización",
-  custom: "Notificación",
+const TYPE_KEYS: Record<string, string> = {
+  task_assigned: "p.board.notifType.task_assigned",
+  task_due_soon: "p.board.notifType.task_due_soon",
+  task_overdue: "p.board.notifType.task_overdue",
+  task_completed: "p.board.notifType.task_completed",
+  task_commented: "p.board.notifType.task_commented",
+  task_blocked: "p.board.notifType.task_blocked",
+  sprint_started: "p.board.notifType.sprint_started",
+  sprint_ending: "p.board.notifType.sprint_ending",
+  sprint_closed: "p.board.notifType.sprint_closed",
+  mention: "p.board.notifType.mention",
+  pr_opened: "p.board.notifType.pr_opened",
+  pr_merged: "p.board.notifType.pr_merged",
+  pr_review_requested: "p.board.notifType.pr_review_requested",
+  ci_failed: "p.board.notifType.ci_failed",
+  release_published: "p.board.notifType.release_published",
+  automation_triggered: "p.board.notifType.automation_triggered",
+  custom: "p.board.notifType.custom",
 };
 
-function timeAgo(dateStr: string): string {
+function timeAgo(dateStr: string, nowLabel: string): string {
   const date = new Date(dateStr);
   const now = new Date();
   const diff = Math.floor((now.getTime() - date.getTime()) / 1000);
-  if (diff < 60) return "ahora";
+  if (diff < 60) return nowLabel;
   if (diff < 3600) return `${Math.floor(diff / 60)}m`;
   if (diff < 86400) return `${Math.floor(diff / 3600)}h`;
   return `${Math.floor(diff / 86400)}d`;
 }
 
 export default function NotificationBell() {
+  const { t } = useTranslation();
   const qc = useQueryClient();
   const [anchorEl, setAnchorEl] = useState<HTMLElement | null>(null);
   const open = Boolean(anchorEl);
@@ -102,15 +105,16 @@ export default function NotificationBell() {
       >
         <Stack direction="row" alignItems="center" justifyContent="space-between" p={1.5}>
           <Typography variant="subtitle1" fontWeight={700}>
-            Notificaciones {unreadCount > 0 && `(${unreadCount})`}
+            {t("nav.notifications")} {unreadCount > 0 && `(${unreadCount})`}
           </Typography>
           {unreadCount > 0 && (
             <Button
               size="small"
               startIcon={<CheckCheck size={14} />}
               onClick={() => markAllRead.mutate()}
+              disabled={markAllRead.isPending}
             >
-              Marcar todas
+              {t("p.board.markAllRead")}
             </Button>
           )}
         </Stack>
@@ -121,11 +125,15 @@ export default function NotificationBell() {
               <CircularProgress size={24} />
             </Box>
           ) : notifList.length === 0 ? (
-            <Typography variant="body2" color="text.secondary" sx={{ p: 3, textAlign: "center" }}>
-              No tienes notificaciones
+            <Typography
+              variant="body2"
+              color="text.secondary"
+              sx={{ p: 3, textAlign: "center" }}
+            >
+              {t("p.board.noNotifications")}
             </Typography>
           ) : (
-            notifList.slice(0, 30).map((n: any) => (
+            notifList.slice(0, 30).map((n: AppNotification) => (
               <Paper
                 key={n.id}
                 variant="outlined"
@@ -147,12 +155,14 @@ export default function NotificationBell() {
                     <Stack direction="row" spacing={0.5} alignItems="center" mb={0.5}>
                       <Chip
                         size="small"
-                        label={TYPE_LABELS[n.type] || n.type}
+                        label={
+                          TYPE_KEYS[n.type || ""] ? t(TYPE_KEYS[n.type || ""]!) : n.type
+                        }
                         sx={{ height: 16, fontSize: 9 }}
                         variant="outlined"
                       />
                       <Typography variant="caption" color="text.secondary">
-                        {timeAgo(n.created_at)}
+                        {timeAgo(n.created_at || "", t("p.board.notifNow"))}
                       </Typography>
                     </Stack>
                     <Typography variant="body2" fontWeight={n.read ? 400 : 600} noWrap>

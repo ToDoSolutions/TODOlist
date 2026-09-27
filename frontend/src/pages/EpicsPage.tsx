@@ -28,10 +28,12 @@ import {
 } from "@mui/material";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { Layers, Plus, Trash2, Pencil, Eye, Folder } from "lucide-react";
+import { useTranslation } from "react-i18next";
 import { epicsApi, projectsApi, type Epic } from "../api/resources";
-import type { Task } from "../types";
-import { STATE_LABELS, PRIORITY_LABELS } from "../types";
+import { DateField } from "../components/DateField";
+import type { Task, Project } from "../types";
 import { notify } from "../notify";
+import { useConfirm } from "../components/ConfirmDialog";
 import { useProject } from "../auth/ProjectContext";
 
 const EPIC_STATES: Epic["state"][] = ["planned", "in_progress", "completed", "cancelled"];
@@ -57,7 +59,9 @@ const emptyForm: EpicForm = {
 };
 
 export default function EpicsPage() {
+  const { t } = useTranslation();
   const qc = useQueryClient();
+  const confirm = useConfirm();
   const navigate = useNavigate();
   const projectCtx = useProject();
   const { project: ctxProject } = projectCtx;
@@ -78,10 +82,10 @@ export default function EpicsPage() {
   });
   const projects = Array.isArray(projectsData)
     ? projectsData
-    : (projectsData as any)?.results || [];
+    : (projectsData as { results?: Project[] } | undefined)?.results || [];
 
   const projectMap = new Map<number, string>(
-    projects.map((p: any) => [p.id, p.name as string]),
+    projects.map((p) => [p.id, p.name as string]),
   );
 
   const { data: epicTasks = [], isLoading: isLoadingEpicTasks } = useQuery({
@@ -94,48 +98,52 @@ export default function EpicsPage() {
     mutationFn: () =>
       epicsApi.create({
         ...form,
-        project_id: form.project_id ? Number(form.project_id) : null,
-      } as any),
+        project: form.project_id ? Number(form.project_id) : null,
+      } as Partial<Epic>),
     onSuccess: () => {
-      notify.success("Épica creada");
+      notify.success(t("p.plan.epics.created"));
       qc.invalidateQueries({ queryKey: ["epics"] });
       setDialogOpen(false);
       setForm(emptyForm);
     },
-    onError: () => notify.error("Error al crear épica"),
+    onError: () => notify.error(t("p.plan.epics.createError")),
   });
 
   const updateMut = useMutation({
     mutationFn: () =>
       epicsApi.update(editingId!, {
         ...form,
-        project_id: form.project_id ? Number(form.project_id) : null,
-      } as any),
+        project: form.project_id ? Number(form.project_id) : null,
+      } as Partial<Epic>),
     onSuccess: () => {
-      notify.success("Épica actualizada");
+      notify.success(t("p.plan.epics.updated"));
       qc.invalidateQueries({ queryKey: ["epics"] });
       setEditOpen(false);
       setEditingId(null);
       setForm(emptyForm);
     },
-    onError: () => notify.error("Error al actualizar épica"),
+    onError: () => notify.error(t("p.plan.epics.updateError")),
   });
 
   const deleteMut = useMutation({
     mutationFn: epicsApi.remove,
     onSuccess: () => {
-      notify.info("Épica eliminada");
+      notify.info(t("p.plan.epics.deleted"));
       qc.invalidateQueries({ queryKey: ["epics"] });
     },
-    onError: () => notify.error("Error al eliminar épica"),
+    onError: () => notify.error(t("p.plan.epics.deleteError")),
   });
 
   const stateLabels: Record<string, string> = {
-    planned: "Planificada",
-    in_progress: "En progreso",
-    completed: "Completada",
-    cancelled: "Cancelada",
+    planned: t("p.plan.epics.statePlanned"),
+    in_progress: t("task.state.in_progress"),
+    completed: t("task.state.completed"),
+    cancelled: t("task.state.cancelled"),
   };
+  const taskStateLabel = (s: string) =>
+    t(`task.state.${s === "review" ? "in_review" : s}`, { defaultValue: s });
+  const taskPriorityLabel = (p: number) =>
+    t(`p.work.priority.p${p}`, { defaultValue: `P${p}` });
 
   const stateColors: Record<string, "default" | "primary" | "success" | "error"> = {
     planned: "default",
@@ -162,26 +170,27 @@ export default function EpicsPage() {
     <Box maxWidth={900} mx="auto">
       <Stack direction="row" justifyContent="space-between" alignItems="center" mb={3}>
         <Typography variant="h5" fontWeight={700}>
-          Épicas
+          {t("p.plan.epics.title")}
         </Typography>
         <Button
           variant="contained"
           startIcon={<Plus size={18} />}
           onClick={() => {
-            setForm({ ...emptyForm, project_id: ctxProject ? String(ctxProject.id) : "" });
+            setForm({
+              ...emptyForm,
+              project_id: ctxProject ? String(ctxProject.id) : "",
+            });
             setDialogOpen(true);
           }}
         >
-          Nueva épica
+          {t("p.plan.epics.new")}
         </Button>
       </Stack>
 
       {isLoading && <LinearProgress />}
 
       {epics.length === 0 && !isLoading && (
-        <Alert severity="info">
-          No hay épicas. Las épicas agrupan tareas relacionadas para rastrear el progreso de iniciativas grandes.
-        </Alert>
+        <Alert severity="info">{t("p.plan.epics.empty")}</Alert>
       )}
 
       <Stack spacing={2}>
@@ -209,7 +218,10 @@ export default function EpicsPage() {
                           label={projectMap.get(epic.project)}
                           size="small"
                           variant="outlined"
-                          sx={{ color: epic.color || undefined, borderColor: epic.color || undefined }}
+                          sx={{
+                            color: epic.color || undefined,
+                            borderColor: epic.color || undefined,
+                          }}
                         />
                       )}
                     </Stack>
@@ -233,18 +245,34 @@ export default function EpicsPage() {
                       <Typography variant="caption" color="text.secondary">
                         {epic.progress_done}/{epic.progress_total} ({pct}%)
                       </Typography>
-                      <Tooltip title="Ver tareas">
+                      <Tooltip title={t("p.plan.epics.viewTasks")}>
                         <IconButton size="small" onClick={() => setViewTasksEpic(epic)}>
                           <Eye size={16} />
                         </IconButton>
                       </Tooltip>
-                      <Tooltip title="Editar">
+                      <Tooltip title={t("common.edit")}>
                         <IconButton size="small" onClick={() => openEdit(epic)}>
                           <Pencil size={16} />
                         </IconButton>
                       </Tooltip>
-                      <Tooltip title="Eliminar">
-                        <IconButton size="small" onClick={() => deleteMut.mutate(epic.id)}>
+                      <Tooltip title={t("common.delete")}>
+                        <IconButton
+                          size="small"
+                          color="error"
+                          onClick={async () => {
+                            if (
+                              await confirm(
+                                t("p.plan.epics.confirmDelete", {
+                                  title: epic.title,
+                                }),
+                                {
+                                  confirmLabel: t("p.plan.epics.confirmDeleteLabel"),
+                                },
+                              )
+                            )
+                              deleteMut.mutate(epic.id);
+                          }}
+                        >
                           <Trash2 size={16} />
                         </IconButton>
                       </Tooltip>
@@ -258,18 +286,23 @@ export default function EpicsPage() {
       </Stack>
 
       {/* Create dialog */}
-      <Dialog open={dialogOpen} onClose={() => setDialogOpen(false)} maxWidth="sm" fullWidth>
-        <DialogTitle>Nueva épica</DialogTitle>
+      <Dialog
+        open={dialogOpen}
+        onClose={() => setDialogOpen(false)}
+        maxWidth="sm"
+        fullWidth
+      >
+        <DialogTitle>{t("p.plan.epics.new")}</DialogTitle>
         <DialogContent>
           <Stack spacing={2} sx={{ mt: 1 }}>
             <TextField
-              label="Título"
+              label={t("p.plan.epics.fieldTitle")}
               value={form.title}
               onChange={(e) => setForm({ ...form, title: e.target.value })}
               fullWidth
             />
             <TextField
-              label="Descripción"
+              label={t("p.plan.epics.fieldDescription")}
               value={form.description}
               onChange={(e) => setForm({ ...form, description: e.target.value })}
               fullWidth
@@ -277,18 +310,18 @@ export default function EpicsPage() {
               rows={3}
             />
             <FormControl fullWidth>
-              <InputLabel>Proyecto</InputLabel>
+              <InputLabel>{t("p.plan.epics.fieldProject")}</InputLabel>
               <Select
-                label="Proyecto"
+                label={t("p.plan.epics.fieldProject")}
                 value={form.project_id}
                 onChange={(e) =>
                   setForm({ ...form, project_id: e.target.value as string })
                 }
               >
                 <MenuItem value="">
-                  <em>Sin proyecto</em>
+                  <em>{t("p.plan.epics.noProject")}</em>
                 </MenuItem>
-                {projects.map((p: any) => (
+                {projects.map((p) => (
                   <MenuItem key={p.id} value={String(p.id)}>
                     {p.name}
                   </MenuItem>
@@ -296,7 +329,7 @@ export default function EpicsPage() {
               </Select>
             </FormControl>
             <Stack direction="row" alignItems="center" spacing={2}>
-              <Typography variant="body2">Color:</Typography>
+              <Typography variant="body2">{t("common.color")}:</Typography>
               <input
                 type="color"
                 value={form.color}
@@ -307,30 +340,30 @@ export default function EpicsPage() {
           </Stack>
         </DialogContent>
         <DialogActions>
-          <Button onClick={() => setDialogOpen(false)}>Cancelar</Button>
+          <Button onClick={() => setDialogOpen(false)}>{t("common.cancel")}</Button>
           <Button
             variant="contained"
             onClick={() => createMut.mutate()}
             disabled={!form.title || createMut.isPending}
           >
-            Crear
+            {t("common.create")}
           </Button>
         </DialogActions>
       </Dialog>
 
       {/* Edit dialog */}
       <Dialog open={editOpen} onClose={() => setEditOpen(false)} maxWidth="sm" fullWidth>
-        <DialogTitle>Editar épica</DialogTitle>
+        <DialogTitle>{t("p.plan.epics.edit")}</DialogTitle>
         <DialogContent>
           <Stack spacing={2} sx={{ mt: 1 }}>
             <TextField
-              label="Título"
+              label={t("p.plan.epics.fieldTitle")}
               value={form.title}
               onChange={(e) => setForm({ ...form, title: e.target.value })}
               fullWidth
             />
             <TextField
-              label="Descripción"
+              label={t("p.plan.epics.fieldDescription")}
               value={form.description}
               onChange={(e) => setForm({ ...form, description: e.target.value })}
               fullWidth
@@ -338,18 +371,18 @@ export default function EpicsPage() {
               rows={3}
             />
             <FormControl fullWidth>
-              <InputLabel>Proyecto</InputLabel>
+              <InputLabel>{t("p.plan.epics.fieldProject")}</InputLabel>
               <Select
-                label="Proyecto"
+                label={t("p.plan.epics.fieldProject")}
                 value={form.project_id}
                 onChange={(e) =>
                   setForm({ ...form, project_id: e.target.value as string })
                 }
               >
                 <MenuItem value="">
-                  <em>Sin proyecto</em>
+                  <em>{t("p.plan.epics.noProject")}</em>
                 </MenuItem>
-                {projects.map((p: any) => (
+                {projects.map((p) => (
                   <MenuItem key={p.id} value={String(p.id)}>
                     {p.name}
                   </MenuItem>
@@ -357,9 +390,9 @@ export default function EpicsPage() {
               </Select>
             </FormControl>
             <FormControl fullWidth>
-              <InputLabel>Estado</InputLabel>
+              <InputLabel>{t("p.plan.epics.fieldState")}</InputLabel>
               <Select
-                label="Estado"
+                label={t("p.plan.epics.fieldState")}
                 value={form.state}
                 onChange={(e) =>
                   setForm({ ...form, state: e.target.value as Epic["state"] })
@@ -373,7 +406,7 @@ export default function EpicsPage() {
               </Select>
             </FormControl>
             <Stack direction="row" alignItems="center" spacing={2}>
-              <Typography variant="body2">Color:</Typography>
+              <Typography variant="body2">{t("common.color")}:</Typography>
               <input
                 type="color"
                 value={form.color}
@@ -381,32 +414,26 @@ export default function EpicsPage() {
                 style={{ width: 50, height: 30, border: "none", cursor: "pointer" }}
               />
             </Stack>
-            <TextField
-              label="Fecha de inicio"
-              type="date"
+            <DateField
+              label={t("p.plan.epics.startDate")}
               value={form.start_date}
-              onChange={(e) => setForm({ ...form, start_date: e.target.value })}
-              fullWidth
-              InputLabelProps={{ shrink: true }}
+              onChange={(v) => setForm({ ...form, start_date: v })}
             />
-            <TextField
-              label="Fecha de fin"
-              type="date"
+            <DateField
+              label={t("p.plan.epics.endDate")}
               value={form.end_date}
-              onChange={(e) => setForm({ ...form, end_date: e.target.value })}
-              fullWidth
-              InputLabelProps={{ shrink: true }}
+              onChange={(v) => setForm({ ...form, end_date: v })}
             />
           </Stack>
         </DialogContent>
         <DialogActions>
-          <Button onClick={() => setEditOpen(false)}>Cancelar</Button>
+          <Button onClick={() => setEditOpen(false)}>{t("common.cancel")}</Button>
           <Button
             variant="contained"
             onClick={() => updateMut.mutate()}
             disabled={!form.title || updateMut.isPending}
           >
-            Guardar
+            {t("common.save")}
           </Button>
         </DialogActions>
       </Dialog>
@@ -419,7 +446,10 @@ export default function EpicsPage() {
         fullWidth
       >
         <DialogTitle>
-          Tareas de "{viewTasksEpic?.title}" ({epicTasks.length})
+          {t("p.plan.epics.tasksOf", {
+            title: viewTasksEpic?.title,
+            count: epicTasks.length,
+          })}
         </DialogTitle>
         <DialogContent>
           <Box mb={2}>
@@ -439,7 +469,7 @@ export default function EpicsPage() {
                 }
               }}
             >
-              Ver en bandeja de tareas
+              {t("p.plan.epics.viewInTasks")}
             </Button>
           </Box>
           {isLoadingEpicTasks ? (
@@ -448,7 +478,7 @@ export default function EpicsPage() {
             </Stack>
           ) : epicTasks.length === 0 ? (
             <Typography variant="body2" color="text.secondary">
-              No hay tareas en esta épica.
+              {t("p.plan.epics.noTasks")}
             </Typography>
           ) : (
             <List dense>
@@ -458,7 +488,7 @@ export default function EpicsPage() {
                   sx={{ px: 0 }}
                   secondaryAction={
                     <Chip
-                      label={PRIORITY_LABELS[task.priority]}
+                      label={taskPriorityLabel(task.priority)}
                       size="small"
                       variant="outlined"
                     />
@@ -468,7 +498,7 @@ export default function EpicsPage() {
                     primary={task.title}
                     secondary={
                       <Chip
-                        label={STATE_LABELS[task.state]}
+                        label={taskStateLabel(task.state)}
                         size="small"
                         sx={{ mt: 0.5 }}
                       />
@@ -480,7 +510,7 @@ export default function EpicsPage() {
           )}
         </DialogContent>
         <DialogActions>
-          <Button onClick={() => setViewTasksEpic(null)}>Cerrar</Button>
+          <Button onClick={() => setViewTasksEpic(null)}>{t("common.close")}</Button>
         </DialogActions>
       </Dialog>
     </Box>

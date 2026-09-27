@@ -1,4 +1,6 @@
 import { useState, useMemo } from "react";
+import { useStateLabels } from "../api/featOrg";
+import { useTranslation } from "react-i18next";
 import {
   Box,
   Paper,
@@ -21,7 +23,11 @@ import {
   Layers,
   Plus,
   ChevronDown,
+  ChevronsLeft,
+  ChevronsRight,
+  ArrowRight,
 } from "lucide-react";
+import { useMediaQuery, useTheme, Select, FormControl } from "@mui/material";
 import { format } from "date-fns";
 import { es } from "date-fns/locale";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
@@ -41,6 +47,9 @@ import {
 import { CSS } from "@dnd-kit/utilities";
 import { tasksApi } from "../api/resources";
 import { notify } from "../notify";
+import { useContextMenu } from "./ui/contextMenu";
+import { TaskContextMenu } from "./TaskListItem";
+import { useUiStore } from "../store/uiStore";
 import {
   Task,
   TaskState,
@@ -58,15 +67,17 @@ interface Props {
   tasks: Task[];
   onEdit: (t: Task) => void;
   onQuickAdd?: (state: TaskState) => void;
+  projectId?: number;
 }
 
-type SwimlaneMode = "none" | "priority" | "type" | "sprint";
+type SwimlaneMode = "none" | "priority" | "type" | "sprint" | "assignee";
 
 const SWIMLANE_LABELS: Record<SwimlaneMode, string> = {
-  none: "Sin swimlanes",
-  priority: "Por prioridad",
-  type: "Por tipo",
-  sprint: "Por sprint",
+  none: "p.board.swimlane.none",
+  priority: "p.board.swimlane.priority",
+  type: "p.board.swimlane.type",
+  sprint: "p.board.swimlane.sprint",
+  assignee: "p.board.swimlane.assignee",
 };
 
 // Límites WIP sugeridos por columna
@@ -79,11 +90,14 @@ const WIP_LIMITS: Partial<Record<TaskState, number>> = {
 interface KanbanCardProps {
   task: Task;
   onEdit: (t: Task) => void;
+  /** Handler onContextMenu ya vinculado a esta tarea (menu.openFor(task)). */
+  onContextMenu?: (e: React.MouseEvent) => void;
 }
 
-function KanbanCard({ task, onEdit }: KanbanCardProps) {
-  const { attributes, listeners, setNodeRef, transform, isDragging } =
-    useDraggable({ id: task.id });
+function KanbanCard({ task, onEdit, onContextMenu }: KanbanCardProps) {
+  const { attributes, listeners, setNodeRef, transform, isDragging } = useDraggable({
+    id: task.id,
+  });
 
   const due = task.due_date ? new Date(task.due_date) : null;
   const isOverdue = due && due < new Date() && task.state !== "completed";
@@ -93,6 +107,7 @@ function KanbanCard({ task, onEdit }: KanbanCardProps) {
       ref={setNodeRef}
       variant="outlined"
       onClick={() => !isDragging && onEdit(task)}
+      onContextMenu={onContextMenu}
       {...attributes}
       {...listeners}
       style={{
@@ -133,7 +148,7 @@ function KanbanCard({ task, onEdit }: KanbanCardProps) {
               height: 18,
               fontSize: 10,
               bgcolor: TYPE_COLORS[task.task_type],
-              color: "#fff",
+              color: "common.white",
             }}
           />
         )}
@@ -187,16 +202,89 @@ function KanbanColumn({
   onEdit,
   onQuickAdd,
   swimlaneKey,
+  stateLabel,
+  collapsed,
+  onToggleCollapse,
+  onCardContextMenu,
 }: {
   state: TaskState;
   tasks: Task[];
   onEdit: (t: Task) => void;
   onQuickAdd?: (state: TaskState) => void;
   swimlaneKey: string;
+  stateLabel: (s: TaskState) => string;
+  collapsed: boolean;
+  onToggleCollapse: () => void;
+  onCardContextMenu?: (task: Task) => (e: React.MouseEvent) => void;
 }) {
+  const { t } = useTranslation();
   const { setNodeRef, isOver } = useDroppable({ id: swimlaneKey });
   const wipLimit = WIP_LIMITS[state];
   const isOverWip = wipLimit && tasks.length > wipLimit;
+
+  // Columna colapsada: strip vertical estrecho (patrón ClickUp/Linear).
+  // Sigue siendo droppable para poder soltar tareas sobre ella.
+  if (collapsed) {
+    return (
+      <Paper
+        ref={setNodeRef}
+        variant="outlined"
+        onClick={onToggleCollapse}
+        sx={{
+          width: 44,
+          flexShrink: 0,
+          bgcolor: "action.hover",
+          py: 1,
+          px: 0.5,
+          minHeight: 200,
+          display: "flex",
+          flexDirection: "column",
+          alignItems: "center",
+          gap: 1,
+          cursor: "pointer",
+          borderColor: isOver ? "primary.main" : "divider",
+          borderWidth: isOver ? 2 : 1,
+          transition: "border-color 0.2s, border-width 0.2s",
+        }}
+      >
+        <Tooltip title={t("p.board.expandColumn")}>
+          <IconButton
+            size="small"
+            aria-label={t("p.board.expandColumn")}
+            onClick={(e) => {
+              e.stopPropagation();
+              onToggleCollapse();
+            }}
+            sx={{ p: 0.25 }}
+          >
+            <ChevronsRight size={14} />
+          </IconButton>
+        </Tooltip>
+        <Box
+          sx={{
+            width: 10,
+            height: 10,
+            borderRadius: "50%",
+            bgcolor: STATE_COLORS[state],
+          }}
+        />
+        <Typography
+          variant="caption"
+          fontWeight={700}
+          sx={{ writingMode: "vertical-rl", transform: "rotate(180deg)" }}
+        >
+          {stateLabel(state)}
+        </Typography>
+        <Chip
+          size="small"
+          label={tasks.length}
+          variant="outlined"
+          aria-label={t("p.board.count", { count: tasks.length })}
+          sx={{ height: 18, fontSize: 11 }}
+        />
+      </Paper>
+    );
+  }
 
   return (
     <Paper
@@ -223,11 +311,12 @@ function KanbanColumn({
           }}
         />
         <Typography variant="subtitle2" fontWeight={700}>
-          {STATE_LABELS[state]}
+          {stateLabel(state)}
         </Typography>
         <Chip
           size="small"
           label={tasks.length}
+          aria-label={t("p.board.count", { count: tasks.length })}
           sx={{
             height: 18,
             fontSize: 11,
@@ -237,12 +326,26 @@ function KanbanColumn({
           variant="outlined"
         />
         {onQuickAdd && (
-          <Tooltip title="Añadir tarea aquí">
-            <IconButton size="small" onClick={() => onQuickAdd(state)} sx={{ ml: "auto", p: 0.25 }}>
+          <Tooltip title={t("p.board.addTaskHere")}>
+            <IconButton
+              size="small"
+              onClick={() => onQuickAdd(state)}
+              sx={{ ml: "auto", p: 0.25 }}
+            >
               <Plus size={14} />
             </IconButton>
           </Tooltip>
         )}
+        <Tooltip title={t("p.board.collapseColumn")}>
+          <IconButton
+            size="small"
+            aria-label={t("p.board.collapseColumn")}
+            onClick={onToggleCollapse}
+            sx={{ ml: onQuickAdd ? 0 : "auto", p: 0.25 }}
+          >
+            <ChevronsLeft size={14} />
+          </IconButton>
+        </Tooltip>
       </Stack>
       {isOverWip && (
         <Alert severity="warning" sx={{ py: 0, mb: 0.5, fontSize: 10 }}>
@@ -251,7 +354,12 @@ function KanbanColumn({
       )}
       <Stack spacing={1}>
         {tasks.map((t) => (
-          <KanbanCard key={t.id} task={t} onEdit={onEdit} />
+          <KanbanCard
+            key={t.id}
+            task={t}
+            onEdit={onEdit}
+            onContextMenu={onCardContextMenu ? onCardContextMenu(t) : undefined}
+          />
         ))}
         {tasks.length === 0 && (
           <Typography
@@ -259,7 +367,7 @@ function KanbanColumn({
             color="text.secondary"
             sx={{ p: 1, textAlign: "center" }}
           >
-            Arrastra aquí
+            {t("p.board.dragHere")}
           </Typography>
         )}
       </Stack>
@@ -267,23 +375,40 @@ function KanbanColumn({
   );
 }
 
-export default function KanbanBoard({ tasks, onEdit, onQuickAdd }: Props) {
+export default function KanbanBoard({ tasks, onEdit, onQuickAdd, projectId }: Props) {
+  const { t } = useTranslation();
   const qc = useQueryClient();
+  const muiTheme = useTheme();
+  const { labelFor } = useStateLabels(projectId);
+  const stateLabel = (s: TaskState) => labelFor(s) ?? STATE_LABELS[s];
+  const isMobile = useMediaQuery(muiTheme.breakpoints.down("md"));
   const [activeTask, setActiveTask] = useState<Task | null>(null);
   const [swimlaneMode, setSwimlaneMode] = useState<SwimlaneMode>("none");
   const [search, setSearch] = useState("");
   const [anchorEl, setAnchorEl] = useState<null | HTMLElement>(null);
+  // Móvil: una columna visible a la vez + "Mover a" por tarjeta
+  // (drag-and-drop táctil es una mala UX y poco accesible)
+  const [mobileColumn, setMobileColumn] = useState<TaskState>("in_progress");
+  const [moveAnchor, setMoveAnchor] = useState<{ task: Task; el: HTMLElement } | null>(
+    null,
+  );
+  // Menú contextual (clic derecho) sobre tarjetas — compartido con la lista.
+  const ctxMenu = useContextMenu<Task>();
+  // Columnas colapsadas persistidas por proyecto (o "global").
+  const kanbanCollapsed = useUiStore((s) => s.kanbanCollapsed);
+  const toggleKanbanColumn = useUiStore((s) => s.toggleKanbanColumn);
+  const collapseKey = (col: TaskState) => String(projectId ?? "global") + ":" + col;
 
   const sensors = useSensors(
     useSensor(PointerSensor, { activationConstraint: { distance: 5 } }),
-    useSensor(KeyboardSensor)
+    useSensor(KeyboardSensor),
   );
 
   const move = useMutation({
     mutationFn: ({ id, state }: { id: number; state: TaskState }) =>
       tasksApi.update(id, { state }),
     onSuccess: () => {
-      notify.info("Tarea movida");
+      notify.info(t("p.board.taskMoved"));
       qc.invalidateQueries({ queryKey: ["tasks"] });
     },
   });
@@ -293,9 +418,7 @@ export default function KanbanBoard({ tasks, onEdit, onQuickAdd }: Props) {
     if (!search.trim()) return tasks;
     const q = search.toLowerCase();
     return tasks.filter(
-      (t) =>
-        t.title.toLowerCase().includes(q) ||
-        t.description.toLowerCase().includes(q)
+      (t) => t.title.toLowerCase().includes(q) || t.description.toLowerCase().includes(q),
     );
   }, [tasks, search]);
 
@@ -305,21 +428,24 @@ export default function KanbanBoard({ tasks, onEdit, onQuickAdd }: Props) {
       return [{ key: "all", label: "", tasks: filteredTasks }];
     }
     const groups: Record<string, { label: string; tasks: Task[] }> = {};
-    for (const t of filteredTasks) {
+    for (const task of filteredTasks) {
       let key = "sin_asignar";
-      let label = "Sin asignar";
+      let label = t("p.board.unassigned");
       if (swimlaneMode === "priority") {
-        key = `p${t.priority}`;
-        label = PRIORITY_LABELS[t.priority];
+        key = `p${task.priority}`;
+        label = PRIORITY_LABELS[task.priority];
       } else if (swimlaneMode === "type") {
-        key = t.task_type || "task";
-        label = TYPE_LABELS[(t.task_type || "task") as TaskType] || "Tarea";
+        key = task.task_type || "task";
+        label = TYPE_LABELS[(task.task_type || "task") as TaskType] || t("p.board.task");
       } else if (swimlaneMode === "sprint") {
-        key = t.sprint ? `s${t.sprint}` : "no_sprint";
-        label = t.sprint_name || "Sin sprint";
+        key = task.sprint ? `s${task.sprint}` : "no_sprint";
+        label = task.sprint_name || t("p.board.noSprint");
+      } else if (swimlaneMode === "assignee") {
+        key = task.assignee ? `a${task.assignee}` : "no_assignee";
+        label = task.assignee_email || t("p.board.unassigned");
       }
       if (!groups[key]) groups[key] = { label, tasks: [] };
-      groups[key].tasks.push(t);
+      groups[key]!.tasks.push(task);
     }
     // Ordenar swimlanes de prioridad
     if (swimlaneMode === "priority") {
@@ -339,7 +465,7 @@ export default function KanbanBoard({ tasks, onEdit, onQuickAdd }: Props) {
       label: v.label,
       tasks: v.tasks,
     }));
-  }, [filteredTasks, swimlaneMode]);
+  }, [filteredTasks, swimlaneMode, t]);
 
   const onDragStart = (e: DragStartEvent) => {
     const task = tasks.find((t) => t.id === e.active.id);
@@ -372,7 +498,7 @@ export default function KanbanBoard({ tasks, onEdit, onQuickAdd }: Props) {
       <Stack direction="row" spacing={1} mb={2} alignItems="center">
         <TextField
           size="small"
-          placeholder="Buscar en tablero..."
+          placeholder={t("p.board.searchBoard")}
           value={search}
           onChange={(e) => setSearch(e.target.value)}
           InputProps={{
@@ -391,15 +517,11 @@ export default function KanbanBoard({ tasks, onEdit, onQuickAdd }: Props) {
         >
           <Layers size={16} />
           <Typography variant="caption" sx={{ ml: 0.5 }}>
-            {SWIMLANE_LABELS[swimlaneMode]}
+            {t(SWIMLANE_LABELS[swimlaneMode])}
           </Typography>
           <ChevronDown size={14} />
         </IconButton>
-        <Menu
-          anchorEl={anchorEl}
-          open={!!anchorEl}
-          onClose={() => setAnchorEl(null)}
-        >
+        <Menu anchorEl={anchorEl} open={!!anchorEl} onClose={() => setAnchorEl(null)}>
           {(Object.keys(SWIMLANE_LABELS) as SwimlaneMode[]).map((mode) => (
             <MenuItem
               key={mode}
@@ -409,51 +531,157 @@ export default function KanbanBoard({ tasks, onEdit, onQuickAdd }: Props) {
                 setAnchorEl(null);
               }}
             >
-              <ListItemText primary={SWIMLANE_LABELS[mode]} />
+              <ListItemText primary={t(SWIMLANE_LABELS[mode])} />
             </MenuItem>
           ))}
         </Menu>
       </Stack>
 
-      {/* Swimlanes */}
-      <Box sx={{ overflowX: "auto", pb: 1 }}>
-        {swimlanes.map((lane) => (
-          <Box key={lane.key} mb={swimlaneMode !== "none" ? 2 : 0}>
-            {swimlaneMode !== "none" && (
-              <Paper
-                variant="outlined"
-                sx={{
-                  p: 0.5,
-                  px: 1.5,
-                  mb: 0.5,
-                  bgcolor: "background.default",
-                  position: "sticky",
-                  left: 0,
-                }}
-              >
-                <Typography variant="overline" fontWeight={700}>
-                  {lane.label} ({lane.tasks.length})
-                </Typography>
-              </Paper>
-            )}
-            <Stack direction="row" spacing={1.5} sx={{ minWidth: "max-content" }}>
+      {/* Móvil: una columna a la vez con selector + "Mover a" por tarjeta */}
+      {isMobile ? (
+        <Box>
+          <FormControl size="small" fullWidth sx={{ mb: 1.5 }}>
+            <Select
+              value={mobileColumn}
+              onChange={(e) => setMobileColumn(e.target.value as TaskState)}
+              aria-label={t("p.board.boardColumn")}
+            >
               {KANBAN_COLUMNS.map((col) => {
-                const colTasks = lane.tasks.filter((t) => t.state === col);
+                const n = filteredTasks.filter((t) => t.state === col).length;
+                const wip = WIP_LIMITS[col];
                 return (
-                  <KanbanColumn
-                    key={`${lane.key}:${col}`}
-                    state={col}
-                    tasks={colTasks}
-                    onEdit={onEdit}
-                    onQuickAdd={onQuickAdd}
-                    swimlaneKey={`${lane.key}:${col}`}
-                  />
+                  <MenuItem key={col} value={col}>
+                    {stateLabel(col)} — {n}
+                    {wip ? ` / WIP ${wip}` : ""}
+                  </MenuItem>
                 );
               })}
-            </Stack>
-          </Box>
-        ))}
-      </Box>
+            </Select>
+          </FormControl>
+          {WIP_LIMITS[mobileColumn] &&
+            filteredTasks.filter((t) => t.state === mobileColumn).length >
+              WIP_LIMITS[mobileColumn]! && (
+              <Alert severity="warning" sx={{ mb: 1.5 }}>
+                {t("p.board.wipExceeded", {
+                  count: filteredTasks.filter((task) => task.state === mobileColumn)
+                    .length,
+                  limit: WIP_LIMITS[mobileColumn],
+                })}
+              </Alert>
+            )}
+          <Stack spacing={1}>
+            {filteredTasks
+              .filter((task) => task.state === mobileColumn)
+              .map((task) => (
+                <Paper
+                  key={task.id}
+                  variant="outlined"
+                  sx={{
+                    p: 1.5,
+                    borderLeft: `3px solid ${PRIORITY_COLORS[task.priority]}`,
+                  }}
+                  onClick={() => onEdit(task)}
+                  onContextMenu={ctxMenu.openFor(task)}
+                >
+                  <Stack direction="row" alignItems="center" spacing={1}>
+                    <Box flex={1} minWidth={0}>
+                      <Typography variant="body2" fontWeight={600}>
+                        {task.title}
+                      </Typography>
+                    </Box>
+                    <IconButton
+                      size="small"
+                      aria-label={t("p.board.moveToColumn", { title: task.title })}
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        setMoveAnchor({ task, el: e.currentTarget });
+                      }}
+                    >
+                      <ArrowRight size={16} />
+                    </IconButton>
+                  </Stack>
+                </Paper>
+              ))}
+            {filteredTasks.filter((t) => t.state === mobileColumn).length === 0 && (
+              <Typography
+                variant="body2"
+                color="text.secondary"
+                textAlign="center"
+                py={4}
+              >
+                {t("p.board.emptyColumn")}
+              </Typography>
+            )}
+          </Stack>
+          <Menu
+            anchorEl={moveAnchor?.el}
+            open={!!moveAnchor}
+            onClose={() => setMoveAnchor(null)}
+          >
+            <ListItemText
+              primary={t("p.board.moveTo")}
+              sx={{ px: 2, py: 0.5, opacity: 0.6, pointerEvents: "none" }}
+            />
+            {KANBAN_COLUMNS.filter((c) => c !== moveAnchor?.task.state).map((c) => (
+              <MenuItem
+                key={c}
+                onClick={() => {
+                  if (moveAnchor) move.mutate({ id: moveAnchor.task.id, state: c });
+                  setMoveAnchor(null);
+                }}
+              >
+                {stateLabel(c)}
+              </MenuItem>
+            ))}
+          </Menu>
+        </Box>
+      ) : (
+        <Box sx={{ overflowX: "auto", pb: 1 }}>
+          {swimlanes.map((lane) => (
+            <Box key={lane.key} mb={swimlaneMode !== "none" ? 2 : 0}>
+              {swimlaneMode !== "none" && (
+                <Paper
+                  variant="outlined"
+                  sx={{
+                    p: 0.5,
+                    px: 1.5,
+                    mb: 0.5,
+                    bgcolor: "background.default",
+                    position: "sticky",
+                    left: 0,
+                  }}
+                >
+                  <Typography variant="overline" fontWeight={700}>
+                    {lane.label} ({lane.tasks.length})
+                  </Typography>
+                </Paper>
+              )}
+              <Stack direction="row" spacing={1.5} sx={{ minWidth: "max-content" }}>
+                {KANBAN_COLUMNS.map((col) => {
+                  const colTasks = lane.tasks.filter((t) => t.state === col);
+                  return (
+                    <KanbanColumn
+                      key={`${lane.key}:${col}`}
+                      state={col}
+                      tasks={colTasks}
+                      onEdit={onEdit}
+                      onQuickAdd={onQuickAdd}
+                      swimlaneKey={`${lane.key}:${col}`}
+                      stateLabel={stateLabel}
+                      collapsed={!!kanbanCollapsed[collapseKey(col)]}
+                      onToggleCollapse={() => toggleKanbanColumn(collapseKey(col))}
+                      onCardContextMenu={ctxMenu.openFor}
+                    />
+                  );
+                })}
+              </Stack>
+            </Box>
+          ))}
+        </Box>
+      )}
+
+      {/* Menú contextual (clic derecho) sobre tarjetas */}
+      <TaskContextMenu menu={ctxMenu} />
 
       <DragOverlay>
         {activeTask ? (

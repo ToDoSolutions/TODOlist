@@ -2,9 +2,9 @@
 from django.utils import timezone
 
 from apps.tasks.models import Task
-from .github_client import GitHubAppClient
-from .models import GitHubIssueLink, GitHubRepo, GitHubInstallation
 
+from .github_client import GitHubAppClient
+from .models import GitHubIssueLink
 
 # Mapeo de estados: tarea local ↔ issue de GitHub
 TASK_TO_ISSUE_STATE = {
@@ -36,7 +36,7 @@ def sync_task_to_issue(task):
 
     # Construir el body del issue con metadatos
     body_parts = [task.description or ""]
-    body_parts.append(f"\n---\n_Synced from TODOlist_")
+    body_parts.append("\n---\n_Synced from TODOlist_")
     if task.due_date:
         body_parts.append(f"_Due: {task.due_date.strftime('%Y-%m-%d')}_")
     if task.priority is not None:
@@ -59,10 +59,23 @@ def sync_task_to_issue(task):
 
 
 def sync_issue_to_task(link, issue_data):
-    """Actualiza una tarea local cuando un issue cambia en GitHub."""
+    """Actualiza una tarea local cuando un issue cambia en GitHub.
+
+    Descarta eventos stale: si el payload es más viejo que el último
+    sync conocido del link, no sobrescribe la tarea local.
+    """
+    from django.utils.dateparse import parse_datetime
+
     task = link.task
     # Marcar para evitar recursión: el signal no debe sync de vuelta
     task._syncing_from_github = True
+
+    # Ordenamiento temporal: ignorar eventos más viejos que el último sync
+    gh_updated = issue_data.get("updated_at")
+    if gh_updated:
+        gh_dt = parse_datetime(gh_updated)
+        if gh_dt and link.last_synced_at and gh_dt < link.last_synced_at:
+            return task
 
     # Actualizar título y descripción
     if issue_data.get("title") and issue_data["title"] != task.title:
@@ -71,14 +84,10 @@ def sync_issue_to_task(link, issue_data):
     # Actualizar estado
     gh_state = issue_data.get("state", "open")
     new_state = ISSUE_TO_TASK_STATE.get(gh_state, task.state)
-    if new_state != task.state:
-        task.state = new_state
-        if new_state == Task.State.COMPLETED and not task.completed_at:
-            task.completed_at = timezone.now()
-        elif new_state != Task.State.COMPLETED:
-            task.completed_at = None
-
+    task.state = new_state
     task.save()
+    from apps.tasks.services import apply_completion_effects
+    apply_completion_effects(task)
 
     link.issue_state = gh_state
     link.issue_url = issue_data.get("html_url", link.issue_url)
@@ -92,7 +101,7 @@ def create_issue_for_task(task, repo):
     client = GitHubAppClient(installation_id=repo.installation.installation_id)
 
     body_parts = [task.description or ""]
-    body_parts.append(f"\n---\n_Synced from TODOlist_")
+    body_parts.append("\n---\n_Synced from TODOlist_")
     if task.due_date:
         body_parts.append(f"_Due: {task.due_date.strftime('%Y-%m-%d')}_")
     body = "\n".join(body_parts)
@@ -140,7 +149,7 @@ def import_issue_as_task(issue_data, repo, user):
         state=task_state,
     )
 
-    link = GitHubIssueLink.objects.create(
+    GitHubIssueLink.objects.create(
         task=task,
         repo=repo,
         issue_number=issue_number,

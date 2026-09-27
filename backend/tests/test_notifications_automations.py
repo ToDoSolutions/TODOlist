@@ -1,16 +1,24 @@
 """Tests de Fase 8 (notificaciones) y Fase 9 (automatizaciones)."""
+from datetime import datetime, timedelta
+
 import pytest
-from datetime import date, timedelta
 from django.utils import timezone
 
-from apps.tasks.models import Task, Comment, Sprint
-from apps.notifications.models import Notification, NotificationPreference
-from apps.notifications.services import notify, mark_as_read, mark_all_as_read, get_unread_count
-from apps.automations.models import AutomationRule, AutomationLog
 from apps.automations.engine import (
-    evaluate_conditions, execute_action, trigger_automation, run_daily_checks,
+    evaluate_conditions,
+    execute_action,
+    run_daily_checks,
+    trigger_automation,
 )
-
+from apps.automations.models import AutomationLog, AutomationRule
+from apps.notifications.models import Notification, NotificationPreference
+from apps.notifications.services import (
+    get_unread_count,
+    mark_all_as_read,
+    mark_as_read,
+    notify,
+)
+from apps.tasks.models import Comment, Sprint, Task
 
 # --- Fase 8: Notificaciones ---
 
@@ -73,7 +81,7 @@ class TestNotifications:
     def test_notificacion_sprint_iniciado(self, user):
         sprint = Sprint.objects.create(
             owner=user, name="S1", state="planned",
-            start_date=date.today(), end_date=date.today() + timedelta(days=14),
+            start_date=timezone.localdate(), end_date=timezone.localdate() + timedelta(days=14),
         )
         sprint.state = "active"
         sprint.save()
@@ -87,7 +95,7 @@ class TestNotificationAPI:
         notify(user, "custom", "Test API")
         resp = authed_client.get("/api/notifications/")
         assert resp.status_code == 200
-        data = resp.data["results"] if "results" in resp.data else resp.data
+        data = resp.data.get("results", resp.data) if isinstance(resp.data, dict) else resp.data
         assert len(data) == 1
 
     def test_contar_no_leidas_api(self, authed_client, user):
@@ -112,7 +120,7 @@ class TestNotificationAPI:
     def test_preferencias_api(self, authed_client, user):
         resp = authed_client.get("/api/notification-preferences/")
         assert resp.status_code == 200
-        data = resp.data["results"] if "results" in resp.data else resp.data
+        data = resp.data.get("results", resp.data) if isinstance(resp.data, dict) else resp.data
         # Debe crear preferencias para todos los tipos
         assert len(data) > 0
 
@@ -269,7 +277,9 @@ class TestDailyChecks:
         Task.objects.create(
             owner=user, title="Vencida",
             state="pending",
-            due_date=date.today() - timedelta(days=1),
+            due_date=timezone.make_aware(
+                datetime.combine(timezone.localdate() - timedelta(days=1), datetime.min.time())
+            ),
         )
         results = run_daily_checks()
         assert len(results) > 0
@@ -298,7 +308,7 @@ class TestAutomationAPI:
         )
         resp = authed_client.get("/api/automation-rules/")
         assert resp.status_code == 200
-        data = resp.data["results"] if "results" in resp.data else resp.data
+        data = resp.data.get("results", resp.data) if isinstance(resp.data, dict) else resp.data
         assert len(data) == 1
 
     def test_logs_de_regla(self, authed_client, user):
@@ -325,4 +335,5 @@ class TestAutomationAPI:
         )
         resp = authed_client.post(f"/api/automation-rules/{rule.id}/test/")
         assert resp.status_code == 200
-        assert "results" in resp.data
+        assert "conditions_met" in resp.data
+        assert resp.data["would_execute"] is True

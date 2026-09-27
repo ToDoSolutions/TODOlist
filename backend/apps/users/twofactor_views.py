@@ -6,6 +6,17 @@ from rest_framework.permissions import IsAuthenticated
 from rest_framework.response import Response
 
 from .models import TwoFactorSecret
+from .security import is_2fa_locked, record_2fa_failure, reset_2fa_failures
+
+
+def _check_2fa_rate_limit(user):
+    """Devuelve Response de error si el usuario superó los intentos 2FA."""
+    if is_2fa_locked(user):
+        return Response(
+            {"error": "Demasiados intentos. Espera unos minutos."},
+            status=status.HTTP_429_TOO_MANY_REQUESTS,
+        )
+    return None
 
 
 @api_view(["GET", "POST", "DELETE"])
@@ -56,6 +67,9 @@ def twofactor_manage(request):
 
         elif action == "confirm":
             # Verificar código y activar
+            limited = _check_2fa_rate_limit(user)
+            if limited:
+                return limited
             code = request.data.get("code", "")
             try:
                 tf = user.twofactor
@@ -65,16 +79,18 @@ def twofactor_manage(request):
                     status=status.HTTP_400_BAD_REQUEST,
                 )
             if tf.verify_totp(code):
+                reset_2fa_failures(user)
                 tf.is_enabled = True
                 from django.utils import timezone
                 tf.enabled_at = timezone.now()
                 tf.save(update_fields=["is_enabled", "enabled_at"])
-                # Generar códigos de backup
+                # Generar códigos de backup (se devuelven en claro solo aquí)
                 backup_codes = tf.generate_backup_codes()
                 return Response({
                     "message": "2FA activado correctamente",
                     "backup_codes": backup_codes,
                 })
+            record_2fa_failure(user)
             return Response(
                 {"error": "Código inválido"},
                 status=status.HTTP_400_BAD_REQUEST,
@@ -86,6 +102,9 @@ def twofactor_manage(request):
         )
 
     if request.method == "DELETE":
+        limited = _check_2fa_rate_limit(user)
+        if limited:
+            return limited
         code = request.data.get("code", "")
         try:
             tf = user.twofactor
@@ -96,10 +115,12 @@ def twofactor_manage(request):
             )
         # Verificar código TOTP o backup
         if tf.verify_totp(code) or tf.use_backup_code(code):
+            reset_2fa_failures(user)
             tf.is_enabled = False
             tf.backup_codes = []
             tf.save(update_fields=["is_enabled", "backup_codes"])
             return Response({"message": "2FA desactivado"})
+        record_2fa_failure(user)
         return Response(
             {"error": "Código inválido"},
             status=status.HTTP_400_BAD_REQUEST,

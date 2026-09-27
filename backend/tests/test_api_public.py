@@ -1,7 +1,7 @@
 """Tests de Fase 12 (API pública: API keys, rate limiting, docs) y Fase 14 (caching)."""
 import pytest
-from apps.users.models import APIKey, User
 
+from apps.users.models import APIKey
 
 # --- API Keys ---
 
@@ -28,7 +28,7 @@ class TestAPIKeys:
         assert api_key.hashed_key != resp.data["key"]  # Está hasheada
 
     def test_listar_api_keys(self, authed_client, user):
-        raw, hashed, prefix = APIKey.generate_key()
+        _, hashed, prefix = APIKey.generate_key()
         APIKey.objects.create(user=user, name="Test", key_prefix=prefix, hashed_key=hashed)
         resp = authed_client.get("/api/api-keys/")
         assert resp.status_code == 200
@@ -39,7 +39,7 @@ class TestAPIKeys:
         assert data[0]["key_prefix"] == prefix
 
     def test_revocar_api_key(self, authed_client, user):
-        raw, hashed, prefix = APIKey.generate_key()
+        _, hashed, prefix = APIKey.generate_key()
         api_key = APIKey.objects.create(user=user, name="Test", key_prefix=prefix, hashed_key=hashed)
         resp = authed_client.post(f"/api/api-keys/{api_key.id}/revoke/")
         assert resp.status_code == 200
@@ -48,13 +48,41 @@ class TestAPIKeys:
 
     def test_autenticacion_con_api_key(self, api_client, user):
         raw, hashed, prefix = APIKey.generate_key()
-        APIKey.objects.create(user=user, name="Test", key_prefix=prefix, hashed_key=hashed)
+        APIKey.objects.create(
+            user=user, name="Test", key_prefix=prefix, hashed_key=hashed,
+            scopes=["read"],
+        )
         # Usar la API key para autenticarse
         resp = api_client.get(
             "/api/tasks/",
             HTTP_AUTHORIZATION=f"ApiKey {raw}",
         )
         assert resp.status_code == 200
+
+    def test_api_key_sin_scopes_no_lee(self, api_client, user):
+        """Una API key sin scopes no puede leer (403)."""
+        raw, hashed, prefix = APIKey.generate_key()
+        APIKey.objects.create(user=user, name="Test", key_prefix=prefix, hashed_key=hashed)
+        resp = api_client.get(
+            "/api/tasks/",
+            HTTP_AUTHORIZATION=f"ApiKey {raw}",
+        )
+        assert resp.status_code == 403
+
+    def test_api_key_read_no_escribe(self, api_client, user):
+        """Una API key con solo 'read' no puede escribir (403)."""
+        raw, hashed, prefix = APIKey.generate_key()
+        APIKey.objects.create(
+            user=user, name="Test", key_prefix=prefix, hashed_key=hashed,
+            scopes=["read"],
+        )
+        resp = api_client.post(
+            "/api/tasks/",
+            {"title": "X"},
+            format="json",
+            HTTP_AUTHORIZATION=f"ApiKey {raw}",
+        )
+        assert resp.status_code == 403
 
     def test_api_key_invalida(self, api_client):
         resp = api_client.get(
@@ -76,7 +104,7 @@ class TestAPIKeys:
         assert resp.status_code == 401
 
     def test_eliminar_api_key(self, authed_client, user):
-        raw, hashed, prefix = APIKey.generate_key()
+        _, hashed, prefix = APIKey.generate_key()
         api_key = APIKey.objects.create(user=user, name="Test", key_prefix=prefix, hashed_key=hashed)
         resp = authed_client.delete(f"/api/api-keys/{api_key.id}/")
         assert resp.status_code == 204
@@ -87,20 +115,25 @@ class TestAPIKeys:
 
 @pytest.mark.django_db
 class TestOpenAPIDocs:
-    def test_schema_endpoint(self, client):
-        resp = client.get("/api/schema/")
+    def test_schema_endpoint(self, authed_client):
+        resp = authed_client.get("/api/schema/")
         assert resp.status_code == 200
         # Debe ser YAML o JSON
         content = resp.content.decode()
         assert "openapi" in content.lower() or "swagger" in content.lower()
 
-    def test_swagger_ui(self, client):
-        resp = client.get("/api/docs/")
+    def test_swagger_ui(self, authed_client):
+        resp = authed_client.get("/api/docs/")
         assert resp.status_code == 200
 
-    def test_redoc(self, client):
-        resp = client.get("/api/redoc/")
+    def test_redoc(self, authed_client):
+        resp = authed_client.get("/api/redoc/")
         assert resp.status_code == 200
+
+    def test_schema_anonymous_forbidden(self, client):
+        """El schema ya no es público: requiere autenticación."""
+        resp = client.get("/api/schema/")
+        assert resp.status_code == 401
 
 
 # --- Caching ---

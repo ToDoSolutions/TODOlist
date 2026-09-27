@@ -1,17 +1,15 @@
 """Tests de integración con GitHub (con API mockeada)."""
 import json
-import pytest
-from unittest.mock import patch, MagicMock
+from unittest.mock import MagicMock, patch
 
-from apps.tasks.models import Task
-from apps.integrations.models import GitHubInstallation, GitHubRepo, GitHubIssueLink
+import pytest
+
+from apps.integrations.models import GitHubInstallation, GitHubIssueLink, GitHubRepo
 from apps.integrations.sync_service import (
     create_issue_for_task,
-    import_issue_as_task,
     sync_issue_to_task,
-    sync_task_to_issue,
-    sync_repo_issues,
 )
+from apps.tasks.models import Task
 
 
 @pytest.fixture

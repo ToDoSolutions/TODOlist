@@ -1,4 +1,5 @@
 import { useState } from "react";
+import { QRCodeSVG } from "qrcode.react";
 import {
   Box,
   Typography,
@@ -18,53 +19,108 @@ import {
   ListItemIcon,
   ListItemText,
   Divider,
+  useTheme,
 } from "@mui/material";
-import { Shield, ShieldCheck, ShieldAlert, Key, Smartphone, Copy, Check } from "lucide-react";
+import {
+  Shield,
+  ShieldCheck,
+  ShieldAlert,
+  Key,
+  Smartphone,
+  Copy,
+  Check,
+  MonitorSmartphone,
+  Trash2,
+} from "lucide-react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
-import { twofactorApi } from "../api/resources";
+import { twofactorApi, offlineSyncApi } from "../api/resources";
+import { formatRelative } from "../lib/dates";
+import { useConfirm } from "../components/ConfirmDialog";
 import { notify } from "../notify";
+import { useTranslation } from "react-i18next";
 
 export default function SecurityPage() {
+  const { t } = useTranslation();
+  const theme = useTheme();
   const qc = useQueryClient();
-  const [setupData, setSetupData] = useState<any>(null);
+  const [setupData, setSetupData] = useState<{
+    secret?: string;
+    otpauth_uri?: string;
+  } | null>(null);
   const [confirmCode, setConfirmCode] = useState("");
   const [disableCode, setDisableCode] = useState("");
   const [disableDialog, setDisableDialog] = useState(false);
   const [backupCodes, setBackupCodes] = useState<string[] | null>(null);
   const [copied, setCopied] = useState(false);
 
+  const confirm = useConfirm();
+
   const { data: status, isLoading } = useQuery({
     queryKey: ["2fa-status"],
     queryFn: twofactorApi.status,
   });
 
+  const { data: devices } = useQuery({
+    queryKey: ["sync-devices"],
+    queryFn: offlineSyncApi.listDevices,
+  });
+
+  const invalidateDevices = () => qc.invalidateQueries({ queryKey: ["sync-devices"] });
+
+  const revokeMut = useMutation({
+    mutationFn: (deviceId: string) => offlineSyncApi.revokeDevice(deviceId),
+    onSuccess: () => {
+      notify.success(t("p.admin.security.deviceRevoked"));
+      invalidateDevices();
+    },
+    onError: () => notify.error(t("p.admin.security.deviceRevokeError")),
+  });
+
+  const removeMut = useMutation({
+    mutationFn: (deviceId: string) => offlineSyncApi.removeDevice(deviceId),
+    onSuccess: () => {
+      notify.success(t("p.admin.security.deviceRemoved"));
+      invalidateDevices();
+    },
+    onError: () => notify.error(t("p.admin.security.deviceRevokeError")),
+  });
+
+  const revokeAllMut = useMutation({
+    mutationFn: offlineSyncApi.revokeAllDevices,
+    onSuccess: () => {
+      notify.success(t("p.admin.security.allRevoked"));
+      invalidateDevices();
+    },
+    onError: () => notify.error(t("p.admin.security.deviceRevokeError")),
+  });
+
   const setupMut = useMutation({
     mutationFn: twofactorApi.setup,
     onSuccess: (data) => setSetupData(data),
-    onError: () => notify.error("Error al iniciar setup 2FA"),
+    onError: () => notify.error(t("p.admin.security.errorSetup")),
   });
 
   const confirmMut = useMutation({
     mutationFn: twofactorApi.confirm,
     onSuccess: (data) => {
-      notify.success("2FA activado correctamente");
+      notify.success(t("p.admin.security.notifyEnabled"));
       setSetupData(null);
       setConfirmCode("");
       setBackupCodes(data.backup_codes);
       qc.invalidateQueries({ queryKey: ["2fa-status"] });
     },
-    onError: () => notify.error("Código inválido"),
+    onError: () => notify.error(t("p.admin.security.invalidCode")),
   });
 
   const disableMut = useMutation({
     mutationFn: twofactorApi.disable,
     onSuccess: () => {
-      notify.info("2FA desactivado");
+      notify.info(t("p.admin.security.notifyDisabled"));
       setDisableDialog(false);
       setDisableCode("");
       qc.invalidateQueries({ queryKey: ["2fa-status"] });
     },
-    onError: () => notify.error("Código inválido"),
+    onError: () => notify.error(t("p.admin.security.invalidCode")),
   });
 
   const copyBackupCodes = () => {
@@ -88,43 +144,54 @@ export default function SecurityPage() {
   return (
     <Box maxWidth={700} mx="auto">
       <Stack direction="row" alignItems="center" spacing={1} mb={3}>
-        <Shield size={24} color="#1976d2" />
-        <Typography variant="h5" fontWeight={700}>Seguridad</Typography>
+        <Shield size={24} style={{ color: theme.palette.primary.main }} />
+        <Typography variant="h5" fontWeight={700}>
+          {t("nav.security")}
+        </Typography>
       </Stack>
 
       {/* 2FA Status */}
       <Paper variant="outlined" sx={{ p: 3, mb: 2 }}>
         <Stack direction="row" alignItems="center" justifyContent="space-between" mb={2}>
           <Stack direction="row" alignItems="center" spacing={1}>
-            {isEnabled ? <ShieldCheck size={20} color="#43a047" /> : <ShieldAlert size={20} color="#f57c00" />}
-            <Typography variant="h6">Autenticación de dos factores (2FA)</Typography>
+            {isEnabled ? (
+              <ShieldCheck size={20} style={{ color: theme.palette.success.main }} />
+            ) : (
+              <ShieldAlert size={20} style={{ color: theme.palette.warning.main }} />
+            )}
+            <Typography variant="h6">{t("p.admin.security.tfaTitle")}</Typography>
           </Stack>
           <Chip
             size="small"
-            label={isEnabled ? "Activado" : "Desactivado"}
+            label={
+              isEnabled ? t("p.admin.security.enabled") : t("p.admin.security.disabled")
+            }
             sx={{
-              height: 22, fontSize: 11,
+              height: 22,
+              fontSize: 11,
               bgcolor: isEnabled ? "success.main" : "grey.400",
-              color: "#fff",
+              color: "common.white",
             }}
           />
         </Stack>
 
         <Typography variant="body2" color="text.secondary" mb={2}>
-          Protege tu cuenta con una capa adicional de seguridad. Al activar 2FA,
-          necesitarás un código de tu app autenticadora (Google Authenticator, Authy)
-          además de tu contraseña para iniciar sesión.
+          {t("p.admin.security.tfaBody")}
         </Typography>
 
         {!isEnabled && !setupData && (
-          <Button variant="contained" startIcon={<Smartphone size={18} />} onClick={() => setupMut.mutate()}>
-            Activar 2FA
+          <Button
+            variant="contained"
+            startIcon={<Smartphone size={18} />}
+            onClick={() => setupMut.mutate()}
+          >
+            {t("p.admin.security.enable")}
           </Button>
         )}
 
         {isEnabled && (
           <Button variant="outlined" color="error" onClick={() => setDisableDialog(true)}>
-            Desactivar 2FA
+            {t("p.admin.security.disable")}
           </Button>
         )}
       </Paper>
@@ -132,30 +199,66 @@ export default function SecurityPage() {
       {/* Setup flow */}
       {setupData && (
         <Paper variant="outlined" sx={{ p: 3, mb: 2 }}>
-          <Typography variant="h6" mb={2}>Configurar 2FA</Typography>
+          <Typography variant="h6" mb={2}>
+            {t("p.admin.security.setupTitle")}
+          </Typography>
           <Alert severity="info" sx={{ mb: 2 }}>
-            1. Abre tu app autenticadora (Google Authenticator, Authy, etc.)<br />
-            2. Escanea el QR o introduce el código manualmente<br />
-            3. Introduce el código de 6 dígitos que genera la app
+            {t("p.admin.security.step1")}
+            <br />
+            {t("p.admin.security.step2")}
+            <br />
+            {t("p.admin.security.step3")}
           </Alert>
 
           <Stack spacing={2}>
             <Box>
-              <Typography variant="subtitle2" mb={1}>Código manual:</Typography>
-              <Paper variant="outlined" sx={{ p: 1.5, fontFamily: "monospace", wordBreak: "break-all", bgcolor: "action.hover", fontSize: 14 }}>
+              <Typography variant="subtitle2" mb={1}>
+                {t("p.admin.security.manualCode")}
+              </Typography>
+              <Paper
+                variant="outlined"
+                sx={{
+                  p: 1.5,
+                  fontFamily: "monospace",
+                  wordBreak: "break-all",
+                  bgcolor: "action.hover",
+                  fontSize: 14,
+                }}
+              >
                 {setupData.secret}
               </Paper>
             </Box>
+            <Box sx={{ display: "flex", justifyContent: "center" }}>
+              <Paper
+                variant="outlined"
+                sx={{ p: 2, bgcolor: "common.white", display: "inline-block" }}
+              >
+                <QRCodeSVG value={setupData.otpauth_uri || ""} size={180} level="M" />
+              </Paper>
+            </Box>
             <Box>
-              <Typography variant="subtitle2" mb={1}>URI para QR:</Typography>
-              <Paper variant="outlined" sx={{ p: 1.5, fontFamily: "monospace", wordBreak: "break-all", bgcolor: "action.hover", fontSize: 12 }}>
+              <Typography variant="subtitle2" mb={1}>
+                {t("p.admin.security.manualUri")}
+              </Typography>
+              <Paper
+                variant="outlined"
+                sx={{
+                  p: 1.5,
+                  fontFamily: "monospace",
+                  wordBreak: "break-all",
+                  bgcolor: "action.hover",
+                  fontSize: 12,
+                }}
+              >
                 {setupData.otpauth_uri}
               </Paper>
             </Box>
             <TextField
-              label="Código de verificación (6 dígitos)"
+              label={t("p.admin.security.codeLabel")}
               value={confirmCode}
-              onChange={(e) => setConfirmCode(e.target.value.replace(/\D/g, "").slice(0, 6))}
+              onChange={(e) =>
+                setConfirmCode(e.target.value.replace(/\D/g, "").slice(0, 6))
+              }
               fullWidth
               size="small"
               placeholder="123456"
@@ -166,10 +269,15 @@ export default function SecurityPage() {
                 onClick={() => confirmMut.mutate(confirmCode)}
                 disabled={confirmCode.length !== 6 || confirmMut.isPending}
               >
-                Confirmar
+                {t("common.confirm")}
               </Button>
-              <Button onClick={() => { setSetupData(null); setConfirmCode(""); }}>
-                Cancelar
+              <Button
+                onClick={() => {
+                  setSetupData(null);
+                  setConfirmCode("");
+                }}
+              >
+                {t("common.cancel")}
               </Button>
             </Stack>
           </Stack>
@@ -179,20 +287,24 @@ export default function SecurityPage() {
       {/* Backup codes display */}
       {backupCodes && (
         <Paper variant="outlined" sx={{ p: 3, mb: 2, borderColor: "warning.main" }}>
-          <Stack direction="row" alignItems="center" justifyContent="space-between" mb={2}>
-            <Typography variant="h6">Códigos de backup</Typography>
+          <Stack
+            direction="row"
+            alignItems="center"
+            justifyContent="space-between"
+            mb={2}
+          >
+            <Typography variant="h6">{t("p.admin.security.backupTitle")}</Typography>
             <Button
               size="small"
               startIcon={copied ? <Check size={16} /> : <Copy size={16} />}
               onClick={copyBackupCodes}
               color={copied ? "success" : "primary"}
             >
-              {copied ? "Copiados" : "Copiar todos"}
+              {copied ? t("p.admin.security.copiedAll") : t("p.admin.security.copyAll")}
             </Button>
           </Stack>
           <Alert severity="warning" sx={{ mb: 2 }}>
-            Guarda estos códigos en un lugar seguro. Cada uno se puede usar una sola vez
-            si pierdes acceso a tu app autenticadora.
+            {t("p.admin.security.backupWarning")}
           </Alert>
           <Paper variant="outlined" sx={{ p: 2, bgcolor: "action.hover" }}>
             <Stack direction="row" flexWrap="wrap" gap={1}>
@@ -202,57 +314,168 @@ export default function SecurityPage() {
             </Stack>
           </Paper>
           <Button sx={{ mt: 2 }} onClick={() => setBackupCodes(null)}>
-            He guardado los códigos
+            {t("p.admin.security.savedCodes")}
           </Button>
         </Paper>
       )}
 
+      {/* Dispositivos sincronizados */}
+      <Paper variant="outlined" sx={{ p: 3, mb: 2 }}>
+        <Stack direction="row" alignItems="center" justifyContent="space-between" mb={1}>
+          <Stack direction="row" alignItems="center" spacing={1}>
+            <MonitorSmartphone size={20} style={{ color: theme.palette.primary.main }} />
+            <Typography variant="h6">{t("p.admin.security.devicesTitle")}</Typography>
+          </Stack>
+          {(devices?.length ?? 0) > 1 && (
+            <Button
+              size="small"
+              color="error"
+              variant="outlined"
+              disabled={revokeAllMut.isPending}
+              onClick={async () => {
+                if (await confirm(t("p.admin.security.confirmRevokeAll")))
+                  revokeAllMut.mutate();
+              }}
+            >
+              {t("p.admin.security.revokeAll")}
+            </Button>
+          )}
+        </Stack>
+        <Typography variant="body2" color="text.secondary" mb={2}>
+          {t("p.admin.security.devicesBody")}
+        </Typography>
+        {(devices ?? []).length === 0 ? (
+          <Typography variant="body2" color="text.secondary">
+            {t("p.admin.security.noDevices")}
+          </Typography>
+        ) : (
+          <List dense>
+            {(devices ?? []).map((d, i) => (
+              <Box key={d.id}>
+                {i > 0 && <Divider component="li" />}
+                <ListItem
+                  secondaryAction={
+                    <Stack direction="row" spacing={0.5}>
+                      {d.is_active && (
+                        <Button
+                          size="small"
+                          color="warning"
+                          disabled={revokeMut.isPending}
+                          onClick={() => revokeMut.mutate(d.device_id)}
+                        >
+                          {t("p.admin.security.revoke")}
+                        </Button>
+                      )}
+                      <Button
+                        size="small"
+                        color="error"
+                        startIcon={<Trash2 size={13} />}
+                        disabled={removeMut.isPending}
+                        onClick={async () => {
+                          if (
+                            await confirm(
+                              t("p.admin.security.confirmRemoveDevice", {
+                                name: d.device_name || d.device_id,
+                              }),
+                            )
+                          )
+                            removeMut.mutate(d.device_id);
+                        }}
+                      >
+                        {t("common.delete")}
+                      </Button>
+                    </Stack>
+                  }
+                >
+                  <ListItemText
+                    primary={d.device_name || d.device_id}
+                    secondary={
+                      d.last_sync_at
+                        ? t("p.admin.security.lastSync", {
+                            when: formatRelative(d.last_sync_at),
+                          })
+                        : t("p.admin.security.neverSynced")
+                    }
+                  />
+                  <Chip
+                    size="small"
+                    sx={{ mr: 1 }}
+                    label={
+                      d.is_active
+                        ? t("p.admin.security.deviceActive")
+                        : t("p.admin.security.deviceRevokedLabel")
+                    }
+                    color={d.is_active ? "success" : "default"}
+                    variant="outlined"
+                  />
+                </ListItem>
+              </Box>
+            ))}
+          </List>
+        )}
+      </Paper>
+
       {/* Security tips */}
       <Paper variant="outlined" sx={{ p: 3 }}>
-        <Typography variant="h6" mb={2}>Consejos de seguridad</Typography>
+        <Typography variant="h6" mb={2}>
+          {t("p.admin.security.tipsTitle")}
+        </Typography>
         <List dense>
           <ListItem>
-            <ListItemIcon><Key size={18} /></ListItemIcon>
-            <ListItemText primary="Usa una contraseña única y fuerte" />
+            <ListItemIcon>
+              <Key size={18} />
+            </ListItemIcon>
+            <ListItemText primary={t("p.admin.security.tip1")} />
           </ListItem>
           <Divider component="li" />
           <ListItem>
-            <ListItemIcon><ShieldCheck size={18} /></ListItemIcon>
-            <ListItemText primary="Activa 2FA para protección adicional" />
+            <ListItemIcon>
+              <ShieldCheck size={18} />
+            </ListItemIcon>
+            <ListItemText primary={t("p.admin.security.tip2")} />
           </ListItem>
           <Divider component="li" />
           <ListItem>
-            <ListItemIcon><Smartphone size={18} /></ListItemIcon>
-            <ListItemText primary="Guarda los códigos de backup offline" />
+            <ListItemIcon>
+              <Smartphone size={18} />
+            </ListItemIcon>
+            <ListItemText primary={t("p.admin.security.tip3")} />
           </ListItem>
         </List>
       </Paper>
 
       {/* Disable dialog */}
-      <Dialog open={disableDialog} onClose={() => setDisableDialog(false)} maxWidth="xs" fullWidth>
-        <DialogTitle>Desactivar 2FA</DialogTitle>
+      <Dialog
+        open={disableDialog}
+        onClose={() => setDisableDialog(false)}
+        maxWidth="xs"
+        fullWidth
+      >
+        <DialogTitle>{t("p.admin.security.disable")}</DialogTitle>
         <DialogContent>
           <Alert severity="warning" sx={{ mb: 2 }}>
-            Tu cuenta será menos segura. Introduce un código TOTP o de backup para confirmar.
+            {t("p.admin.security.disableWarning")}
           </Alert>
           <TextField
-            label="Código de verificación"
+            label={t("p.admin.security.codeLabelShort")}
             value={disableCode}
-            onChange={(e) => setDisableCode(e.target.value.replace(/\D/g, "").slice(0, 6))}
+            onChange={(e) =>
+              setDisableCode(e.target.value.replace(/\D/g, "").slice(0, 6))
+            }
             fullWidth
             size="small"
             placeholder="123456"
           />
         </DialogContent>
         <DialogActions>
-          <Button onClick={() => setDisableDialog(false)}>Cancelar</Button>
+          <Button onClick={() => setDisableDialog(false)}>{t("common.cancel")}</Button>
           <Button
             color="error"
             variant="contained"
             onClick={() => disableMut.mutate(disableCode)}
             disabled={disableCode.length < 6 || disableMut.isPending}
           >
-            Desactivar
+            {t("p.admin.security.disableAction")}
           </Button>
         </DialogActions>
       </Dialog>

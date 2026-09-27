@@ -1,11 +1,15 @@
 """Tests de features avanzadas: GraphQL, time tracking, attachments, templates,
 custom fields, outgoing webhooks, bulk operations, search."""
 import pytest
-from apps.tasks.models import (
-    Task, TimeEntry, Attachment, TaskTemplate, CustomField,
-    CustomFieldValue, OutgoingWebhook,
-)
 
+from apps.tasks.models import (
+    CustomField,
+    CustomFieldValue,
+    OutgoingWebhook,
+    Task,
+    TaskTemplate,
+    TimeEntry,
+)
 
 # --- GraphQL ---
 
@@ -58,14 +62,14 @@ class TestTimeTracking:
         TimeEntry.objects.create(task=task, user=user, duration_seconds=1800)
         resp = authed_client.get("/api/time-entries/")
         assert resp.status_code == 200
-        data = resp.data["results"] if "results" in resp.data else resp.data
+        data = resp.data.get("results", resp.data) if isinstance(resp.data, dict) else resp.data
         assert len(data) == 1
 
     def test_filtrar_por_tarea(self, authed_client, user, task):
         TimeEntry.objects.create(task=task, user=user, duration_seconds=1800)
         resp = authed_client.get(f"/api/time-entries/?task={task.id}")
         assert resp.status_code == 200
-        data = resp.data["results"] if "results" in resp.data else resp.data
+        data = resp.data.get("results", resp.data) if isinstance(resp.data, dict) else resp.data
         assert len(data) == 1
 
 
@@ -100,7 +104,7 @@ class TestTaskTemplates:
         TaskTemplate.objects.create(owner=user, name="T1", template_data={})
         resp = authed_client.get("/api/task-templates/")
         assert resp.status_code == 200
-        data = resp.data["results"] if "results" in resp.data else resp.data
+        data = resp.data.get("results", resp.data) if isinstance(resp.data, dict) else resp.data
         assert len(data) == 1
 
 
@@ -159,7 +163,7 @@ class TestOutgoingWebhooks:
         )
         resp = authed_client.get("/api/outgoing-webhooks/")
         assert resp.status_code == 200
-        data = resp.data["results"] if "results" in resp.data else resp.data
+        data = resp.data.get("results", resp.data) if isinstance(resp.data, dict) else resp.data
         assert len(data) == 1
 
     def test_desactivar_webhook(self, authed_client, user):
@@ -203,13 +207,16 @@ class TestBulkOperations:
         assert not Task.objects.filter(id__in=[t1.id, t2.id]).exists()
 
     def test_bulk_move_sprint(self, authed_client, user, project):
+        from datetime import timedelta
+
+        from django.utils import timezone
+
         from apps.tasks.models import Sprint
-        from datetime import date, timedelta
         sprint = Sprint.objects.create(
             owner=user, project=project, name="S1",
             state=Sprint.SprintState.PLANNED,
-            start_date=date.today(),
-            end_date=date.today() + timedelta(days=14),
+            start_date=timezone.localdate(),
+            end_date=timezone.localdate() + timedelta(days=14),
         )
         t1 = Task.objects.create(owner=user, project=project, title="T1")
         t2 = Task.objects.create(owner=user, project=project, title="T2")

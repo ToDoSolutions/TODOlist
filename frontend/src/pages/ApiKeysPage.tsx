@@ -1,3 +1,4 @@
+import { formatDateTime } from "../lib/dates";
 import { useState } from "react";
 import {
   Box,
@@ -25,14 +26,21 @@ import {
   TableContainer,
   TableHead,
   TableRow,
+  useTheme,
 } from "@mui/material";
-import { Key, Plus, Trash2, Copy, Check, Ban, ExternalLink } from "lucide-react";
+import { Key, Plus, Trash2, Copy, Check, Ban } from "lucide-react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { apiKeysApi } from "../api/resources";
+import type { ApiKeyItem } from "../types";
 import { notify } from "../notify";
+import { useConfirm } from "../components/ConfirmDialog";
+import { useTranslation } from "react-i18next";
 
 export default function ApiKeysPage() {
+  const { t } = useTranslation();
+  const theme = useTheme();
   const qc = useQueryClient();
+  const confirm = useConfirm();
   const [dialogOpen, setDialogOpen] = useState(false);
   const [newKey, setNewKey] = useState<string | null>(null);
   const [copied, setCopied] = useState(false);
@@ -47,7 +55,7 @@ export default function ApiKeysPage() {
     mutationFn: apiKeysApi.create,
     onSuccess: (data) => {
       setNewKey(data.key);
-      notify.success("API key creada");
+      notify.success(t("p.admin.apiKeys.created"));
       qc.invalidateQueries({ queryKey: ["api-keys"] });
     },
   });
@@ -55,7 +63,7 @@ export default function ApiKeysPage() {
   const revokeMut = useMutation({
     mutationFn: apiKeysApi.revoke,
     onSuccess: () => {
-      notify.info("API key revocada");
+      notify.info(t("p.admin.apiKeys.revoked"));
       qc.invalidateQueries({ queryKey: ["api-keys"] });
     },
   });
@@ -63,7 +71,7 @@ export default function ApiKeysPage() {
   const deleteMut = useMutation({
     mutationFn: apiKeysApi.delete,
     onSuccess: () => {
-      notify.info("API key eliminada");
+      notify.info(t("p.admin.apiKeys.deleted"));
       qc.invalidateQueries({ queryKey: ["api-keys"] });
     },
   });
@@ -87,19 +95,34 @@ export default function ApiKeysPage() {
     <Box maxWidth={800} mx="auto">
       <Stack direction="row" alignItems="center" justifyContent="space-between" mb={3}>
         <Stack direction="row" alignItems="center" spacing={1}>
-          <Key size={24} color="#1976d2" />
-          <Typography variant="h5" fontWeight={700}>API Keys</Typography>
+          <Key size={24} style={{ color: theme.palette.primary.main }} />
+          <Typography variant="h5" fontWeight={700}>
+            {t("nav.apiKeys")}
+          </Typography>
         </Stack>
-        <Button variant="contained" startIcon={<Plus size={18} />} onClick={() => { setForm({ name: "", scopes: ["read"] }); setNewKey(null); setDialogOpen(true); }}>
-          Nueva key
+        <Button
+          variant="contained"
+          startIcon={<Plus size={18} />}
+          onClick={() => {
+            setForm({ name: "", scopes: ["read"] });
+            setNewKey(null);
+            setDialogOpen(true);
+          }}
+        >
+          {t("p.admin.apiKeys.new")}
         </Button>
       </Stack>
 
       <Alert severity="info" sx={{ mb: 2 }}>
-        Usa las API keys para acceso programático a la API REST. Incluye el header
-        <code>Authorization: ApiKey &lt;tu_key&gt;</code> en tus requests.
-        Documentación: <a href="/api/docs/" target="_blank" rel="noopener">Swagger UI</a> ·
-        <a href="/api/redoc/" target="_blank" rel="noopener">ReDoc</a>
+        {t("p.admin.apiKeys.infoPre")} <code>Authorization: ApiKey &lt;tu_key&gt;</code>{" "}
+        {t("p.admin.apiKeys.infoPost")}{" "}
+        <a href="/api/docs/" target="_blank" rel="noopener">
+          Swagger UI
+        </a>{" "}
+        ·
+        <a href="/api/redoc/" target="_blank" rel="noopener">
+          ReDoc
+        </a>
       </Alert>
 
       {isLoading ? (
@@ -110,7 +133,7 @@ export default function ApiKeysPage() {
         <Paper variant="outlined" sx={{ p: 6, textAlign: "center" }}>
           <Key size={48} color="text.disabled" />
           <Typography color="text.secondary" mt={1}>
-            No tienes API keys. Crea una para empezar a usar la API.
+            {t("p.admin.apiKeys.empty")}
           </Typography>
         </Paper>
       ) : (
@@ -118,57 +141,90 @@ export default function ApiKeysPage() {
           <Table size="small">
             <TableHead>
               <TableRow>
-                <TableCell>Nombre</TableCell>
-                <TableCell>Prefix</TableCell>
-                <TableCell>Scopes</TableCell>
-                <TableCell>Estado</TableCell>
-                <TableCell>Último uso</TableCell>
-                <TableCell>Acciones</TableCell>
+                <TableCell>{t("common.name")}</TableCell>
+                <TableCell>{t("p.admin.apiKeys.colPrefix")}</TableCell>
+                <TableCell>{t("p.admin.apiKeys.colScopes")}</TableCell>
+                <TableCell>{t("p.admin.apiKeys.colStatus")}</TableCell>
+                <TableCell>{t("p.admin.apiKeys.colLastUsed")}</TableCell>
+                <TableCell>{t("p.admin.apiKeys.colActions")}</TableCell>
               </TableRow>
             </TableHead>
             <TableBody>
-              {keyList.map((k: any) => (
+              {keyList.map((k: ApiKeyItem) => (
                 <TableRow key={k.id}>
                   <TableCell>
-                    <Typography variant="body2" fontWeight={600}>{k.name}</Typography>
+                    <Typography variant="body2" fontWeight={600}>
+                      {k.name}
+                    </Typography>
                   </TableCell>
                   <TableCell>
-                    <Typography variant="body2" fontFamily="monospace">{k.key_prefix}...</Typography>
+                    <Typography variant="body2" fontFamily="monospace">
+                      {k.key_prefix}...
+                    </Typography>
                   </TableCell>
                   <TableCell>
                     <Stack direction="row" spacing={0.5}>
                       {(k.scopes || []).map((s: string) => (
-                        <Chip key={s} size="small" label={s} sx={{ height: 18, fontSize: 10 }} variant="outlined" />
+                        <Chip
+                          key={s}
+                          size="small"
+                          label={s}
+                          sx={{ height: 18, fontSize: 10 }}
+                          variant="outlined"
+                        />
                       ))}
                     </Stack>
                   </TableCell>
                   <TableCell>
                     <Chip
                       size="small"
-                      label={k.is_active ? "Activa" : "Revocada"}
+                      label={
+                        k.is_active
+                          ? t("p.admin.apiKeys.statusActive")
+                          : t("p.admin.apiKeys.statusRevoked")
+                      }
                       sx={{
-                        height: 18, fontSize: 10,
+                        height: 18,
+                        fontSize: 10,
                         bgcolor: k.is_active ? "success.main" : "grey.400",
-                        color: "#fff",
+                        color: "common.white",
                       }}
                     />
                   </TableCell>
                   <TableCell>
                     <Typography variant="caption" color="text.secondary">
-                      {k.last_used_at ? new Date(k.last_used_at).toLocaleString("es-ES") : "Nunca"}
+                      {k.last_used_at
+                        ? formatDateTime(k.last_used_at)
+                        : t("p.admin.apiKeys.never")}
                     </Typography>
                   </TableCell>
                   <TableCell>
                     <Stack direction="row" spacing={0.5}>
                       {k.is_active && (
-                        <Tooltip title="Revocar">
+                        <Tooltip title={t("p.admin.apiKeys.revoke")}>
                           <IconButton size="small" onClick={() => revokeMut.mutate(k.id)}>
                             <Ban size={14} />
                           </IconButton>
                         </Tooltip>
                       )}
-                      <Tooltip title="Eliminar">
-                        <IconButton size="small" color="error" onClick={() => deleteMut.mutate(k.id)}>
+                      <Tooltip title={t("common.delete")}>
+                        <IconButton
+                          size="small"
+                          color="error"
+                          onClick={async () => {
+                            if (
+                              await confirm(
+                                t("p.admin.apiKeys.confirmDelete", {
+                                  name: k.name,
+                                }),
+                                {
+                                  confirmLabel: t("p.admin.apiKeys.confirmDeleteLabel"),
+                                },
+                              )
+                            )
+                              deleteMut.mutate(k.id);
+                          }}
+                        >
                           <Trash2 size={14} />
                         </IconButton>
                       </Tooltip>
@@ -182,15 +238,28 @@ export default function ApiKeysPage() {
       )}
 
       {/* Dialog de creación */}
-      <Dialog open={dialogOpen} onClose={() => setDialogOpen(false)} maxWidth="sm" fullWidth>
-        <DialogTitle>Crear API key</DialogTitle>
+      <Dialog
+        open={dialogOpen}
+        onClose={() => setDialogOpen(false)}
+        maxWidth="sm"
+        fullWidth
+      >
+        <DialogTitle>{t("p.admin.apiKeys.createTitle")}</DialogTitle>
         <DialogContent>
           {newKey ? (
             <Box>
               <Alert severity="warning" sx={{ mb: 2 }}>
-                Guarda esta key en un lugar seguro. No se volverá a mostrar.
+                {t("p.admin.apiKeys.keyWarning")}
               </Alert>
-              <Paper variant="outlined" sx={{ p: 2, fontFamily: "monospace", wordBreak: "break-all", bgcolor: "action.hover" }}>
+              <Paper
+                variant="outlined"
+                sx={{
+                  p: 2,
+                  fontFamily: "monospace",
+                  wordBreak: "break-all",
+                  bgcolor: "action.hover",
+                }}
+              >
                 {newKey}
               </Paper>
               <Button
@@ -199,42 +268,53 @@ export default function ApiKeysPage() {
                 sx={{ mt: 1 }}
                 color={copied ? "success" : "primary"}
               >
-                {copied ? "Copiada" : "Copiar"}
+                {copied ? t("p.admin.apiKeys.copied") : t("p.admin.apiKeys.copy")}
               </Button>
             </Box>
           ) : (
             <Stack spacing={2} sx={{ mt: 1 }}>
               <TextField
-                label="Nombre"
+                label={t("common.name")}
                 value={form.name}
                 onChange={(e) => setForm({ ...form, name: e.target.value })}
                 fullWidth
                 size="small"
-                helperText="Nombre descriptivo para identificar la key"
+                helperText={t("p.admin.apiKeys.nameHelper")}
               />
               <FormControl fullWidth size="small">
-                <InputLabel>Scopes</InputLabel>
+                <InputLabel>{t("p.admin.apiKeys.colScopes")}</InputLabel>
                 <Select
                   multiple
                   value={form.scopes}
-                  label="Scopes"
-                  onChange={(e) => setForm({ ...form, scopes: e.target.value as string[] })}
+                  label={t("p.admin.apiKeys.colScopes")}
+                  onChange={(e) =>
+                    setForm({ ...form, scopes: e.target.value as string[] })
+                  }
                 >
-                  <MenuItem value="read">Read (lectura)</MenuItem>
-                  <MenuItem value="write">Write (escritura)</MenuItem>
-                  <MenuItem value="admin">Admin (todo)</MenuItem>
+                  <MenuItem value="read">{t("p.admin.apiKeys.scopeRead")}</MenuItem>
+                  <MenuItem value="write">{t("p.admin.apiKeys.scopeWrite")}</MenuItem>
+                  <MenuItem value="admin">{t("p.admin.apiKeys.scopeAdmin")}</MenuItem>
                 </Select>
               </FormControl>
             </Stack>
           )}
         </DialogContent>
         <DialogActions>
-          <Button onClick={() => { setDialogOpen(false); setNewKey(null); }}>
-            {newKey ? "Cerrar" : "Cancelar"}
+          <Button
+            onClick={() => {
+              setDialogOpen(false);
+              setNewKey(null);
+            }}
+          >
+            {newKey ? t("common.close") : t("common.cancel")}
           </Button>
           {!newKey && (
-            <Button variant="contained" onClick={handleCreate} disabled={!form.name || createMut.isPending}>
-              Crear
+            <Button
+              variant="contained"
+              onClick={handleCreate}
+              disabled={!form.name || createMut.isPending}
+            >
+              {t("common.create")}
             </Button>
           )}
         </DialogActions>
@@ -242,4 +322,3 @@ export default function ApiKeysPage() {
     </Box>
   );
 }
-

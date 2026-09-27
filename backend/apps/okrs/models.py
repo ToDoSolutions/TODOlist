@@ -66,6 +66,10 @@ class KeyResult(models.Model):
         related_name="key_results",
     )
     due_date = models.DateField(null=True, blank=True)
+    # Tareas vinculadas: su % completado alimenta ``linked_progress``.
+    linked_tasks = models.ManyToManyField(
+        "tasks.Task", blank=True, related_name="linked_key_results"
+    )
     created_at = models.DateTimeField(auto_now_add=True)
 
     class Meta:

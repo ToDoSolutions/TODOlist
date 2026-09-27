@@ -1,10 +1,4 @@
-import {
-  createContext,
-  useContext,
-  useEffect,
-  useState,
-  ReactNode,
-} from "react";
+import { createContext, useContext, useEffect, useState, ReactNode } from "react";
 import { authApi } from "../api/auth";
 import { tokenStorage } from "../api/client";
 import type { User } from "../types";
@@ -12,12 +6,8 @@ import type { User } from "../types";
 interface AuthContextValue {
   user: User | null;
   loading: boolean;
-  login: (email: string, password: string) => Promise<void>;
-  register: (
-    email: string,
-    username: string,
-    password: string
-  ) => Promise<void>;
+  login: (email: string, password: string, totpCode?: string) => Promise<void>;
+  register: (email: string, username: string, password: string) => Promise<void>;
   logout: () => void;
   saveTokens: (access: string, refresh: string) => Promise<void>;
 }
@@ -26,13 +16,10 @@ const AuthContext = createContext<AuthContextValue | undefined>(undefined);
 
 export function AuthProvider({ children }: { children: ReactNode }) {
   const [user, setUser] = useState<User | null>(null);
+  // La sesión puede vivir solo en cookies httpOnly: siempre intentamos me()
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
-    if (!tokenStorage.getAccess()) {
-      setLoading(false);
-      return;
-    }
     authApi
       .me()
       .then(setUser)
@@ -40,8 +27,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       .finally(() => setLoading(false));
   }, []);
 
-  const login = async (email: string, password: string) => {
-    await authApi.login(email, password);
+  const login = async (email: string, password: string, totpCode?: string) => {
+    await authApi.login(email, password, totpCode);
     const me = await authApi.me();
     setUser(me);
   };

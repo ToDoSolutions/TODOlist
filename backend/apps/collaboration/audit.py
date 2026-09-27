@@ -1,5 +1,6 @@
 """Servicio de auditoría para registrar cambios sensibles."""
 import logging
+
 from .models import AuditLog
 
 logger = logging.getLogger(__name__)
@@ -38,8 +39,8 @@ def log_action(
             ip_address=ip_address,
             user_agent=user_agent[:500] if user_agent else "",
         )
-    except Exception as e:
-        logger.error(f"Error creando audit log: {e}", exc_info=True)
+    except Exception:
+        logger.exception("Error creando audit log")
         return None
 
 

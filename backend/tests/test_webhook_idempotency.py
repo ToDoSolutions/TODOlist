@@ -1,16 +1,19 @@
 """Tests de idempotencia de webhooks y cola de reintentos."""
 import json
-import pytest
 from unittest.mock import patch
 
+import pytest
+
 from apps.integrations.models import (
-    WebhookDelivery, GitHubRepo, GitHubIssueLink, GitHubInstallation,
+    GitHubInstallation,
+    GitHubRepo,
+    WebhookDelivery,
 )
-from apps.tasks.models import Task
 from apps.integrations.webhook_processor import (
     process_webhook_delivery,
     retry_dead_letter_deliveries,
 )
+from apps.tasks.models import Task
 
 
 @pytest.fixture
@@ -110,7 +113,7 @@ class TestWebhookIdempotency:
         """Un webhook que falla debe registrarse para reintento."""
         mock_handler.side_effect = Exception("API de GitHub caída")
 
-        result, status = process_webhook_delivery(
+        _, status = process_webhook_delivery(
             delivery_id="delivery-fail-001",
             event_type="issues",
             action="closed",
@@ -141,7 +144,7 @@ class TestWebhookIdempotency:
             max_retries=5,
         )
 
-        result, status = process_webhook_delivery(
+        process_webhook_delivery(
             delivery_id=delivery_id,
             event_type="issues",
             action="closed",
@@ -156,7 +159,7 @@ class TestWebhookIdempotency:
     @patch("apps.integrations.webhook_processor._handle_issue_event")
     def test_dlq_no_se_reprocesa(self, mock_handler):
         """Un webhook en DLQ no se reprocesa automáticamente."""
-        delivery = WebhookDelivery.objects.create(
+        WebhookDelivery.objects.create(
             delivery_id="delivery-dead-001",
             event_type="issues",
             action="closed",
@@ -207,26 +210,70 @@ class TestWebhookIdempotency:
 
 @pytest.mark.django_db
 class TestWebhookDeliveryAPI:
-    def test_listar_entregas(self, authed_client):
+    def test_listar_entregas(self, authed_client, user):
+        # Crear instalación y repo del usuario para que el filtro funcione
+        inst = GitHubInstallation.objects.create(
+            user=user,
+            installation_id=12345,
+            account_login="testuser",
+            account_type="User",
+        )
+        GitHubRepo.objects.create(
+            installation=inst,
+            repo_id=999,
+            full_name="testuser/my-repo",
+            name="my-repo",
+            owner="testuser",
+        )
         WebhookDelivery.objects.create(
             delivery_id="del-1",
             event_type="issues",
             action="opened",
             payload={},
             status="processed",
+            repo_full_name="testuser/my-repo",
         )
         resp = authed_client.get("/api/webhooks/deliveries/")
         assert resp.status_code == 200
         assert len(resp.data) == 1
         assert resp.data[0]["delivery_id"] == "del-1"
 
-    def test_reintentar_dlq_endpoint(self, authed_client):
+    def test_listar_entregas_filtra_por_usuario(self, authed_client, user, other_user):
+        """Usuario A no ve entregas de repos de Usuario B."""
+        inst_b = GitHubInstallation.objects.create(
+            user=other_user,
+            installation_id=67890,
+            account_login="otheruser",
+            account_type="User",
+        )
+        GitHubRepo.objects.create(
+            installation=inst_b,
+            repo_id=888,
+            full_name="otheruser/other-repo",
+            name="other-repo",
+            owner="otheruser",
+        )
+        WebhookDelivery.objects.create(
+            delivery_id="del-other",
+            event_type="issues",
+            action="opened",
+            payload={},
+            status="processed",
+            repo_full_name="otheruser/other-repo",
+        )
+        resp = authed_client.get("/api/webhooks/deliveries/")
+        assert resp.status_code == 200
+        # user no tiene repos, así que no ve entregas de other_user
+        assert len(resp.data) == 0
+
+    def test_reintentar_dlq_endpoint(self, authed_client, github_repo):
         WebhookDelivery.objects.create(
             delivery_id="del-dlq",
             event_type="issues",
             action="closed",
             payload={},
             status="dead_letter",
+            repo_full_name="testuser/my-repo",
         )
         with patch("apps.integrations.tasks.process_webhook_retry_task.delay"):
             resp = authed_client.post("/api/webhooks/retry-dead-letter/")

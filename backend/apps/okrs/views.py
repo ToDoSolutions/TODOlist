@@ -1,4 +1,3 @@
-from django.conf import settings
 from django.db import transaction
 from rest_framework import status, viewsets
 from rest_framework.decorators import action
@@ -44,7 +43,7 @@ class ObjectiveViewSet(viewsets.ModelViewSet):
                     total += min(
                         max(kr.current_value / kr.target_value, 0.0), 1.0
                     )
-            computed = int(round(total / key_results.count() * 100))
+            computed = round(total / key_results.count() * 100)
 
         if request.method == "POST":
             objective.progress = computed
@@ -62,7 +61,9 @@ class KeyResultViewSet(viewsets.ModelViewSet):
     serializer_class = KeyResultSerializer
 
     def get_queryset(self):
-        return KeyResult.objects.filter(owner=self.request.user)
+        return KeyResult.objects.filter(
+            owner=self.request.user
+        ).prefetch_related("linked_tasks")
 
     def perform_create(self, serializer):
         serializer.save(owner=self.request.user)
@@ -88,9 +89,13 @@ class KeyResultViewSet(viewsets.ModelViewSet):
                 status=status.HTTP_400_BAD_REQUEST,
             )
 
-        old_value = key_result.current_value
-
         with transaction.atomic():
+            # Lock de la fila para que old_value sea consistente bajo
+            # escrituras concurrentes
+            key_result = type(key_result).objects.select_for_update().get(
+                pk=key_result.pk
+            )
+            old_value = key_result.current_value
             KeyResultUpdate.objects.create(
                 key_result=key_result,
                 user=request.user,

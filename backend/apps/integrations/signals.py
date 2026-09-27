@@ -18,8 +18,8 @@ def sync_task_to_github(sender, instance, created, **kwargs):
     try:
         from .sync_service import sync_task_to_issue
         sync_task_to_issue(instance)
-    except Exception as e:
+    except Exception:
         # Log pero no romper el save de la tarea
         import logging
         logger = logging.getLogger(__name__)
-        logger.error(f"Error sincronizando tarea {instance.id} a GitHub: {e}")
+        logger.exception(f"Error sincronizando tarea {instance.id} a GitHub")

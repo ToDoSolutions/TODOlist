@@ -6,12 +6,11 @@ fechas, prioridad, estado y dependencias para generar sugerencias útiles.
 from __future__ import annotations
 
 from datetime import timedelta
-from typing import Any, Dict, List
+from typing import Any
 
 from django.utils import timezone
 
 from apps.tasks.models import Task, TaskRelation
-
 
 # Fibonacci-ish para story points
 STORY_POINT_OPTIONS = [1, 2, 3, 5, 8, 13]
@@ -25,13 +24,13 @@ def _days_until_due(task: Task) -> float | None:
     return delta.total_seconds() / 86400
 
 
-def estimate_priority(task: Task) -> Dict[str, Any]:
+def estimate_priority(task: Task) -> dict[str, Any]:
     """Heurística de prioridad basada en due_date, prioridad, estado y dependencias.
 
     Devuelve ``{"suggested_priority": int 0-5, "confidence": float 0-1}``.
     """
     score = 0.0
-    reasons: List[str] = []
+    reasons: list[str] = []
 
     # 1. Proximidad del due_date
     days = _days_until_due(task)
@@ -100,13 +99,13 @@ def estimate_priority(task: Task) -> Dict[str, Any]:
     }
 
 
-def estimate_story_points(task: Task) -> Dict[str, Any]:
+def estimate_story_points(task: Task) -> dict[str, Any]:
     """Heurística de story points basada en descripción, subtareas y dependencias.
 
     Devuelve ``{"suggested_points": int, "confidence": float 0-1}``.
     """
     score = 0.0
-    reasons: List[str] = []
+    reasons: list[str] = []
 
     # 1. Longitud de la descripción
     desc_len = len(task.description or "")
@@ -169,7 +168,7 @@ def estimate_story_points(task: Task) -> Dict[str, Any]:
     }
 
 
-def detect_blockers(user) -> List[Dict[str, Any]]:
+def detect_blockers(user) -> list[dict[str, Any]]:
     """Detecta posibles bloqueos para las tareas de un usuario.
 
     - Tareas en progreso sin actualización hace 7+ días.
@@ -178,11 +177,13 @@ def detect_blockers(user) -> List[Dict[str, Any]]:
     """
     now = timezone.now()
     stale_threshold = now - timedelta(days=7)
-    blockers: List[Dict[str, Any]] = []
+    blockers: list[dict[str, Any]] = []
 
+    # Excluir tareas con EncryptedTask vinculada (E2E): la IA opera sobre
+    # texto claro y no debe procesar contenido cifrado.
     tasks = Task.objects.filter(owner=user).exclude(
         state__in=[Task.State.COMPLETED, Task.State.CANCELLED, Task.State.ARCHIVED]
-    )
+    ).exclude(encrypted_data__isnull=False)
 
     # 1. En progreso sin actualizaciones recientes
     stale = tasks.filter(state=Task.State.IN_PROGRESS, updated_at__lte=stale_threshold)
@@ -223,6 +224,8 @@ def detect_blockers(user) -> List[Dict[str, Any]]:
         state__in=[Task.State.PENDING, Task.State.BACKLOG, Task.State.IN_PROGRESS],
     )
     for t in overdue:
+        if t.due_date is None:
+            continue
         days_overdue = (now - t.due_date).days
         blockers.append({
             "task_id": t.id,
@@ -235,12 +238,12 @@ def detect_blockers(user) -> List[Dict[str, Any]]:
     return blockers
 
 
-def improve_description(task: Task) -> Dict[str, Any]:
+def improve_description(task: Task) -> dict[str, Any]:
     """Sugiere mejoras a la descripción de una tarea.
 
     Devuelve ``{"suggestions": [str, ...], "confidence": float}``.
     """
-    suggestions: List[str] = []
+    suggestions: list[str] = []
     desc = (task.description or "").strip()
 
     if not desc:

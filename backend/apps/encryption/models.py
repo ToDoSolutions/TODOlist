@@ -16,6 +16,7 @@ class UserPublicKey(models.Model):
     algorithm = models.CharField(max_length=20, default="RSA-OA-256", help_text="Algoritmo: RSA-OA-256, X25519")
     is_active = models.BooleanField(default=True)
     created_at = models.DateTimeField(auto_now_add=True)
+    rotated_at = models.DateTimeField(null=True, blank=True, help_text="Fecha de rotación de la clave")
 
     class Meta:
         ordering = ["-created_at"]
@@ -32,6 +33,14 @@ class EncryptedTask(models.Model):
         settings.AUTH_USER_MODEL,
         on_delete=models.CASCADE,
         related_name="encrypted_tasks",
+    )
+    task = models.OneToOneField(
+        "tasks.Task",
+        on_delete=models.CASCADE,
+        related_name="encrypted_data",
+        null=True,
+        blank=True,
+        help_text="Tarea relacionada (FK real para integridad referencial)",
     )
     encrypted_data = models.TextField(help_text="Datos cifrados en base64 (título, descripción, etc.)")
     encryption_key_id = models.CharField(max_length=100, help_text="ID de la clave usada para cifrar")

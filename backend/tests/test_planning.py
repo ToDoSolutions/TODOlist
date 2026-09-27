@@ -1,10 +1,16 @@
 """Tests de fases 2-4: jerarquías, relaciones, actividad, sprints, épicas, búsquedas guardadas."""
+from datetime import timedelta
+
 import pytest
-from datetime import date, timedelta
 from django.utils import timezone
 
 from apps.tasks.models import (
-    Task, TaskRelation, TaskActivity, Sprint, Epic, SavedSearch,
+    Epic,
+    SavedSearch,
+    Sprint,
+    Task,
+    TaskActivity,
+    TaskRelation,
 )
 
 
@@ -14,8 +20,8 @@ def sprint(user):
         owner=user,
         name="Sprint 1",
         goal="Entregar MVP",
-        start_date=date.today(),
-        end_date=date.today() + timedelta(days=14),
+        start_date=timezone.localdate(),
+        end_date=timezone.localdate() + timedelta(days=14),
     )
 
 
@@ -40,7 +46,7 @@ class TestSprints:
     def test_listar_sprints(self, authed_client, sprint):
         resp = authed_client.get("/api/sprints/")
         assert resp.status_code == 200
-        data = resp.data["results"] if "results" in resp.data else resp.data
+        data = resp.data.get("results", resp.data) if isinstance(resp.data, dict) else resp.data
         assert len(data) == 1
         assert data[0]["name"] == "Sprint 1"
 
@@ -67,8 +73,8 @@ class TestSprints:
         # Crear siguiente sprint
         next_sprint = Sprint.objects.create(
             owner=user, name="Sprint 2",
-            start_date=date.today() + timedelta(days=15),
-            end_date=date.today() + timedelta(days=29),
+            start_date=timezone.localdate() + timedelta(days=15),
+            end_date=timezone.localdate() + timedelta(days=29),
         )
         resp = authed_client.post(
             f"/api/sprints/{sprint.id}/close/",
@@ -87,16 +93,16 @@ class TestSprints:
         Task.objects.create(owner=user, title="T2", sprint=sprint)
         resp = authed_client.get(f"/api/sprints/{sprint.id}/tasks/")
         assert resp.status_code == 200
-        data = resp.data["results"] if "results" in resp.data else resp.data
+        data = resp.data.get("results", resp.data) if isinstance(resp.data, dict) else resp.data
         assert len(data) == 2
 
     def test_sprint_ajeno_no_visible(self, authed_client, other_user):
         Sprint.objects.create(
             owner=other_user, name="Ajeno",
-            start_date=date.today(), end_date=date.today() + timedelta(days=7),
+            start_date=timezone.localdate(), end_date=timezone.localdate() + timedelta(days=7),
         )
         resp = authed_client.get("/api/sprints/")
-        data = resp.data["results"] if "results" in resp.data else resp.data
+        data = resp.data.get("results", resp.data) if isinstance(resp.data, dict) else resp.data
         assert len(data) == 0
 
 
@@ -124,7 +130,7 @@ class TestEpics:
         Task.objects.create(owner=user, title="T1", epic=epic)
         resp = authed_client.get(f"/api/epics/{epic.id}/tasks/")
         assert resp.status_code == 200
-        data = resp.data["results"] if "results" in resp.data else resp.data
+        data = resp.data.get("results", resp.data) if isinstance(resp.data, dict) else resp.data
         assert len(data) == 1
 
 
@@ -243,7 +249,7 @@ class TestSavedSearches:
         )
         resp = authed_client.get("/api/saved-searches/")
         assert resp.status_code == 200
-        data = resp.data["results"] if "results" in resp.data else resp.data
+        data = resp.data.get("results", resp.data) if isinstance(resp.data, dict) else resp.data
         assert len(data) == 1
 
     def test_busquedas_compartidas_visibles(self, authed_client, other_user):
@@ -252,7 +258,7 @@ class TestSavedSearches:
             filters={"state": "pending"}, is_shared=True,
         )
         resp = authed_client.get("/api/saved-searches/")
-        data = resp.data["results"] if "results" in resp.data else resp.data
+        data = resp.data.get("results", resp.data) if isinstance(resp.data, dict) else resp.data
         assert any(d["name"] == "Compartida" for d in data)
 
 
@@ -274,7 +280,7 @@ class TestTaskTypesAndEstimates:
         Task.objects.create(owner=user, title="Bug", task_type="bug")
         Task.objects.create(owner=user, title="Feature", task_type="feature")
         resp = authed_client.get("/api/tasks/?task_type=bug")
-        data = resp.data["results"] if "results" in resp.data else resp.data
+        data = resp.data.get("results", resp.data) if isinstance(resp.data, dict) else resp.data
         assert len(data) == 1
         assert data[0]["task_type"] == "bug"
 
@@ -282,7 +288,7 @@ class TestTaskTypesAndEstimates:
         Task.objects.create(owner=user, title="En sprint", sprint=sprint)
         Task.objects.create(owner=user, title="Fuera sprint")
         resp = authed_client.get(f"/api/tasks/?sprint={sprint.id}")
-        data = resp.data["results"] if "results" in resp.data else resp.data
+        data = resp.data.get("results", resp.data) if isinstance(resp.data, dict) else resp.data
         assert len(data) == 1
 
     def test_mover_a_sprint(self, authed_client, user, sprint):

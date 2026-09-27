@@ -1,8 +1,19 @@
 import { useQuery } from "@tanstack/react-query";
+import { useTranslation } from "react-i18next";
 import { advancedMetricsApi } from "../api/resources";
-import { Box, Typography, CircularProgress, Paper, Chip, LinearProgress, Alert } from "@mui/material";
+import type { CapacityEntry } from "../types";
+import {
+  Box,
+  Typography,
+  CircularProgress,
+  Paper,
+  Chip,
+  LinearProgress,
+  Alert,
+} from "@mui/material";
 
 export default function CapacityPage() {
+  const { t } = useTranslation();
   const { data, isLoading, isError } = useQuery({
     queryKey: ["capacity"],
     queryFn: advancedMetricsApi.capacity,
@@ -13,28 +24,59 @@ export default function CapacityPage() {
   if (isError) {
     return (
       <Box maxWidth={1000} mx="auto" mt={4}>
-        <Alert severity="error">No se pudieron cargar los datos de capacidad.</Alert>
+        <Alert severity="error">{t("p.plan.capacity.loadError")}</Alert>
       </Box>
     );
   }
 
   const capacity = data?.capacity || [];
-  const maxPoints = Math.max(...capacity.map((c: any) => c.total_points), 1);
+  const maxPoints = Math.max(...capacity.map((c: CapacityEntry) => c.total_points), 1);
 
   return (
     <Box>
-      <Typography variant="h5" gutterBottom>Capacity Planning</Typography>
+      <Typography variant="h5" gutterBottom>
+        {t("p.plan.capacity.title")}
+      </Typography>
       <Paper sx={{ p: 2 }}>
-        {capacity.length === 0 && <Typography color="textSecondary">Sin datos</Typography>}
-        {capacity.map((c: any, i: number) => (
+        {capacity.length === 0 && (
+          <Typography color="textSecondary">{t("p.plan.capacity.noData")}</Typography>
+        )}
+        {capacity.map((c: CapacityEntry, i: number) => (
           <Box key={i} sx={{ mb: 2 }}>
             <Box sx={{ display: "flex", alignItems: "center", gap: 1, mb: 0.5 }}>
-              <Box sx={{ width: 12, height: 12, borderRadius: "50%", bgcolor: c.project_color }} />
+              <Box
+                sx={{
+                  width: 12,
+                  height: 12,
+                  borderRadius: "50%",
+                  bgcolor: c.project_color,
+                }}
+              />
               <Typography sx={{ flex: 1 }}>{c.project}</Typography>
-              <Chip label={`${c.total_points}pt`} size="small" color="primary" />
-              <Chip label={`${c.open_tasks} abiertas`} size="small" variant="outlined" />
-              {c.in_progress > 0 && <Chip label={`${c.in_progress} en progreso`} size="small" color="info" />}
-              {c.blocked > 0 && <Chip label={`${c.blocked} bloqueadas`} size="small" color="error" />}
+              <Chip
+                label={t("p.plan.capacity.pointsChip", { count: c.total_points })}
+                size="small"
+                color="primary"
+              />
+              <Chip
+                label={t("p.plan.capacity.openChip", { count: c.open_tasks })}
+                size="small"
+                variant="outlined"
+              />
+              {c.in_progress > 0 && (
+                <Chip
+                  label={t("p.plan.capacity.inProgressChip", { count: c.in_progress })}
+                  size="small"
+                  color="info"
+                />
+              )}
+              {c.blocked > 0 && (
+                <Chip
+                  label={t("p.plan.capacity.blockedChip", { count: c.blocked })}
+                  size="small"
+                  color="error"
+                />
+              )}
             </Box>
             <LinearProgress
               variant="determinate"

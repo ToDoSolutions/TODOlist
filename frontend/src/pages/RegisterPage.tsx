@@ -27,25 +27,22 @@ import {
 } from "lucide-react";
 import { useNavigate, Link as RouterLink } from "react-router-dom";
 import { useAuth } from "../auth/AuthContext";
+import type { ApiError } from "../api/resources";
 import { notify } from "../notify";
 import { useState } from "react";
 import { motion } from "framer-motion";
+import { useTranslation } from "react-i18next";
+import "../i18n";
 
-const schema = z
-  .object({
-    username: z.string().min(3, "Mínimo 3 caracteres"),
-    email: z.string().email("Email no válido"),
-    password: z.string().min(8, "Mínimo 8 caracteres"),
-    password2: z.string().min(8, "Mínimo 8 caracteres"),
-  })
-  .refine((d) => d.password === d.password2, {
-    path: ["password2"],
-    message: "Las contraseñas no coinciden",
-  });
-
-type FormValues = z.infer<typeof schema>;
+type FormValues = {
+  username: string;
+  email: string;
+  password: string;
+  password2: string;
+};
 
 export default function RegisterPage() {
+  const { t } = useTranslation();
   const { register: registerUser } = useAuth();
   const navigate = useNavigate();
   const theme = useTheme();
@@ -53,6 +50,18 @@ export default function RegisterPage() {
   const [serverError, setServerError] = useState("");
   const [showPassword, setShowPassword] = useState(false);
   const [showPassword2, setShowPassword2] = useState(false);
+
+  const schema = z
+    .object({
+      username: z.string().min(3, t("p.auth.errors.minChars", { count: 3 })),
+      email: z.string().email(t("p.auth.errors.emailInvalid")),
+      password: z.string().min(8, t("p.auth.errors.minChars", { count: 8 })),
+      password2: z.string().min(8, t("p.auth.errors.minChars", { count: 8 })),
+    })
+    .refine((d) => d.password === d.password2, {
+      path: ["password2"],
+      message: t("p.auth.errors.passwordsMismatch"),
+    });
 
   const {
     register,
@@ -64,24 +73,26 @@ export default function RegisterPage() {
     setServerError("");
     try {
       await registerUser(values.email, values.username, values.password);
-      notify.success("Cuenta creada correctamente");
+      notify.success(t("p.auth.register.success"));
       navigate("/app");
-    } catch (e: any) {
-      const data = e.response?.data;
+    } catch (e) {
+      const data = (e as ApiError).response?.data;
       const msg =
         typeof data === "string"
           ? data
-          : data?.email?.[0] || data?.username?.[0] || "No se pudo registrar. Inténtalo de nuevo.";
+          : (data?.email as string[] | undefined)?.[0] ||
+            (data?.username as string[] | undefined)?.[0] ||
+            t("p.auth.errors.registerFailed");
       setServerError(msg);
       notify.error(msg);
     }
   };
 
   const features = [
-    { icon: CheckCircle2, text: "Gestión de tareas y proyectos" },
-    { icon: Zap, text: "Automatizaciones y reglas" },
-    { icon: BarChart3, text: "Dashboards y métricas" },
-    { icon: Calendar, text: "Sprints, épicas y Gantt" },
+    { icon: CheckCircle2, text: t("p.auth.features.tasks") },
+    { icon: Zap, text: t("p.auth.features.automations") },
+    { icon: BarChart3, text: t("p.auth.features.dashboards") },
+    { icon: Calendar, text: t("p.auth.features.sprints") },
   ];
 
   return (
@@ -135,12 +146,14 @@ export default function RegisterPage() {
               animate={{ opacity: 1, y: 0 }}
               transition={{ duration: 0.6 }}
             >
-              <Typography sx={{ color: "#fff", fontSize: "2rem", fontWeight: 800, mb: 3 }}>
+              <Typography
+                sx={{ color: "common.white", fontSize: "2rem", fontWeight: 800, mb: 3 }}
+              >
                 TODOlist
               </Typography>
               <Typography
                 sx={{
-                  color: "#fff",
+                  color: "common.white",
                   fontSize: "2.5rem",
                   fontWeight: 700,
                   lineHeight: 1.2,
@@ -148,12 +161,14 @@ export default function RegisterPage() {
                   mb: 2,
                 }}
               >
-                Empieza gratis.
+                {t("p.auth.register.heroTitle1")}
                 <br />
-                Sin tarjeta de crédito.
+                {t("p.auth.register.heroTitle2")}
               </Typography>
-              <Typography sx={{ color: "rgba(255,255,255,0.8)", fontSize: "1.125rem", mb: 5 }}>
-                Únete a miles de equipos que ya organizan su trabajo con TODOlist.
+              <Typography
+                sx={{ color: "rgba(255,255,255,0.8)", fontSize: "1.125rem", mb: 5 }}
+              >
+                {t("p.auth.register.heroSubtitle")}
               </Typography>
             </motion.div>
 
@@ -166,7 +181,7 @@ export default function RegisterPage() {
                   transition={{ duration: 0.5, delay: 0.3 + i * 0.1 }}
                 >
                   <Box sx={{ display: "flex", alignItems: "center", gap: 1.5 }}>
-                    <f.icon size={22} color="#fff" />
+                    <f.icon size={22} style={{ color: theme.palette.common.white }} />
                     <Typography sx={{ color: "rgba(255,255,255,0.9)", fontSize: "1rem" }}>
                       {f.text}
                     </Typography>
@@ -197,16 +212,22 @@ export default function RegisterPage() {
           style={{ width: "100%", maxWidth: 400 }}
         >
           {!isDesktop && (
-            <Typography sx={{ fontSize: "1.5rem", fontWeight: 800, mb: 3, color: "primary.main" }}>
+            <Typography
+              sx={{ fontSize: "1.5rem", fontWeight: 800, mb: 3, color: "primary.main" }}
+            >
               TODOlist
             </Typography>
           )}
 
-          <Typography variant="h4" fontWeight={700} sx={{ mb: 1, letterSpacing: "-0.02em" }}>
-            Crear cuenta
+          <Typography
+            variant="h4"
+            fontWeight={700}
+            sx={{ mb: 1, letterSpacing: "-0.02em" }}
+          >
+            {t("p.auth.register.title")}
           </Typography>
           <Typography variant="body2" color="text.secondary" sx={{ mb: 4 }}>
-            Regístrate para empezar a organizar tu trabajo
+            {t("p.auth.register.subtitle")}
           </Typography>
 
           {serverError && (
@@ -219,7 +240,7 @@ export default function RegisterPage() {
 
           <Box component="form" onSubmit={handleSubmit(onSubmit)} noValidate>
             <TextField
-              label="Nombre de usuario"
+              label={t("p.auth.username")}
               fullWidth
               margin="normal"
               autoComplete="username"
@@ -236,7 +257,7 @@ export default function RegisterPage() {
               {...register("username")}
             />
             <TextField
-              label="Email"
+              label={t("p.auth.email")}
               fullWidth
               margin="normal"
               autoComplete="email"
@@ -252,7 +273,7 @@ export default function RegisterPage() {
               {...register("email")}
             />
             <TextField
-              label="Contraseña"
+              label={t("p.auth.password")}
               type={showPassword ? "text" : "password"}
               fullWidth
               margin="normal"
@@ -271,7 +292,7 @@ export default function RegisterPage() {
                       onClick={() => setShowPassword(!showPassword)}
                       edge="end"
                       size="small"
-                      aria-label="mostrar contraseña"
+                      aria-label={t("p.auth.showPassword")}
                     >
                       {showPassword ? <EyeOff size={18} /> : <Eye size={18} />}
                     </IconButton>
@@ -281,7 +302,7 @@ export default function RegisterPage() {
               {...register("password")}
             />
             <TextField
-              label="Repetir contraseña"
+              label={t("p.auth.confirmPassword")}
               type={showPassword2 ? "text" : "password"}
               fullWidth
               margin="normal"
@@ -300,7 +321,7 @@ export default function RegisterPage() {
                       onClick={() => setShowPassword2(!showPassword2)}
                       edge="end"
                       size="small"
-                      aria-label="mostrar contraseña"
+                      aria-label={t("p.auth.showPassword")}
                     >
                       {showPassword2 ? <EyeOff size={18} /> : <Eye size={18} />}
                     </IconButton>
@@ -318,14 +339,14 @@ export default function RegisterPage() {
               sx={{ mt: 3, mb: 2, py: 1.5, fontSize: "0.95rem" }}
               disabled={isSubmitting}
             >
-              {isSubmitting ? "Creando cuenta..." : "Registrarme"}
+              {isSubmitting ? t("p.auth.register.creating") : t("p.auth.register.submit")}
             </Button>
           </Box>
 
           <Typography variant="body2" mt={4} textAlign="center" color="text.secondary">
-            ¿Ya tienes cuenta?{" "}
+            {t("p.auth.haveAccount")}{" "}
             <Link component={RouterLink} to="/login" fontWeight={600}>
-              Inicia sesión
+              {t("p.auth.signInLink")}
             </Link>
           </Typography>
         </motion.div>

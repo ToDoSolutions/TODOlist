@@ -14,6 +14,7 @@ class SyncDevice(models.Model):
     device_id = models.CharField(max_length=100, unique=True)
     device_name = models.CharField(max_length=200, blank=True, default="")
     last_sync_at = models.DateTimeField(null=True, blank=True)
+    is_active = models.BooleanField(default=True, help_text="Si el dispositivo está activo/revocado")
     created_at = models.DateTimeField(auto_now_add=True)
 
     def __str__(self):
@@ -34,6 +35,11 @@ class SyncOperation(models.Model):
         CONFLICT = "conflict", "Conflicto"
         REJECTED = "rejected", "Rechazada"
 
+    class ConflictStatus(models.TextChoices):
+        NONE = "none", "Sin conflicto"
+        CONFLICT = "conflict", "Conflicto"
+        RESOLVED = "resolved", "Resuelto"
+
     device = models.ForeignKey(SyncDevice, on_delete=models.CASCADE, related_name="operations")
     user = models.ForeignKey(
         settings.AUTH_USER_MODEL,
@@ -48,6 +54,11 @@ class SyncOperation(models.Model):
     client_timestamp = models.DateTimeField()
     server_timestamp = models.DateTimeField(null=True, blank=True)
     status = models.CharField(max_length=10, choices=Status.choices, default=Status.PENDING)
+    conflict_status = models.CharField(
+        max_length=10, choices=ConflictStatus.choices, default=ConflictStatus.NONE,
+        help_text="Estado de detección de conflictos por versión",
+    )
+    base_version = models.IntegerField(null=True, blank=True, help_text="Versión del recurso que el cliente tenía al hacer el cambio")
     conflict_data = models.JSONField(null=True, blank=True, help_text="Datos del servidor en conflicto")
     created_at = models.DateTimeField(auto_now_add=True)
     applied_at = models.DateTimeField(null=True, blank=True)

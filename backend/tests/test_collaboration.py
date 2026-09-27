@@ -1,19 +1,23 @@
 """Tests de Fase 10 (colaboración) y Fase 11 (audit)."""
-import pytest
-from datetime import date, timedelta
-from django.utils import timezone
 
-from apps.tasks.models import Task, Comment
-from apps.users.models import User
-from apps.notifications.models import Notification
-from apps.collaboration.models import (
-    Team, TeamMembership, ProjectMember, Mention, AuditLog,
+import pytest
+
+from apps.collaboration.audit import (
+    log_create,
+    log_delete,
+    log_role_change,
+    log_update,
 )
 from apps.collaboration.mentions import extract_mentions, process_mentions
-from apps.collaboration.audit import (
-    log_action, log_create, log_update, log_delete, log_role_change,
+from apps.collaboration.models import (
+    AuditLog,
+    Mention,
+    ProjectMember,
+    Team,
+    TeamMembership,
 )
-
+from apps.notifications.models import Notification
+from apps.tasks.models import Comment
 
 # --- Fase 10: Colaboración ---
 
@@ -36,7 +40,7 @@ class TestTeams:
         TeamMembership.objects.create(team=team, user=user, role="owner")
         resp = authed_client.get("/api/teams/")
         assert resp.status_code == 200
-        data = resp.data["results"] if "results" in resp.data else resp.data
+        data = resp.data.get("results", resp.data) if isinstance(resp.data, dict) else resp.data
         assert len(data) == 1
 
     def test_añadir_miembro(self, authed_client, user, other_user):
@@ -56,6 +60,28 @@ class TestTeams:
         resp = authed_client.delete(f"/api/teams/{team.id}/members/{m.id}/")
         assert resp.status_code == 204
         assert not TeamMembership.objects.filter(id=m.id).exists()
+
+    def test_actualizar_equipo_audita_cambios(self, authed_client, user):
+        team = Team.objects.create(name="T1", slug="t1", owner=user)
+        TeamMembership.objects.create(team=team, user=user, role="owner")
+        resp = authed_client.patch(
+            f"/api/teams/{team.id}/", {"name": "T1 renamed"}, format="json"
+        )
+        assert resp.status_code == 200
+        entry = AuditLog.objects.get(action="update", resource_type="team")
+        assert entry.resource_id == team.id
+        assert entry.old_values["name"] == "T1"
+        assert entry.new_values["name"] == "T1 renamed"
+
+    def test_eliminar_equipo_audita(self, authed_client, user):
+        team = Team.objects.create(name="T1", slug="t1", owner=user)
+        TeamMembership.objects.create(team=team, user=user, role="owner")
+        resp = authed_client.delete(f"/api/teams/{team.id}/")
+        assert resp.status_code == 204
+        assert not Team.objects.filter(id=team.id).exists()
+        entry = AuditLog.objects.get(action="delete", resource_type="team")
+        assert entry.resource_id == team.id
+        assert entry.old_values["name"] == "T1"
 
 
 @pytest.mark.django_db
@@ -94,6 +120,7 @@ class TestMentions:
         assert extract_mentions("Sin menciones") == set()
 
     def test_procesar_menciones_crea_notificacion(self, user, other_user, task):
+        ProjectMember.objects.create(project=task.project, user=other_user, role="viewer")
         mentioned = process_mentions(
             text=f"Hola @{other_user.username} revisa esto",
             task=task,
@@ -118,6 +145,7 @@ class TestMentions:
 
     def test_mencion_por_comentario(self, user, other_user, task):
         """Al crear un comentario con @user, se procesa la mención."""
+        ProjectMember.objects.create(project=task.project, user=other_user, role="viewer")
         Comment.objects.create(
             task=task, author=user,
             body=f"Revisa esto @{other_user.username}",
@@ -136,7 +164,7 @@ class TestMentionAPI:
         )
         resp = authed_client.get("/api/mentions/")
         assert resp.status_code == 200
-        data = resp.data["results"] if "results" in resp.data else resp.data
+        data = resp.data.get("results", resp.data) if isinstance(resp.data, dict) else resp.data
         assert len(data) == 1
 
 
@@ -191,7 +219,7 @@ class TestAuditLogAPI:
         log_update(actor=user, resource_type="task", resource_id=1, resource_name="T1")
         resp = authed_client.get("/api/audit-logs/")
         assert resp.status_code == 200
-        data = resp.data["results"] if "results" in resp.data else resp.data
+        data = resp.data.get("results", resp.data) if isinstance(resp.data, dict) else resp.data
         assert len(data) == 2
 
     def test_filtrar_por_accion(self, authed_client, user):
@@ -199,7 +227,7 @@ class TestAuditLogAPI:
         log_delete(actor=user, resource_type="task", resource_id=2, resource_name="T2")
         resp = authed_client.get("/api/audit-logs/?action=delete")
         assert resp.status_code == 200
-        data = resp.data["results"] if "results" in resp.data else resp.data
+        data = resp.data.get("results", resp.data) if isinstance(resp.data, dict) else resp.data
         assert len(data) == 1
         assert data[0]["action"] == "delete"
 
@@ -208,6 +236,6 @@ class TestAuditLogAPI:
         log_create(actor=user, resource_type="project", resource_id=1, resource_name="P1")
         resp = authed_client.get("/api/audit-logs/?resource_type=project")
         assert resp.status_code == 200
-        data = resp.data["results"] if "results" in resp.data else resp.data
+        data = resp.data.get("results", resp.data) if isinstance(resp.data, dict) else resp.data
         assert len(data) == 1
         assert data[0]["resource_type"] == "project"

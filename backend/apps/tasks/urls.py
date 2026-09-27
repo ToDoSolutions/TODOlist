@@ -1,11 +1,20 @@
 from rest_framework.routers import DefaultRouter
 
 from .views import (
-    TaskViewSet, SubtaskViewSet, CommentViewSet,
-    SprintViewSet, EpicViewSet, SavedSearchViewSet,
-    TaskRelationViewSet, TimeEntryViewSet, AttachmentViewSet,
-    TaskTemplateViewSet, CustomFieldViewSet, CustomFieldValueViewSet,
-    OutgoingWebhookViewSet, RecurrenceRuleViewSet,
+    AttachmentViewSet,
+    CommentViewSet,
+    CustomFieldValueViewSet,
+    CustomFieldViewSet,
+    EpicViewSet,
+    OutgoingWebhookViewSet,
+    RecurrenceRuleViewSet,
+    SavedSearchViewSet,
+    SprintViewSet,
+    SubtaskViewSet,
+    TaskRelationViewSet,
+    TaskTemplateViewSet,
+    TaskViewSet,
+    TimeEntryViewSet,
 )
 
 router = DefaultRouter()

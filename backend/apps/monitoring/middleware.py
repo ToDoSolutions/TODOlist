@@ -1,6 +1,7 @@
 """Middleware para capturar métricas de requests."""
 import time
-from .metrics import REQUEST_COUNT, REQUEST_LATENCY, API_CALLS
+
+from .metrics import API_CALLS, REQUEST_COUNT, REQUEST_LATENCY
 
 
 class MetricsMiddleware:
@@ -14,7 +15,20 @@ class MetricsMiddleware:
         response = self.get_response(request)
         duration = time.time() - start
 
+        # Normalizar path para evitar alta cardinalidad en Prometheus
+        # /api/tasks/123/ → /api/tasks/{id}/
         endpoint = request.path
+        parts = endpoint.split("/")
+        normalized = []
+        for part in parts:
+            if part.isdigit():
+                normalized.append("{id}")
+            elif part and len(part) > 20 and "-" in part:
+                normalized.append("{uuid}")
+            else:
+                normalized.append(part)
+        endpoint = "/".join(normalized)
+
         method = request.method
         status = response.status_code
 

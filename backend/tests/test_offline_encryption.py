@@ -1,8 +1,8 @@
 """Tests para offline sync y E2E encryption."""
-import pytest
-from django.utils import timezone
 from datetime import timedelta
 
+import pytest
+from django.utils import timezone
 
 # --- Offline Sync ---
 
@@ -47,6 +47,7 @@ class TestOfflineSync:
                     "entity_type": "task",
                     "entity_id": "client-uuid-1",
                     "payload": {"id": task.id, "title": "Updated title"},
+                    "base_version": task.version,
                     "client_timestamp": (timezone.now() + timedelta(seconds=10)).isoformat(),
                 }
             ]
@@ -68,6 +69,7 @@ class TestOfflineSync:
                     "entity_type": "task",
                     "entity_id": "client-uuid-1",
                     "payload": {"id": task_id},
+                    "base_version": task.version,
                     "client_timestamp": timezone.now().isoformat(),
                 }
             ]
@@ -78,7 +80,8 @@ class TestOfflineSync:
         assert not Task.objects.filter(id=task_id).exists()
 
     def test_pull_changes(self, authed_client, user, task):
-        resp = authed_client.get(f"/api/sync/pull/?since={(timezone.now() - timedelta(days=1)).isoformat()}")
+        since = (timezone.now() - timedelta(days=1)).isoformat().replace("+00:00", "Z")
+        resp = authed_client.get(f"/api/sync/pull/?since={since}")
         assert resp.status_code == 200
         assert "tasks" in resp.data
         assert len(resp.data["tasks"]) >= 1
@@ -126,7 +129,7 @@ class TestEncryption:
         )
         resp = authed_client.get("/api/encrypted-tasks/")
         assert resp.status_code == 200
-        data = resp.data["results"] if "results" in resp.data else resp.data
+        data = resp.data.get("results", resp.data) if isinstance(resp.data, dict) else resp.data
         assert len(data) == 1
 
     def test_share_encrypted_task(self, authed_client, user, other_user):
@@ -147,7 +150,11 @@ class TestEncryption:
         assert EncryptedKeyShare.objects.filter(encrypted_task=task, user=other_user).exists()
 
     def test_list_shared_tasks(self, authed_client, user, other_user):
-        from apps.encryption.models import EncryptedTask, UserPublicKey, EncryptedKeyShare
+        from apps.encryption.models import (
+            EncryptedKeyShare,
+            EncryptedTask,
+            UserPublicKey,
+        )
         # other_user crea una tarea y la comparte con user
         task = EncryptedTask.objects.create(
             owner=other_user, encrypted_data="secret", encryption_key_id="k1", iv="iv",

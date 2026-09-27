@@ -1,0 +1,263 @@
+﻿// Páginas de planificación: SprintsPage, EpicsPage, RoadmapPage, GanttPage,
+// BurndownPage, CapacityPage, DecisionsPage, DependenciesPage.
+// Claves namespaced bajo p.plan.*.
+// Las cadenas `es` replican exactamente los literales que estaban hardcoded.
+export default {
+  es: {
+    // SprintsPage — notifications and mutations
+    "p.plan.sprints.created": "Sprint creado",
+    "p.plan.sprints.createError": "Error al crear sprint",
+    "p.plan.sprints.activated": "Sprint activado",
+    "p.plan.sprints.deleted": "Sprint eliminado",
+    "p.plan.sprints.updated": "Sprint actualizado",
+    "p.plan.sprints.updateError": "Error al actualizar sprint",
+    // SprintsPage — estados, acciones y formulario
+    "p.plan.sprints.empty":
+      "No hay sprints. Crea tu primer sprint para empezar a planificar.",
+    "p.plan.sprints.state.planned": "Planificado",
+    "p.plan.sprints.state.active": "Activo",
+    "p.plan.sprints.state.closed": "Cerrado",
+    "p.plan.sprints.activate": "Activar",
+    "p.plan.sprints.confirmDelete":
+      '¿Eliminar el sprint "{{name}}"? Las tareas se desvinculan, no se borran.',
+    "p.plan.sprints.confirmDeleteLabel": "Eliminar sprint",
+    "p.plan.sprints.fieldGoal": "Objetivo",
+    "p.plan.sprints.editTitle": "Editar sprint",
+    "p.plan.sprints.noTasks": "No hay tareas en este sprint.",
+    // EpicsPage — notifications and mutations
+    "p.plan.epics.created": "Épica creada",
+    "p.plan.epics.createError": "Error al crear épica",
+    "p.plan.epics.updated": "Épica actualizada",
+    "p.plan.epics.updateError": "Error al actualizar épica",
+    "p.plan.epics.deleted": "Épica eliminada",
+    "p.plan.epics.deleteError": "Error al eliminar épica",
+    // EpicsPage — header and cards
+    "p.plan.epics.title": "Épicas",
+    "p.plan.epics.new": "Nueva épica",
+    "p.plan.epics.edit": "Editar épica",
+    "p.plan.epics.empty":
+      "No hay épicas. Las épicas agrupan tareas relacionadas para rastrear el progreso de iniciativas grandes.",
+    "p.plan.epics.viewTasks": "Ver tareas",
+    "p.plan.epics.confirmDelete":
+      '¿Eliminar la épica "{{title}}"? Las tareas no se eliminan.',
+    "p.plan.epics.confirmDeleteLabel": "Eliminar épica",
+    "p.plan.epics.statePlanned": "Planificada",
+    // EpicsPage — form
+    "p.plan.epics.fieldTitle": "Título",
+    "p.plan.epics.fieldDescription": "Descripción",
+    "p.plan.epics.fieldProject": "Proyecto",
+    "p.plan.epics.noProject": "Sin proyecto",
+    "p.plan.epics.fieldState": "Estado",
+    "p.plan.epics.startDate": "Fecha de inicio",
+    "p.plan.epics.endDate": "Fecha de fin",
+    // EpicsPage — tasks dialog
+    "p.plan.epics.tasksOf": 'Tareas de "{{title}}" ({{count}})',
+    "p.plan.epics.viewInTasks": "Ver en bandeja de tareas",
+    "p.plan.epics.noTasks": "No hay tareas en esta épica.",
+    // RoadmapPage
+    "p.plan.roadmap.title": "Roadmap",
+    "p.plan.roadmap.loadError": "No se pudo cargar el roadmap.",
+    "p.plan.roadmap.empty": "No hay épicas ni sprints con fechas",
+    "p.plan.roadmap.noDates": "sin fechas",
+    "p.plan.roadmap.moreTasks": "… +{{count}} más",
+    // GanttPage
+    "p.plan.gantt.title": "Gantt Chart",
+    "p.plan.gantt.loadError": "No se pudieron cargar los datos del Gantt.",
+    "p.plan.gantt.noProject": "Sin proyecto",
+    "p.plan.gantt.mobileTitle": "Cronología",
+    "p.plan.gantt.mobileHint":
+      "Vista de agenda del Gantt. La vista completa está disponible en escritorio.",
+    "p.plan.gantt.noDatedTasks": "No hay tareas con fechas",
+    "p.plan.gantt.sprintsHeading": "Sprints",
+    "p.plan.gantt.tasksHeading": "Tareas ({{count}})",
+    "p.plan.gantt.empty":
+      "No hay tareas ni sprints con fechas para mostrar en el Gantt. Asigna fechas de inicio o entrega a tus tareas para verlas aquí.",
+    "p.plan.gantt.taskColumn": "Tarea",
+    "p.plan.gantt.implicit": "(implícita)",
+    "p.plan.gantt.noDates": "Sin fechas",
+    "p.plan.gantt.pointsShort": "{{count}}pt",
+    // BurndownPage
+    "p.plan.burndown.title": "Burndown Chart",
+    "p.plan.burndown.sprintLabel": "Sprint",
+    "p.plan.burndown.selectSprint": "Selecciona un sprint",
+    "p.plan.burndown.loadError": "No se pudieron cargar los datos del burndown.",
+    "p.plan.burndown.noData": "Sin datos para este sprint",
+    "p.plan.burndown.pointsChip": "{{count}} pts",
+    "p.plan.burndown.tasksChip": "{{count}} tareas",
+    "p.plan.burndown.ideal": "Ideal",
+    "p.plan.burndown.actual": "Actual",
+    "p.plan.burndown.axesHint": "Eje X: días del sprint · Eje Y: puntos restantes",
+    "p.plan.burndown.titleBurnup": "Burnup Chart",
+    "p.plan.burndown.modeBurndown": "Burndown",
+    "p.plan.burndown.modeBurnup": "Burnup",
+    "p.plan.burndown.completed": "Completado",
+    "p.plan.burndown.scope": "Scope",
+    "p.plan.burndown.axesHintBurnup": "Eje X: días del sprint · Eje Y: puntos acumulados",
+    // CapacityPage
+    "p.plan.capacity.title": "Capacity Planning",
+    "p.plan.capacity.loadError": "No se pudieron cargar los datos de capacidad.",
+    "p.plan.capacity.noData": "Sin datos",
+    "p.plan.capacity.pointsChip": "{{count}}pt",
+    "p.plan.capacity.openChip": "{{count}} abiertas",
+    "p.plan.capacity.inProgressChip": "{{count}} en progreso",
+    "p.plan.capacity.blockedChip": "{{count}} bloqueadas",
+    // DecisionsPage
+    "p.plan.decisions.title": "Registro de decisiones",
+    "p.plan.decisions.desc": "{{count}} reuniones con decisiones documentadas.",
+    "p.plan.decisions.breadcrumbKnowledge": "Conocimiento",
+    "p.plan.decisions.breadcrumb": "Decisiones",
+    "p.plan.decisions.searchPlaceholder": "Buscar en decisiones…",
+    "p.plan.decisions.emptyTitle": "Sin decisiones registradas",
+    "p.plan.decisions.emptyDesc":
+      "Las decisiones se documentan en la pestaña de cada reunión.",
+    "p.plan.decisions.goToMeetings": "Ir a reuniones",
+    // DependenciesPage
+    "p.plan.dependencies.title": "Dependencias",
+    "p.plan.dependencies.desc":
+      "Qué bloquea a una tarea y a qué tareas bloquea. Detecta cadenas cíclicas.",
+    "p.plan.dependencies.breadcrumbProject": "Proyecto",
+    "p.plan.dependencies.taskLabel": "Tarea",
+    "p.plan.dependencies.selectTask": "Selecciona una tarea",
+    "p.plan.dependencies.emptyDesc":
+      "Verás qué la bloquea, qué bloquea y si hay ciclos en la cadena.",
+    "p.plan.dependencies.loadError": "No se pudieron cargar las dependencias.",
+    "p.plan.dependencies.blockedBy_one":
+      "Esta tarea está bloqueada por {{count}} elemento pendiente.",
+    "p.plan.dependencies.blockedBy_other":
+      "Esta tarea está bloqueada por {{count}} elementos pendientes.",
+    "p.plan.dependencies.cycleDetected":
+      "Ciclo detectado: {{path}}. Las tareas se bloquean mutuamente en cadena; revisa las relaciones.",
+    "p.plan.dependencies.blockedByCount": "La bloquean ({{count}})",
+    "p.plan.dependencies.nothingBlocks": "Nada la bloquea.",
+    "p.plan.dependencies.blocksCount": "Bloquea a ({{count}})",
+    "p.plan.dependencies.blocksNothing": "No bloquea nada.",
+    "p.plan.dependencies.relatedCount": "Relacionadas ({{count}})",
+  } as Record<string, string>,
+  en: {
+    // SprintsPage — notifications and mutations
+    "p.plan.sprints.created": "Sprint created",
+    "p.plan.sprints.createError": "Error creating sprint",
+    "p.plan.sprints.activated": "Sprint activated",
+    "p.plan.sprints.deleted": "Sprint deleted",
+    "p.plan.sprints.updated": "Sprint updated",
+    "p.plan.sprints.updateError": "Error updating sprint",
+    // SprintsPage — states, actions and form
+    "p.plan.sprints.empty": "No sprints. Create your first sprint to start planning.",
+    "p.plan.sprints.state.planned": "Planned",
+    "p.plan.sprints.state.active": "Active",
+    "p.plan.sprints.state.closed": "Closed",
+    "p.plan.sprints.activate": "Activate",
+    "p.plan.sprints.confirmDelete":
+      'Delete sprint "{{name}}"? Tasks are unlinked, not deleted.',
+    "p.plan.sprints.confirmDeleteLabel": "Delete sprint",
+    "p.plan.sprints.fieldGoal": "Goal",
+    "p.plan.sprints.editTitle": "Edit sprint",
+    "p.plan.sprints.noTasks": "No tasks in this sprint.",
+    // EpicsPage — notifications and mutations
+    "p.plan.epics.created": "Epic created",
+    "p.plan.epics.createError": "Error creating epic",
+    "p.plan.epics.updated": "Epic updated",
+    "p.plan.epics.updateError": "Error updating epic",
+    "p.plan.epics.deleted": "Epic deleted",
+    "p.plan.epics.deleteError": "Error deleting epic",
+    // EpicsPage — header and cards
+    "p.plan.epics.title": "Epics",
+    "p.plan.epics.new": "New epic",
+    "p.plan.epics.edit": "Edit epic",
+    "p.plan.epics.empty":
+      "No epics. Epics group related tasks to track progress on large initiatives.",
+    "p.plan.epics.viewTasks": "View tasks",
+    "p.plan.epics.confirmDelete": 'Delete the epic "{{title}}"? Tasks are not deleted.',
+    "p.plan.epics.confirmDeleteLabel": "Delete epic",
+    "p.plan.epics.statePlanned": "Planned",
+    // EpicsPage — form
+    "p.plan.epics.fieldTitle": "Title",
+    "p.plan.epics.fieldDescription": "Description",
+    "p.plan.epics.fieldProject": "Project",
+    "p.plan.epics.noProject": "No project",
+    "p.plan.epics.fieldState": "State",
+    "p.plan.epics.startDate": "Start date",
+    "p.plan.epics.endDate": "End date",
+    // EpicsPage — tasks dialog
+    "p.plan.epics.tasksOf": 'Tasks of "{{title}}" ({{count}})',
+    "p.plan.epics.viewInTasks": "View in task inbox",
+    "p.plan.epics.noTasks": "No tasks in this epic.",
+    // RoadmapPage
+    "p.plan.roadmap.title": "Roadmap",
+    "p.plan.roadmap.loadError": "Error loading roadmap",
+    "p.plan.roadmap.empty": "No epics or sprints with dates",
+    "p.plan.roadmap.noDates": "no dates",
+    "p.plan.roadmap.moreTasks": "… +{{count}} more",
+    // GanttPage
+    "p.plan.gantt.title": "Gantt Chart",
+    "p.plan.gantt.loadError": "Could not load Gantt data.",
+    "p.plan.gantt.noProject": "No project",
+    "p.plan.gantt.mobileTitle": "Timeline",
+    "p.plan.gantt.mobileHint":
+      "Agenda view of the Gantt. The full view is available on desktop.",
+    "p.plan.gantt.noDatedTasks": "No tasks with dates",
+    "p.plan.gantt.sprintsHeading": "Sprints",
+    "p.plan.gantt.tasksHeading": "Tasks ({{count}})",
+    "p.plan.gantt.empty":
+      "No tasks or sprints with dates to show in the Gantt. Assign start or due dates to your tasks to see them here.",
+    "p.plan.gantt.taskColumn": "Task",
+    "p.plan.gantt.implicit": "(implicit)",
+    "p.plan.gantt.noDates": "No dates",
+    "p.plan.gantt.pointsShort": "{{count}}pt",
+    // BurndownPage
+    "p.plan.burndown.title": "Burndown Chart",
+    "p.plan.burndown.sprintLabel": "Sprint",
+    "p.plan.burndown.selectSprint": "Select a sprint",
+    "p.plan.burndown.loadError": "Could not load burndown data.",
+    "p.plan.burndown.noData": "No data for this sprint",
+    "p.plan.burndown.pointsChip": "{{count}} pts",
+    "p.plan.burndown.tasksChip": "{{count}} tasks",
+    "p.plan.burndown.ideal": "Ideal",
+    "p.plan.burndown.actual": "Actual",
+    "p.plan.burndown.axesHint": "X axis: sprint days · Y axis: remaining points",
+    "p.plan.burndown.titleBurnup": "Burnup Chart",
+    "p.plan.burndown.modeBurndown": "Burndown",
+    "p.plan.burndown.modeBurnup": "Burnup",
+    "p.plan.burndown.completed": "Completed",
+    "p.plan.burndown.scope": "Scope",
+    "p.plan.burndown.axesHintBurnup": "X axis: sprint days · Y axis: cumulative points",
+    // CapacityPage
+    "p.plan.capacity.title": "Capacity Planning",
+    "p.plan.capacity.loadError": "Could not load capacity data.",
+    "p.plan.capacity.noData": "No data",
+    "p.plan.capacity.pointsChip": "{{count}}pt",
+    "p.plan.capacity.openChip": "{{count}} open",
+    "p.plan.capacity.inProgressChip": "{{count}} in progress",
+    "p.plan.capacity.blockedChip": "{{count}} blocked",
+    // DecisionsPage
+    "p.plan.decisions.title": "Decision log",
+    "p.plan.decisions.desc": "{{count}} meetings with documented decisions.",
+    "p.plan.decisions.breadcrumbKnowledge": "Knowledge",
+    "p.plan.decisions.breadcrumb": "Decisions",
+    "p.plan.decisions.searchPlaceholder": "Search decisions…",
+    "p.plan.decisions.emptyTitle": "No decisions recorded",
+    "p.plan.decisions.emptyDesc": "Decisions are documented in each meeting's tab.",
+    "p.plan.decisions.goToMeetings": "Go to meetings",
+    // DependenciesPage
+    "p.plan.dependencies.title": "Dependencies",
+    "p.plan.dependencies.desc":
+      "What blocks a task and which tasks it blocks. Detects cyclic chains.",
+    "p.plan.dependencies.breadcrumbProject": "Project",
+    "p.plan.dependencies.taskLabel": "Task",
+    "p.plan.dependencies.selectTask": "Select a task",
+    "p.plan.dependencies.emptyDesc":
+      "You'll see what blocks it, what it blocks, and whether there are cycles in the chain.",
+    "p.plan.dependencies.loadError": "Could not load dependencies.",
+    "p.plan.dependencies.blockedBy_one":
+      "This task is blocked by {{count}} pending item.",
+    "p.plan.dependencies.blockedBy_other":
+      "This task is blocked by {{count}} pending items.",
+    "p.plan.dependencies.cycleDetected":
+      "Cycle detected: {{path}}. Tasks block each other in a chain; review the relations.",
+    "p.plan.dependencies.blockedByCount": "Blocked by ({{count}})",
+    "p.plan.dependencies.nothingBlocks": "Nothing blocks it.",
+    "p.plan.dependencies.blocksCount": "Blocks ({{count}})",
+    "p.plan.dependencies.blocksNothing": "Blocks nothing.",
+    "p.plan.dependencies.relatedCount": "Related ({{count}})",
+  } as Record<string, string>,
+};

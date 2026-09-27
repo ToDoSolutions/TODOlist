@@ -23,6 +23,7 @@ class AutomationRule(models.Model):
         SPRINT_STARTED = "sprint_started", "Sprint iniciado"
         SPRINT_CLOSED = "sprint_closed", "Sprint cerrado"
         DAILY_CHECK = "daily_check", "Chequeo diario"
+        SCHEDULED = "scheduled", "Programada (cada N horas)"
 
     class Action(models.TextChoices):
         SET_PRIORITY = "set_priority", "Cambiar prioridad"
@@ -34,6 +35,10 @@ class AutomationRule(models.Model):
         SUBTASKS_IN_PROGRESS = "subtasks_in_progress", "Subtareas a in_progress"
         CREATE_NOTIFICATION = "create_notification", "Crear notificación"
         CREATE_TASK = "create_task", "Crear tarea"
+        CREATE_SUBTASK = "create_subtask", "Crear subtarea (checklist)"
+        SET_DUE_OFFSET = "set_due_offset", "Fecha límite en N días"
+        POST_COMMENT = "post_comment", "Publicar comentario"
+        MOVE_TO_PROJECT = "move_to_project", "Mover a proyecto"
 
     class ConditionOperator(models.TextChoices):
         EQUALS = "equals", "Igual a"
@@ -57,6 +62,11 @@ class AutomationRule(models.Model):
     # Action
     action = models.CharField(max_length=30, choices=Action.choices)
     action_params = models.JSONField(default=dict, blank=True)
+    # Para trigger SCHEDULED: intervalo en horas entre ejecuciones
+    schedule_hours = models.PositiveIntegerField(
+        default=24,
+        help_text="Intervalo en horas para reglas SCHEDULED (p.ej. 8, 24, 168)",
+    )
     # Stats
     trigger_count = models.PositiveIntegerField(default=0)
     last_triggered_at = models.DateTimeField(null=True, blank=True)
@@ -68,6 +78,50 @@ class AutomationRule(models.Model):
 
     def __str__(self):
         return f"{self.name} ({self.trigger} → {self.action})"
+
+
+class SlaPolicy(models.Model):
+    """Política SLA: tiempos objetivo por prioridad + acción de escalado.
+
+    El daily check marca como vencidas (breach) las tareas que superan
+    `resolution_hours` desde su creación y aplica la escalación:
+    - bump_priority: sube la prioridad un nivel
+    - notify_owner / notify_assignee: notificación de incumplimiento
+    """
+
+    owner = models.ForeignKey(
+        settings.AUTH_USER_MODEL,
+        on_delete=models.CASCADE,
+        related_name="sla_policies",
+    )
+    name = models.CharField(max_length=255)
+    priority = models.PositiveSmallIntegerField(
+        help_text="Prioridad de las tareas a las que aplica (P0-P5)"
+    )
+    response_hours = models.PositiveIntegerField(
+        default=24,
+        help_text="Horas máximas hasta que la tarea se empieza (in_progress)",
+    )
+    resolution_hours = models.PositiveIntegerField(
+        default=72,
+        help_text="Horas máximas hasta que la tarea se completa",
+    )
+    bump_priority = models.BooleanField(
+        default=True,
+        help_text="Escalar prioridad un nivel al incumplir el SLA",
+    )
+    notify_owner = models.BooleanField(default=True)
+    notify_assignee = models.BooleanField(default=True)
+    enabled = models.BooleanField(default=True)
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        ordering = ["priority"]
+        unique_together = ("owner", "priority")
+
+    def __str__(self):
+        return f"{self.name} (P{self.priority}: {self.resolution_hours}h)"
 
 
 class AutomationLog(models.Model):

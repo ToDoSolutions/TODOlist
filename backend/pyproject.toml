@@ -1,0 +1,16 @@
+[tool.mutmut]
+source_paths = ["apps/"]
+
+pytest_add_cli_args_test_selection = ["tests/", "-m", "not contract"]
+pytest_add_cli_args = ["-p", "no:django", "-o", "addopts=", "--tb=short"]
+mutate_only_covered_lines = true
+also_copy = ["conftest.py", "config/", ".env", "pytest.ini", "manage.py"]
+
+[tool.ruff]
+line-length = 120
+target-version = "py311"
+
+[tool.ruff.lint]
+# RUF012: los atributos de clase mutables (permission_classes, filterset_fields,
+# serializer_class...) son el idiom canónico de DRF, no un bug real.
+ignore = ["RUF012"]

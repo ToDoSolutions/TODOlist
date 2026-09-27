@@ -1,9 +1,11 @@
 """Tests de tareas recurrentes: creacion, generacion de ocurrencias."""
+
+from datetime import UTC
+
 import pytest
 from django.utils import timezone
-from datetime import timedelta
 
-from apps.tasks.models import Task, RecurrenceRule
+from apps.tasks.models import RecurrenceRule, Task
 
 
 @pytest.mark.django_db
@@ -126,3 +128,27 @@ class TestRecurrenceGeneration:
         new_task = Task.objects.filter(owner=user, state="pending", recurrence=rule).first()
         assert new_task is not None
         assert tag in new_task.tags.all()
+
+
+@pytest.mark.django_db
+class TestRecurrenceCalendarMath:
+    def test_monthly_respeta_meses_reales(self, user):
+        from datetime import datetime
+
+        from apps.tasks.models import RecurrenceRule
+        # 31 de enero + 1 mes debe ser ~28 feb, no 2 marzo
+        rule = RecurrenceRule.objects.create(owner=user, frequency='monthly', interval=1)
+        base = datetime(2025, 1, 31, 10, 0, tzinfo=UTC)
+        nxt = rule.next_due_date(base)
+        assert nxt.month == 2 and nxt.day == 28
+
+    def test_yearly_respeta_bisiestos(self, user):
+        from datetime import datetime
+
+        from apps.tasks.models import RecurrenceRule
+        rule = RecurrenceRule.objects.create(owner=user, frequency='yearly', interval=1)
+        base = datetime(2024, 2, 29, 10, 0, tzinfo=UTC)
+        nxt = rule.next_due_date(base)
+        # 29 feb 2024 + 1 año = 28 feb 2025 (no 1 marzo)
+        assert nxt.year == 2025 and nxt.month == 2 and nxt.day == 28
+

@@ -1,4 +1,4 @@
-import { useState, useMemo } from "react";
+import { useState, useMemo, useCallback } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import {
   Box,
@@ -28,18 +28,21 @@ import {
   ToggleButtonGroup,
   ToggleButton,
   Divider,
+  useTheme,
 } from "@mui/material";
 import { Plus, Pencil, Trash2, Clock, Timer, BarChart3 } from "lucide-react";
+import { useTranslation } from "react-i18next";
 import { timeEntriesApi, tasksApi, projectsApi } from "../api/resources";
 import { notify } from "../notify";
-import type { Task } from "../types";
+import { DateField } from "../components/DateField";
+import type { Task, Project } from "../types";
 
 interface TimeEntry {
   id: number;
   task: number;
   task_title?: string;
-  duration: number; // minutes
-  date: string;
+  duration_seconds: number;
+  started_at: string;
   description?: string;
 }
 
@@ -67,6 +70,22 @@ function formatDuration(minutes: number): string {
   return `${h}h ${m}m`;
 }
 
+/** Convierte segundos del backend a minutos para la UI */
+function secondsToMinutes(seconds: number): number {
+  return Math.round((seconds || 0) / 60);
+}
+
+/** Convierte minutos de la UI a segundos para el backend */
+function minutesToSeconds(minutes: number): number {
+  return Math.round(minutes * 60);
+}
+
+/** Extrae la fecha (YYYY-MM-DD) desde un ISO datetime del backend */
+function dateFromISO(iso: string): string {
+  if (!iso) return "";
+  return iso.slice(0, 10);
+}
+
 function startOfWeek(date: Date): Date {
   const d = new Date(date);
   const day = d.getDay(); // 0 = Sunday
@@ -92,6 +111,8 @@ function isSameDay(a: Date, b: Date): boolean {
 }
 
 export default function TimeEntriesPage() {
+  const { t } = useTranslation();
+  const theme = useTheme();
   const qc = useQueryClient();
   const [open, setOpen] = useState(false);
   const [editing, setEditing] = useState<TimeEntry | null>(null);
@@ -103,15 +124,22 @@ export default function TimeEntriesPage() {
     queryKey: ["time-entries"],
     queryFn: timeEntriesApi.list,
   });
-  const entries: TimeEntry[] = Array.isArray(entriesData)
-    ? entriesData
-    : (entriesData as any)?.results ?? [];
+  const entries: TimeEntry[] = useMemo(
+    () =>
+      Array.isArray(entriesData)
+        ? entriesData
+        : ((entriesData as { results?: TimeEntry[] } | undefined)?.results ?? []),
+    [entriesData],
+  );
 
   const { data: tasksData } = useQuery({
     queryKey: ["tasks-for-selector"],
     queryFn: () => tasksApi.list(),
   });
-  const tasks: Task[] = Array.isArray(tasksData) ? tasksData : [];
+  const tasks: Task[] = useMemo(
+    () => (Array.isArray(tasksData) ? tasksData : []),
+    [tasksData],
+  );
 
   const { data: projectsData } = useQuery({
     queryKey: ["projects-for-timeentries"],
@@ -119,8 +147,10 @@ export default function TimeEntriesPage() {
   });
   const projectMap = useMemo(() => {
     const m = new Map<number, string>();
-    const list = Array.isArray(projectsData) ? projectsData : (projectsData as any)?.results || [];
-    list.forEach((p: any) => m.set(p.id, p.name));
+    const list = Array.isArray(projectsData)
+      ? projectsData
+      : (projectsData as { results?: Project[] } | undefined)?.results || [];
+    list.forEach((p) => m.set(p.id, p.name));
     return m;
   }, [projectsData]);
 
@@ -141,15 +171,18 @@ export default function TimeEntriesPage() {
     return m;
   }, [tasks]);
 
-  const getTaskTitle = (taskId: number) =>
-    taskTitleMap.get(taskId) ?? `Tarea #${taskId}`;
+  const getTaskTitle = useCallback(
+    (taskId: number) =>
+      taskTitleMap.get(taskId) ?? t("p.ops.taskFallback", { id: taskId }),
+    [taskTitleMap, t],
+  );
 
   // Filtered entries based on date filter
   const filteredEntries = useMemo(() => {
     if (dateFilter === "all") return entries;
     const now = new Date();
     return entries.filter((e) => {
-      const d = new Date(e.date + "T00:00:00");
+      const d = new Date(dateFromISO(e.started_at) + "T00:00:00");
       if (dateFilter === "today") return isSameDay(d, now);
       if (dateFilter === "week") return d >= startOfWeek(now);
       if (dateFilter === "month") return d >= startOfMonth(now);
@@ -164,17 +197,20 @@ export default function TimeEntriesPage() {
     const monthStart = startOfMonth(now);
 
     const weekMinutes = entries
-      .filter((e) => new Date(e.date + "T00:00:00") >= weekStart)
-      .reduce((sum, e) => sum + (e.duration || 0), 0);
+      .filter((e) => new Date(dateFromISO(e.started_at) + "T00:00:00") >= weekStart)
+      .reduce((sum, e) => sum + (secondsToMinutes(e.duration_seconds) || 0), 0);
 
     const monthMinutes = entries
-      .filter((e) => new Date(e.date + "T00:00:00") >= monthStart)
-      .reduce((sum, e) => sum + (e.duration || 0), 0);
+      .filter((e) => new Date(dateFromISO(e.started_at) + "T00:00:00") >= monthStart)
+      .reduce((sum, e) => sum + (secondsToMinutes(e.duration_seconds) || 0), 0);
 
     // Time per task (top 5) - based on filtered entries
     const perTask = new Map<number, number>();
     filteredEntries.forEach((e) => {
-      perTask.set(e.task, (perTask.get(e.task) || 0) + (e.duration || 0));
+      perTask.set(
+        e.task,
+        (perTask.get(e.task) || 0) + (secondsToMinutes(e.duration_seconds) || 0),
+      );
     });
     const topTasks = Array.from(perTask.entries())
       .map(([taskId, minutes]) => ({ taskId, minutes, title: getTaskTitle(taskId) }))
@@ -187,7 +223,10 @@ export default function TimeEntriesPage() {
     filteredEntries.forEach((e) => {
       const projId = taskProjectMap.get(e.task);
       if (projId != null) {
-        perProject.set(projId, (perProject.get(projId) || 0) + (e.duration || 0));
+        perProject.set(
+          projId,
+          (perProject.get(projId) || 0) + (secondsToMinutes(e.duration_seconds) || 0),
+        );
         projectHasEntries.add(projId);
       }
     });
@@ -196,8 +235,8 @@ export default function TimeEntriesPage() {
       .sort((a, b) => b.minutes - a.minutes);
 
     const filteredTotal = filteredEntries.reduce(
-      (sum, e) => sum + (e.duration || 0),
-      0
+      (sum, e) => sum + (secondsToMinutes(e.duration_seconds) || 0),
+      0,
     );
 
     return {
@@ -208,7 +247,7 @@ export default function TimeEntriesPage() {
       filteredTotal,
       hasProjectInfo: projectHasEntries.size > 0,
     };
-  }, [entries, filteredEntries, taskTitleMap, taskProjectMap]);
+  }, [entries, filteredEntries, taskProjectMap, getTaskTitle]);
 
   // Group filtered entries by task
   const groupedEntries = useMemo(() => {
@@ -223,52 +262,54 @@ export default function TimeEntriesPage() {
       .map(([taskId, items]) => ({
         taskId,
         title: getTaskTitle(taskId),
-        items: items.sort((a, b) => (a.date < b.date ? 1 : -1)),
-        total: items.reduce((s, e) => s + (e.duration || 0), 0),
+        items: items.sort((a, b) =>
+          dateFromISO(a.started_at) < dateFromISO(b.started_at) ? 1 : -1,
+        ),
+        total: items.reduce((s, e) => s + (secondsToMinutes(e.duration_seconds) || 0), 0),
       }))
       .sort((a, b) => b.total - a.total);
-  }, [filteredEntries, taskTitleMap]);
+  }, [filteredEntries, getTaskTitle]);
 
   const createMut = useMutation({
     mutationFn: () =>
       timeEntriesApi.create({
         task: Number(form.task),
-        duration: Number(form.duration),
+        duration_seconds: minutesToSeconds(Number(form.duration)),
         description: form.description,
-        date: form.date,
+        started_at: new Date(form.date + "T09:00:00").toISOString(),
       }),
     onSuccess: () => {
-      notify.success("Registro de tiempo creado");
+      notify.success(t("p.ops.time.created"));
       qc.invalidateQueries({ queryKey: ["time-entries"] });
       setOpen(false);
     },
-    onError: () => notify.error("No se pudo crear el registro"),
+    onError: () => notify.error(t("p.ops.time.createError")),
   });
 
   const updateMut = useMutation({
     mutationFn: () =>
       timeEntriesApi.update(editing!.id, {
         task: Number(form.task),
-        duration: Number(form.duration),
+        duration_seconds: minutesToSeconds(Number(form.duration)),
         description: form.description,
-        date: form.date,
+        started_at: new Date(form.date + "T09:00:00").toISOString(),
       }),
     onSuccess: () => {
-      notify.success("Registro de tiempo actualizado");
+      notify.success(t("p.ops.time.updated"));
       qc.invalidateQueries({ queryKey: ["time-entries"] });
       setOpen(false);
     },
-    onError: () => notify.error("No se pudo actualizar"),
+    onError: () => notify.error(t("p.ops.time.updateError")),
   });
 
   const deleteMut = useMutation({
     mutationFn: (id: number) => timeEntriesApi.delete(id),
     onSuccess: () => {
-      notify.success("Registro de tiempo eliminado");
+      notify.success(t("p.ops.time.deleted"));
       qc.invalidateQueries({ queryKey: ["time-entries"] });
       setDeleteId(null);
     },
-    onError: () => notify.error("No se pudo eliminar"),
+    onError: () => notify.error(t("p.ops.time.deleteError")),
   });
 
   const openNew = () => {
@@ -281,9 +322,9 @@ export default function TimeEntriesPage() {
     setEditing(e);
     setForm({
       task: String(e.task),
-      duration: String(e.duration),
+      duration: String(secondsToMinutes(e.duration_seconds)),
       description: e.description ?? "",
-      date: e.date ?? "",
+      date: dateFromISO(e.started_at) ?? "",
     });
     setOpen(true);
   };
@@ -298,10 +339,10 @@ export default function TimeEntriesPage() {
     <Box maxWidth={900} mx="auto">
       <Stack direction="row" alignItems="center" justifyContent="space-between" mb={2}>
         <Typography variant="h5" fontWeight={700}>
-          Registros de tiempo
+          {t("p.ops.time.title")}
         </Typography>
         <Button variant="contained" startIcon={<Plus size={18} />} onClick={openNew}>
-          Nuevo registro
+          {t("p.ops.time.new")}
         </Button>
       </Stack>
 
@@ -310,13 +351,13 @@ export default function TimeEntriesPage() {
         <Stack direction="row" alignItems="center" spacing={1} mb={2}>
           <BarChart3 size={20} />
           <Typography variant="subtitle1" fontWeight={700}>
-            Estadísticas
+            {t("p.ops.time.stats")}
           </Typography>
         </Stack>
         <Stack direction={{ xs: "column", sm: "row" }} spacing={2} flexWrap="wrap">
           <Box sx={{ flex: "1 1 auto", minWidth: 140 }}>
             <Typography variant="caption" color="text.secondary">
-              Tiempo esta semana
+              {t("p.ops.time.week")}
             </Typography>
             <Typography variant="h6" fontWeight={700}>
               {formatDuration(stats.weekMinutes)}
@@ -324,7 +365,7 @@ export default function TimeEntriesPage() {
           </Box>
           <Box sx={{ flex: "1 1 auto", minWidth: 140 }}>
             <Typography variant="caption" color="text.secondary">
-              Tiempo este mes
+              {t("p.ops.time.month")}
             </Typography>
             <Typography variant="h6" fontWeight={700}>
               {formatDuration(stats.monthMinutes)}
@@ -332,7 +373,7 @@ export default function TimeEntriesPage() {
           </Box>
           <Box sx={{ flex: "1 1 auto", minWidth: 140 }}>
             <Typography variant="caption" color="text.secondary">
-              Total (filtro actual)
+              {t("p.ops.time.totalFiltered")}
             </Typography>
             <Typography variant="h6" fontWeight={700}>
               {formatDuration(stats.filteredTotal)}
@@ -345,11 +386,11 @@ export default function TimeEntriesPage() {
         <Stack direction={{ xs: "column", md: "row" }} spacing={3}>
           <Box sx={{ flex: 1 }}>
             <Typography variant="subtitle2" fontWeight={600} mb={1}>
-              Tiempo por tarea (top 5)
+              {t("p.ops.time.perTask")}
             </Typography>
             {stats.topTasks.length === 0 ? (
               <Typography variant="body2" color="text.secondary">
-                Sin datos
+                {t("p.ops.time.noData")}
               </Typography>
             ) : (
               <Stack spacing={0.5}>
@@ -382,11 +423,11 @@ export default function TimeEntriesPage() {
           {stats.hasProjectInfo && (
             <Box sx={{ flex: 1 }}>
               <Typography variant="subtitle2" fontWeight={600} mb={1}>
-                Tiempo por proyecto
+                {t("p.ops.time.perProject")}
               </Typography>
               {stats.topProjects.length === 0 ? (
                 <Typography variant="body2" color="text.secondary">
-                  Sin datos
+                  {t("p.ops.time.noData")}
                 </Typography>
               ) : (
                 <Stack spacing={0.5}>
@@ -398,7 +439,8 @@ export default function TimeEntriesPage() {
                       alignItems="center"
                     >
                       <Typography variant="body2">
-                        {projectMap.get(p.projectId) || `Proyecto #${p.projectId}`}
+                        {projectMap.get(p.projectId) ||
+                          t("p.ops.projectFallback", { id: p.projectId })}
                       </Typography>
                       <Chip
                         size="small"
@@ -417,7 +459,7 @@ export default function TimeEntriesPage() {
       {/* Date filter */}
       <Stack direction="row" alignItems="center" spacing={1} mb={2}>
         <Typography variant="body2" color="text.secondary">
-          Filtrar por fecha:
+          {t("p.ops.time.filterByDate")}
         </Typography>
         <ToggleButtonGroup
           size="small"
@@ -425,10 +467,10 @@ export default function TimeEntriesPage() {
           exclusive
           onChange={(_, v: DateFilter | null) => v && setDateFilter(v)}
         >
-          <ToggleButton value="today">Hoy</ToggleButton>
-          <ToggleButton value="week">Esta semana</ToggleButton>
-          <ToggleButton value="month">Este mes</ToggleButton>
-          <ToggleButton value="all">Todo</ToggleButton>
+          <ToggleButton value="today">{t("p.ops.time.filterToday")}</ToggleButton>
+          <ToggleButton value="week">{t("p.ops.time.filterWeek")}</ToggleButton>
+          <ToggleButton value="month">{t("p.ops.time.filterMonth")}</ToggleButton>
+          <ToggleButton value="all">{t("p.ops.time.filterAll")}</ToggleButton>
         </ToggleButtonGroup>
       </Stack>
 
@@ -438,9 +480,9 @@ export default function TimeEntriesPage() {
         </Box>
       ) : filteredEntries.length === 0 ? (
         <Paper variant="outlined" sx={{ p: 6, textAlign: "center" }}>
-          <Clock size={32} style={{ color: "#bbb" }} />
+          <Clock size={32} style={{ color: theme.palette.divider }} />
           <Typography color="text.secondary" mt={1}>
-            No hay registros de tiempo para este filtro. Crea uno para empezar a rastrear tu tiempo.
+            {t("p.ops.time.empty")}
           </Typography>
         </Paper>
       ) : (
@@ -458,7 +500,7 @@ export default function TimeEntriesPage() {
                 }}
               >
                 <Stack direction="row" alignItems="center" spacing={1}>
-                  <Clock size={16} style={{ color: "#888" }} />
+                  <Clock size={16} style={{ color: theme.palette.text.secondary }} />
                   <Typography variant="subtitle2" fontWeight={700} noWrap>
                     {group.title}
                   </Typography>
@@ -472,10 +514,10 @@ export default function TimeEntriesPage() {
               <Table size="small">
                 <TableHead>
                   <TableRow>
-                    <TableCell>Duración</TableCell>
-                    <TableCell>Fecha</TableCell>
-                    <TableCell>Descripción</TableCell>
-                    <TableCell align="right">Acciones</TableCell>
+                    <TableCell>{t("p.ops.time.colDuration")}</TableCell>
+                    <TableCell>{t("p.ops.date")}</TableCell>
+                    <TableCell>{t("p.ops.description")}</TableCell>
+                    <TableCell align="right">{t("p.ops.actions")}</TableCell>
                   </TableRow>
                 </TableHead>
                 <TableBody>
@@ -485,10 +527,10 @@ export default function TimeEntriesPage() {
                         <Chip
                           size="small"
                           icon={<Timer size={14} />}
-                          label={formatDuration(e.duration)}
+                          label={formatDuration(secondsToMinutes(e.duration_seconds))}
                         />
                       </TableCell>
-                      <TableCell>{e.date}</TableCell>
+                      <TableCell>{dateFromISO(e.started_at)}</TableCell>
                       <TableCell>
                         <Typography
                           variant="body2"
@@ -500,12 +542,12 @@ export default function TimeEntriesPage() {
                         </Typography>
                       </TableCell>
                       <TableCell align="right">
-                        <Tooltip title="Editar">
+                        <Tooltip title={t("common.edit")}>
                           <IconButton size="small" onClick={() => openEdit(e)}>
                             <Pencil size={16} />
                           </IconButton>
                         </Tooltip>
-                        <Tooltip title="Eliminar">
+                        <Tooltip title={t("common.delete")}>
                           <IconButton size="small" onClick={() => setDeleteId(e.id)}>
                             <Trash2 size={16} />
                           </IconButton>
@@ -523,22 +565,24 @@ export default function TimeEntriesPage() {
       {/* Create / Edit dialog */}
       <Dialog open={open} onClose={() => setOpen(false)} fullWidth maxWidth="sm">
         <DialogTitle>
-          {editing ? "Editar registro de tiempo" : "Nuevo registro de tiempo"}
+          {editing ? t("p.ops.time.editTitle") : t("p.ops.time.newTitle")}
         </DialogTitle>
         <DialogContent>
           <Stack spacing={2} sx={{ mt: 1 }}>
             <FormControl fullWidth required error={!form.task}>
-              <InputLabel id="task-select-label">Tarea *</InputLabel>
+              <InputLabel id="task-select-label">
+                {t("p.ops.time.taskRequired")}
+              </InputLabel>
               <Select
                 labelId="task-select-label"
-                label="Tarea *"
+                label={t("p.ops.time.taskRequired")}
                 value={form.task}
                 onChange={(e) => setForm({ ...form, task: String(e.target.value) })}
                 autoFocus
                 displayEmpty
               >
                 <MenuItem value="" disabled>
-                  Selecciona una tarea
+                  {t("p.ops.time.selectTask")}
                 </MenuItem>
                 {tasks.map((t) => (
                   <MenuItem key={t.id} value={String(t.id)}>
@@ -548,29 +592,26 @@ export default function TimeEntriesPage() {
               </Select>
               {!form.task && (
                 <Typography variant="caption" color="error" sx={{ mt: 0.5 }}>
-                  La tarea es obligatoria
+                  {t("p.ops.time.taskMandatory")}
                 </Typography>
               )}
             </FormControl>
             <TextField
-              label="Duración (minutos)"
+              label={t("p.ops.time.durationMin")}
               fullWidth
               required
               type="number"
               value={form.duration}
               onChange={(e) => setForm({ ...form, duration: e.target.value })}
             />
-            <TextField
-              label="Fecha"
-              type="date"
-              fullWidth
+            <DateField
+              label={t("p.ops.date")}
               required
               value={form.date}
-              onChange={(e) => setForm({ ...form, date: e.target.value })}
-              InputLabelProps={{ shrink: true }}
+              onChange={(v) => setForm({ ...form, date: v })}
             />
             <TextField
-              label="Descripción"
+              label={t("p.ops.description")}
               fullWidth
               multiline
               rows={2}
@@ -580,33 +621,38 @@ export default function TimeEntriesPage() {
           </Stack>
         </DialogContent>
         <DialogActions>
-          <Button onClick={() => setOpen(false)}>Cancelar</Button>
+          <Button onClick={() => setOpen(false)}>{t("common.cancel")}</Button>
           <Button
             variant="contained"
             onClick={save}
-            disabled={!form.task || !form.duration || !form.date}
+            disabled={
+              !form.task ||
+              !form.duration ||
+              !form.date ||
+              createMut.isPending ||
+              updateMut.isPending
+            }
           >
-            {editing ? "Guardar" : "Crear"}
+            {editing ? t("common.save") : t("common.create")}
           </Button>
         </DialogActions>
       </Dialog>
 
       {/* Delete confirmation */}
       <Dialog open={deleteId !== null} onClose={() => setDeleteId(null)} maxWidth="xs">
-        <DialogTitle>Eliminar registro</DialogTitle>
+        <DialogTitle>{t("p.ops.time.deleteTitle")}</DialogTitle>
         <DialogContent>
-          <Alert severity="warning">
-            ¿Seguro que deseas eliminar este registro de tiempo? Esta acción no se puede deshacer.
-          </Alert>
+          <Alert severity="warning">{t("p.ops.time.confirmDelete")}</Alert>
         </DialogContent>
         <DialogActions>
-          <Button onClick={() => setDeleteId(null)}>Cancelar</Button>
+          <Button onClick={() => setDeleteId(null)}>{t("common.cancel")}</Button>
           <Button
             color="error"
             variant="contained"
             onClick={() => deleteId && deleteMut.mutate(deleteId)}
+            disabled={deleteMut.isPending}
           >
-            Eliminar
+            {t("common.delete")}
           </Button>
         </DialogActions>
       </Dialog>

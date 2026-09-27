@@ -1,6 +1,7 @@
 import { createContext, useContext, useState, useEffect, ReactNode } from "react";
 import { ThemeProvider as MuiThemeProvider, CssBaseline } from "@mui/material";
 import { createAppTheme } from "./theme";
+import { useUiStore } from "./store/uiStore";
 
 type ThemeMode = "light" | "dark";
 
@@ -34,7 +35,9 @@ export function AppThemeProvider({ children }: { children: ReactNode }) {
   const toggle = () => setModeState((prev) => (prev === "light" ? "dark" : "light"));
   const setMode = (m: ThemeMode) => setModeState(m);
 
-  const theme = createAppTheme(mode === "dark");
+  const density = useUiStore((s) => s.density);
+  const accent = useUiStore((s) => s.accent);
+  const theme = createAppTheme(mode === "dark", density, accent);
 
   return (
     <ThemeModeContext.Provider value={{ mode, toggle, setMode }}>

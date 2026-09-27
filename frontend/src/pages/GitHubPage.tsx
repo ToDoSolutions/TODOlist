@@ -1,3 +1,4 @@
+import { formatDateTime, formatDate, formatTime } from "../lib/dates";
 import { useState } from "react";
 import {
   Box,
@@ -29,6 +30,7 @@ import {
   TableHead,
   TableRow,
   Link as MuiLink,
+  useTheme,
 } from "@mui/material";
 import {
   Github,
@@ -53,7 +55,10 @@ import {
   type GitHubIssue,
   type GitHubIssueLink,
 } from "../api/resources";
+import type { GitHubPR, GitHubCommit, GitHubRelease, GitHubCheckRun } from "../types";
 import { notify } from "../notify";
+import { useConfirm } from "../components/ConfirmDialog";
+import { useTranslation, Trans } from "react-i18next";
 
 /* ---------- helpers ---------- */
 
@@ -92,7 +97,10 @@ function EmptyState({ icon, message }: { icon: React.ReactNode; message: string 
 /* ---------- main component ---------- */
 
 export default function GitHubPage() {
+  const { t } = useTranslation();
+  const theme = useTheme();
   const qc = useQueryClient();
+  const confirm = useConfirm();
   const [tab, setTab] = useState(0);
 
   /* ----- Instalaciones ----- */
@@ -105,22 +113,23 @@ export default function GitHubPage() {
     mutationFn: githubApi.discoverRepos,
     onSuccess: (data) => {
       notify.success(
-        data.message || `Se descubrieron ${data.new} repos nuevos (${data.total} total)`
+        data.message ||
+          t("p.integr.ghDiscoverSuccess", { new: data.new, total: data.total }),
       );
       qc.invalidateQueries({ queryKey: ["github-repos"] });
       qc.invalidateQueries({ queryKey: ["github-installations"] });
     },
-    onError: () => notify.error("Error al descubrir repos"),
+    onError: () => notify.error(t("p.integr.ghDiscoverError")),
   });
 
   const removeInstMut = useMutation({
     mutationFn: githubApi.removeInstallation,
     onSuccess: () => {
-      notify.info("Instalación eliminada");
+      notify.info(t("p.integr.ghInstDeleted"));
       qc.invalidateQueries({ queryKey: ["github-installations"] });
       qc.invalidateQueries({ queryKey: ["github-repos"] });
     },
-    onError: () => notify.error("Error al eliminar instalación"),
+    onError: () => notify.error(t("p.integr.ghInstDeleteError")),
   });
 
   /* ----- Repos ----- */
@@ -132,20 +141,20 @@ export default function GitHubPage() {
   const syncRepoMut = useMutation({
     mutationFn: githubApi.syncRepo,
     onSuccess: (data) => {
-      notify.success(data.message || "Repo sincronizado");
+      notify.success(data.message || t("p.integr.ghRepoSynced"));
       qc.invalidateQueries({ queryKey: ["github-repos"] });
     },
-    onError: () => notify.error("Error al sincronizar repo"),
+    onError: () => notify.error(t("p.integr.ghRepoSyncError")),
   });
 
   const updateRepoMut = useMutation({
     mutationFn: ({ id, data }: { id: number; data: Partial<GitHubRepo> }) =>
       githubApi.updateRepo(id, data),
     onSuccess: () => {
-      notify.success("Repo actualizado");
+      notify.success(t("p.integr.ghRepoUpdated"));
       qc.invalidateQueries({ queryKey: ["github-repos"] });
     },
-    onError: () => notify.error("Error al actualizar repo"),
+    onError: () => notify.error(t("p.integr.ghRepoUpdateError")),
   });
 
   /* ----- Issues & Links ----- */
@@ -197,53 +206,76 @@ export default function GitHubPage() {
       githubApi.importIssues(selectedRepoId as number, issueState, importLabel),
     onSuccess: (data) => {
       notify.success(
-        `Importadas ${data.imported} issues (${data.skipped} omitidas de ${data.total} total)`
+        t("p.integr.ghImportSuccess", {
+          imported: data.imported,
+          skipped: data.skipped,
+          total: data.total,
+        }),
       );
       setImportDialogOpen(false);
       setImportLabel("");
       qc.invalidateQueries({ queryKey: ["github-links"] });
     },
-    onError: () => notify.error("Error al importar issues"),
+    onError: () => notify.error(t("p.integr.ghImportError")),
   });
 
   const createLinkMut = useMutation({
     mutationFn: () =>
       githubApi.createLinkForTask(Number(linkForm.taskId), Number(linkForm.repoId)),
     onSuccess: () => {
-      notify.success("Link creado correctamente");
+      notify.success(t("p.integr.ghLinkCreated"));
       setLinkDialogOpen(false);
       setLinkForm({ taskId: "", repoId: "", issueNumber: "" });
       qc.invalidateQueries({ queryKey: ["github-links"] });
     },
-    onError: () => notify.error("Error al crear link"),
+    onError: () => notify.error(t("p.integr.ghLinkCreateError")),
   });
 
   const syncLinkMut = useMutation({
     mutationFn: githubApi.syncLink,
     onSuccess: (data) => {
-      notify.success(data.message || "Link sincronizado");
+      notify.success(data.message || t("p.integr.ghLinkSynced"));
       qc.invalidateQueries({ queryKey: ["github-links"] });
     },
-    onError: () => notify.error("Error al sincronizar link"),
+    onError: () => notify.error(t("p.integr.ghLinkSyncError")),
   });
 
-  const instList: GitHubInstallation[] = Array.isArray(installations) ? installations : (installations as any)?.results || [];
-  const repoList: GitHubRepo[] = Array.isArray(repos) ? repos : (repos as any)?.results || [];
-  const issueList: GitHubIssue[] = Array.isArray(issues) ? issues : (issues as any)?.results || [];
-  const linkList: GitHubIssueLink[] = Array.isArray(links) ? links : (links as any)?.results || [];
+  const instList: GitHubInstallation[] = Array.isArray(installations)
+    ? installations
+    : (installations as { results?: GitHubInstallation[] } | undefined)?.results || [];
+  const repoList: GitHubRepo[] = Array.isArray(repos)
+    ? repos
+    : (repos as { results?: GitHubRepo[] } | undefined)?.results || [];
+  const issueList: GitHubIssue[] = Array.isArray(issues)
+    ? issues
+    : (issues as { results?: GitHubIssue[] } | undefined)?.results || [];
+  const linkList: GitHubIssueLink[] = Array.isArray(links)
+    ? links
+    : (links as { results?: GitHubIssueLink[] } | undefined)?.results || [];
 
-  const prList: any[] = Array.isArray(pullRequests) ? pullRequests : (pullRequests as any)?.results || [];
-  const commitList: any[] = Array.isArray(commits) ? commits : (commits as any)?.results || [];
-  const releaseList: any[] = Array.isArray(releases) ? releases : (releases as any)?.results || [];
-  const checkList: any[] = Array.isArray(checks) ? checks : (checks as any)?.results || [];
+  const prList: GitHubPR[] = Array.isArray(pullRequests)
+    ? pullRequests
+    : (pullRequests as { results?: GitHubPR[] } | undefined)?.results || [];
+  const commitList: GitHubCommit[] = Array.isArray(commits)
+    ? commits
+    : (commits as { results?: GitHubCommit[] } | undefined)?.results || [];
+  const releaseList: GitHubRelease[] = Array.isArray(releases)
+    ? releases
+    : (releases as { results?: GitHubRelease[] } | undefined)?.results || [];
+  const checkList: GitHubCheckRun[] = Array.isArray(checks)
+    ? checks
+    : (checks as { results?: GitHubCheckRun[] } | undefined)?.results || [];
 
   const { data: tasksData } = useQuery({
     queryKey: ["tasks-for-github-links"],
     queryFn: () => tasksApi.list(),
   });
   const taskTitleMap = new Map(
-    (Array.isArray(tasksData) ? tasksData : (tasksData as any)?.results || [])
-      .map((t: any) => [t.id, t.title])
+    (Array.isArray(tasksData)
+      ? tasksData
+      : (tasksData as { results?: { id: number; title: string }[] } | undefined)
+          ?.results || []
+    ).map((task) => [task.id, task.title]),
   );
 
   /* ---------- render ---------- */
@@ -251,15 +283,14 @@ export default function GitHubPage() {
   return (
     <Box maxWidth={1000} mx="auto">
       <Stack direction="row" alignItems="center" spacing={1} mb={3}>
-        <Github size={28} color="#1976d2" />
+        <Github size={28} style={{ color: theme.palette.primary.main }} />
         <Typography variant="h5" fontWeight={700}>
-          Integración GitHub
+          {t("p.integr.ghTitle")}
         </Typography>
       </Stack>
 
       <Alert severity="info" sx={{ mb: 2 }}>
-        Conecta tu cuenta de GitHub para sincronizar repos, importar issues y enlazarlos
-        con tus tareas. Usa las pestañas para gestionar instalaciones, repos y links.
+        {t("p.integr.ghIntro")}
       </Alert>
 
       <Paper variant="outlined">
@@ -271,41 +302,46 @@ export default function GitHubPage() {
           <Tab
             icon={<Settings size={16} />}
             iconPosition="start"
-            label="Instalaciones"
+            label={t("p.integr.ghTabInstallations")}
           />
-          <Tab label="Repos" />
+          <Tab label={t("p.integr.ghTabRepos")} />
           <Tab
             icon={<Link2 size={16} />}
             iconPosition="start"
-            label="Issues & Links"
+            label={t("p.integr.ghTabIssuesLinks")}
           />
           <Tab
             icon={<GitPullRequest size={16} />}
             iconPosition="start"
-            label="PRs"
+            label={t("p.integr.ghTabPrs")}
           />
           <Tab
             icon={<GitCommit size={16} />}
             iconPosition="start"
-            label="Commits"
+            label={t("p.integr.ghTabCommits")}
           />
           <Tab
             icon={<Tag size={16} />}
             iconPosition="start"
-            label="Releases"
+            label={t("p.integr.ghTabReleases")}
           />
           <Tab
             icon={<CheckCircle size={16} />}
             iconPosition="start"
-            label="CI"
+            label={t("p.integr.ci")}
           />
         </Tabs>
 
         {/* ===== Tab 1: Instalaciones ===== */}
         <TabPanel value={tab} index={0}>
-          <Stack direction="row" justifyContent="space-between" alignItems="center" mb={2}>
+          <Stack
+            direction="row"
+            justifyContent="space-between"
+            alignItems="center"
+            mb={2}
+          >
             <Typography variant="subtitle1" fontWeight={600}>
-              Instalaciones de GitHub App
+              {t("p.integr.ghInstTitle")}
             </Typography>
             <Button
               variant="contained"
@@ -314,7 +350,9 @@ export default function GitHubPage() {
               onClick={() => discoverMut.mutate()}
               disabled={discoverMut.isPending}
             >
-              {discoverMut.isPending ? "Descubriendo..." : "Descubrir repos"}
+              {discoverMut.isPending
+                ? t("p.integr.ghDiscovering")
+                : t("p.integr.ghDiscover")}
             </Button>
           </Stack>
 
@@ -323,19 +361,19 @@ export default function GitHubPage() {
           ) : instList.length === 0 ? (
             <EmptyState
               icon={<Github size={48} color="text.disabled" />}
-              message="No hay instalaciones. Instala la GitHub App en tu cuenta u organización para empezar."
+              message={t("p.integr.ghInstEmpty")}
             />
           ) : (
             <TableContainer component={Paper} variant="outlined">
               <Table size="small">
                 <TableHead>
                   <TableRow>
-                    <TableCell>Cuenta</TableCell>
-                    <TableCell>Tipo</TableCell>
-                    <TableCell>Usuario</TableCell>
-                    <TableCell>Instalación ID</TableCell>
-                    <TableCell>Creada</TableCell>
-                    <TableCell>Acciones</TableCell>
+                    <TableCell>{t("p.integr.ghColAccount")}</TableCell>
+                    <TableCell>{t("p.integr.type")}</TableCell>
+                    <TableCell>{t("p.integr.user")}</TableCell>
+                    <TableCell>{t("p.integr.ghColInstId")}</TableCell>
+                    <TableCell>{t("p.integr.ghColCreated")}</TableCell>
+                    <TableCell>{t("p.integr.actions")}</TableCell>
                   </TableRow>
                 </TableHead>
                 <TableBody>
@@ -373,15 +411,24 @@ export default function GitHubPage() {
                       </TableCell>
                       <TableCell>
                         <Typography variant="caption" color="text.secondary">
-                          {new Date(inst.created_at).toLocaleDateString("es-ES")}
+                          {formatDate(inst.created_at)}
                         </Typography>
                       </TableCell>
                       <TableCell>
-                        <Tooltip title="Eliminar instalación">
+                        <Tooltip title={t("p.integr.ghInstRemoveTooltip")}>
                           <IconButton
                             size="small"
                             color="error"
-                            onClick={() => removeInstMut.mutate(inst.id)}
+                            onClick={async () => {
+                              if (
+                                await confirm(
+                                  t("p.integr.ghInstConfirmDisconnect", {
+                                    account: inst.account_login || "GitHub",
+                                  }),
+                                )
+                              )
+                                removeInstMut.mutate(inst.id);
+                            }}
                             disabled={removeInstMut.isPending}
                           >
                             <Trash2 size={14} />
@@ -398,9 +445,14 @@ export default function GitHubPage() {
 
         {/* ===== Tab 2: Repos ===== */}
         <TabPanel value={tab} index={1}>
-          <Stack direction="row" justifyContent="space-between" alignItems="center" mb={2}>
+          <Stack
+            direction="row"
+            justifyContent="space-between"
+            alignItems="center"
+            mb={2}
+          >
             <Typography variant="subtitle1" fontWeight={600}>
-              Repositorios sincronizados
+              {t("p.integr.ghReposTitle")}
             </Typography>
             <Button
               variant="outlined"
@@ -408,7 +460,7 @@ export default function GitHubPage() {
               startIcon={<RefreshCw size={16} />}
               onClick={() => qc.invalidateQueries({ queryKey: ["github-repos"] })}
             >
-              Refrescar
+              {t("p.integr.refresh")}
             </Button>
           </Stack>
 
@@ -417,19 +469,19 @@ export default function GitHubPage() {
           ) : repoList.length === 0 ? (
             <EmptyState
               icon={<Github size={48} color="text.disabled" />}
-              message="No hay repos descubiertos. Ve a la pestaña Instalaciones y pulsa «Descubrir repos»."
+              message={t("p.integr.ghReposEmpty")}
             />
           ) : (
             <TableContainer component={Paper} variant="outlined">
               <Table size="small">
                 <TableHead>
                   <TableRow>
-                    <TableCell>Repositorio</TableCell>
-                    <TableCell>Owner</TableCell>
-                    <TableCell>Branch</TableCell>
-                    <TableCell>Visibilidad</TableCell>
-                    <TableCell>Sincronización</TableCell>
-                    <TableCell>Acciones</TableCell>
+                    <TableCell>{t("p.integr.ghRepo")}</TableCell>
+                    <TableCell>{t("p.integr.ghColOwner")}</TableCell>
+                    <TableCell>{t("p.integr.ghColBranch")}</TableCell>
+                    <TableCell>{t("p.integr.ghColVisibility")}</TableCell>
+                    <TableCell>{t("p.integr.ghColSync")}</TableCell>
+                    <TableCell>{t("p.integr.actions")}</TableCell>
                   </TableRow>
                 </TableHead>
                 <TableBody>
@@ -457,12 +509,16 @@ export default function GitHubPage() {
                       <TableCell>
                         <Chip
                           size="small"
-                          label={repo.is_private ? "Privado" : "Público"}
+                          label={
+                            repo.is_private
+                              ? t("p.integr.ghPrivate")
+                              : t("p.integr.ghPublic")
+                          }
                           sx={{
                             height: 20,
                             fontSize: 11,
                             bgcolor: repo.is_private ? "warning.light" : "success.light",
-                            color: "#fff",
+                            color: "common.white",
                           }}
                         />
                       </TableCell>
@@ -479,12 +535,14 @@ export default function GitHubPage() {
                             }
                           />
                           <Typography variant="caption" color="text.secondary">
-                            {repo.sync_enabled ? "Activada" : "Desactivada"}
+                            {repo.sync_enabled
+                              ? t("p.integr.ghSyncOn")
+                              : t("p.integr.ghSyncOff")}
                           </Typography>
                         </Stack>
                       </TableCell>
                       <TableCell>
-                        <Tooltip title="Sincronizar repo">
+                        <Tooltip title={t("p.integr.ghSyncRepoTooltip")}>
                           <IconButton
                             size="small"
                             onClick={() => syncRepoMut.mutate(repo.id)}
@@ -508,14 +566,14 @@ export default function GitHubPage() {
           <Paper variant="outlined" sx={{ p: 2, mb: 3 }}>
             <Stack direction="row" spacing={2} alignItems="center" mb={2}>
               <FormControl size="small" sx={{ minWidth: 300 }}>
-                <InputLabel>Seleccionar repo</InputLabel>
+                <InputLabel>{t("p.integr.ghSelectRepo")}</InputLabel>
                 <Select
                   value={selectedRepoId}
-                  label="Seleccionar repo"
+                  label={t("p.integr.ghSelectRepo")}
                   onChange={(e) => setSelectedRepoId(e.target.value as number)}
                 >
                   <MenuItem value="">
-                    <em>— Ninguno —</em>
+                    <em>{t("p.integr.ghNone")}</em>
                   </MenuItem>
                   {repoList.map((r) => (
                     <MenuItem key={r.id} value={r.id}>
@@ -525,15 +583,15 @@ export default function GitHubPage() {
                 </Select>
               </FormControl>
               <FormControl size="small" sx={{ minWidth: 120 }}>
-                <InputLabel>Estado</InputLabel>
+                <InputLabel>{t("p.integr.status")}</InputLabel>
                 <Select
                   value={issueState}
-                  label="Estado"
+                  label={t("p.integr.status")}
                   onChange={(e) => setIssueState(e.target.value as string)}
                 >
-                  <MenuItem value="open">Abiertos</MenuItem>
-                  <MenuItem value="closed">Cerrados</MenuItem>
-                  <MenuItem value="all">Todos</MenuItem>
+                  <MenuItem value="open">{t("p.integr.ghStateOpen")}</MenuItem>
+                  <MenuItem value="closed">{t("p.integr.ghStateClosed")}</MenuItem>
+                  <MenuItem value="all">{t("p.integr.ghStateAll")}</MenuItem>
                 </Select>
               </FormControl>
               <Button
@@ -543,20 +601,18 @@ export default function GitHubPage() {
                 onClick={() => setImportDialogOpen(true)}
                 disabled={selectedRepoId === ""}
               >
-                Importar issues
+                {t("p.integr.ghImportIssues")}
               </Button>
             </Stack>
 
             {selectedRepoId === "" ? (
-              <Alert severity="info">
-                Selecciona un repositorio para ver sus issues.
-              </Alert>
+              <Alert severity="info">{t("p.integr.ghSelectRepoHint")}</Alert>
             ) : loadingIssues ? (
               <LoadingBox />
             ) : issueList.length === 0 ? (
               <EmptyState
                 icon={<Github size={40} color="text.disabled" />}
-                message="Este repo no tiene issues con el estado seleccionado."
+                message={t("p.integr.ghIssuesEmpty")}
               />
             ) : (
               <TableContainer component={Paper} variant="outlined">
@@ -564,11 +620,11 @@ export default function GitHubPage() {
                   <TableHead>
                     <TableRow>
                       <TableCell width={60}>#</TableCell>
-                      <TableCell>Título</TableCell>
-                      <TableCell>Estado</TableCell>
-                      <TableCell>Labels</TableCell>
-                      <TableCell>Link</TableCell>
-                      <TableCell>URL</TableCell>
+                      <TableCell>{t("p.integr.title")}</TableCell>
+                      <TableCell>{t("p.integr.status")}</TableCell>
+                      <TableCell>{t("p.integr.ghColLabels")}</TableCell>
+                      <TableCell>{t("p.integr.ghColLink")}</TableCell>
+                      <TableCell>{t("p.integr.url")}</TableCell>
                     </TableRow>
                   </TableHead>
                   <TableBody>
@@ -591,7 +647,7 @@ export default function GitHubPage() {
                               fontSize: 11,
                               bgcolor:
                                 issue.state === "open" ? "success.light" : "grey.400",
-                              color: "#fff",
+                              color: "common.white",
                             }}
                           />
                         </TableCell>
@@ -612,7 +668,7 @@ export default function GitHubPage() {
                           {issue.already_linked ? (
                             <Chip
                               size="small"
-                              label="Vinculado"
+                              label={t("p.integr.ghLinked")}
                               color="success"
                               sx={{ height: 20, fontSize: 11 }}
                             />
@@ -650,7 +706,7 @@ export default function GitHubPage() {
             mb={2}
           >
             <Typography variant="subtitle1" fontWeight={600}>
-              Links tarea ↔ issue
+              {t("p.integr.ghLinksTitle")}
             </Typography>
             <Button
               variant="contained"
@@ -661,7 +717,7 @@ export default function GitHubPage() {
                 setLinkDialogOpen(true);
               }}
             >
-              Nuevo link
+              {t("p.integr.ghNewLink")}
             </Button>
           </Stack>
 
@@ -670,19 +726,19 @@ export default function GitHubPage() {
           ) : linkList.length === 0 ? (
             <EmptyState
               icon={<Link2 size={40} color="text.disabled" />}
-              message="No hay links creados. Crea uno para vincular una tarea con un issue de GitHub."
+              message={t("p.integr.ghLinksEmpty")}
             />
           ) : (
             <TableContainer component={Paper} variant="outlined">
               <Table size="small">
                 <TableHead>
                   <TableRow>
-                    <TableCell>Task ID</TableCell>
-                    <TableCell>Repo</TableCell>
-                    <TableCell>Issue</TableCell>
-                    <TableCell>Estado</TableCell>
-                    <TableCell>Última sync</TableCell>
-                    <TableCell>Acciones</TableCell>
+                    <TableCell>{t("p.integr.ghColTaskId")}</TableCell>
+                    <TableCell>{t("p.integr.repo")}</TableCell>
+                    <TableCell>{t("p.integr.ghColIssue")}</TableCell>
+                    <TableCell>{t("p.integr.status")}</TableCell>
+                    <TableCell>{t("p.integr.ghColLastSync")}</TableCell>
+                    <TableCell>{t("p.integr.actions")}</TableCell>
                   </TableRow>
                 </TableHead>
                 <TableBody>
@@ -723,22 +779,20 @@ export default function GitHubPage() {
                             height: 20,
                             fontSize: 11,
                             bgcolor:
-                              link.issue_state === "open"
-                                ? "success.light"
-                                : "grey.400",
-                            color: "#fff",
+                              link.issue_state === "open" ? "success.light" : "grey.400",
+                            color: "common.white",
                           }}
                         />
                       </TableCell>
                       <TableCell>
                         <Typography variant="caption" color="text.secondary">
                           {link.last_synced_at
-                            ? new Date(link.last_synced_at).toLocaleString("es-ES")
-                            : "Nunca"}
+                            ? formatDateTime(link.last_synced_at)
+                            : t("p.integr.never")}
                         </Typography>
                       </TableCell>
                       <TableCell>
-                        <Tooltip title="Sincronizar link">
+                        <Tooltip title={t("p.integr.ghSyncLinkTooltip")}>
                           <IconButton
                             size="small"
                             onClick={() => syncLinkMut.mutate(link.id)}
@@ -765,17 +819,15 @@ export default function GitHubPage() {
             mb={2}
           >
             <Typography variant="subtitle1" fontWeight={600}>
-              Pull Requests
+              {t("p.integr.ghPrsTitle")}
             </Typography>
             <Button
               variant="outlined"
               size="small"
               startIcon={<RefreshCw size={16} />}
-              onClick={() =>
-                qc.invalidateQueries({ queryKey: ["github-pull-requests"] })
-              }
+              onClick={() => qc.invalidateQueries({ queryKey: ["github-pull-requests"] })}
             >
-              Refrescar
+              {t("p.integr.refresh")}
             </Button>
           </Stack>
 
@@ -784,7 +836,7 @@ export default function GitHubPage() {
           ) : prList.length === 0 ? (
             <EmptyState
               icon={<GitPullRequest size={40} color="text.disabled" />}
-              message="No hay pull requests para mostrar."
+              message={t("p.integr.ghPrsEmpty")}
             />
           ) : (
             <TableContainer component={Paper} variant="outlined">
@@ -792,12 +844,12 @@ export default function GitHubPage() {
                 <TableHead>
                   <TableRow>
                     <TableCell width={60}>PR#</TableCell>
-                    <TableCell>Título</TableCell>
-                    <TableCell>Estado</TableCell>
-                    <TableCell>Autor</TableCell>
-                    <TableCell>Branch</TableCell>
-                    <TableCell>Approvals</TableCell>
-                    <TableCell>CI</TableCell>
+                    <TableCell>{t("p.integr.title")}</TableCell>
+                    <TableCell>{t("p.integr.status")}</TableCell>
+                    <TableCell>{t("p.integr.author")}</TableCell>
+                    <TableCell>{t("p.integr.ghColBranch")}</TableCell>
+                    <TableCell>{t("p.integr.ghColApprovals")}</TableCell>
+                    <TableCell>{t("p.integr.ci")}</TableCell>
                   </TableRow>
                 </TableHead>
                 <TableBody>
@@ -805,14 +857,14 @@ export default function GitHubPage() {
                     const stateLabel = pr.is_merged
                       ? "merged"
                       : pr.state === "open"
-                      ? "open"
-                      : "closed";
+                        ? "open"
+                        : "closed";
                     const stateColor =
                       stateLabel === "merged"
                         ? "secondary.light"
                         : stateLabel === "open"
-                        ? "success.light"
-                        : "grey.400";
+                          ? "success.light"
+                          : "grey.400";
                     return (
                       <TableRow key={pr.pr_number}>
                         <TableCell>
@@ -837,7 +889,7 @@ export default function GitHubPage() {
                               height: 20,
                               fontSize: 11,
                               bgcolor: stateColor,
-                              color: "#fff",
+                              color: "common.white",
                             }}
                           />
                         </TableCell>
@@ -869,9 +921,9 @@ export default function GitHubPage() {
                                   pr.ci_status === "success"
                                     ? "success.light"
                                     : pr.ci_status === "failure"
-                                    ? "error.light"
-                                    : "grey.400",
-                                color: "#fff",
+                                      ? "error.light"
+                                      : "grey.400",
+                                color: "common.white",
                               }}
                             />
                           ) : (
@@ -898,17 +950,15 @@ export default function GitHubPage() {
             mb={2}
           >
             <Typography variant="subtitle1" fontWeight={600}>
-              Commits recientes
+              {t("p.integr.ghCommitsTitle")}
             </Typography>
             <Button
               variant="outlined"
               size="small"
               startIcon={<RefreshCw size={16} />}
-              onClick={() =>
-                qc.invalidateQueries({ queryKey: ["github-commits"] })
-              }
+              onClick={() => qc.invalidateQueries({ queryKey: ["github-commits"] })}
             >
-              Refrescar
+              {t("p.integr.refresh")}
             </Button>
           </Stack>
 
@@ -917,7 +967,7 @@ export default function GitHubPage() {
           ) : commitList.length === 0 ? (
             <EmptyState
               icon={<GitCommit size={40} color="text.disabled" />}
-              message="No hay commits para mostrar."
+              message={t("p.integr.ghCommitsEmpty")}
             />
           ) : (
             <TableContainer component={Paper} variant="outlined">
@@ -925,9 +975,9 @@ export default function GitHubPage() {
                 <TableHead>
                   <TableRow>
                     <TableCell width={100}>SHA</TableCell>
-                    <TableCell>Mensaje</TableCell>
-                    <TableCell>Autor</TableCell>
-                    <TableCell>Fecha</TableCell>
+                    <TableCell>{t("p.integr.ghColMessage")}</TableCell>
+                    <TableCell>{t("p.integr.author")}</TableCell>
+                    <TableCell>{t("p.integr.date")}</TableCell>
                   </TableRow>
                 </TableHead>
                 <TableBody>
@@ -953,9 +1003,7 @@ export default function GitHubPage() {
                       </TableCell>
                       <TableCell>
                         <Typography variant="caption" color="text.secondary">
-                          {c.author_date
-                            ? new Date(c.author_date).toLocaleString("es-ES")
-                            : "—"}
+                          {c.author_date ? formatDateTime(c.author_date) : "—"}
                         </Typography>
                       </TableCell>
                     </TableRow>
@@ -975,17 +1023,15 @@ export default function GitHubPage() {
             mb={2}
           >
             <Typography variant="subtitle1" fontWeight={600}>
-              Releases
+              {t("p.integr.ghReleasesTitle")}
             </Typography>
             <Button
               variant="outlined"
               size="small"
               startIcon={<RefreshCw size={16} />}
-              onClick={() =>
-                qc.invalidateQueries({ queryKey: ["github-releases"] })
-              }
+              onClick={() => qc.invalidateQueries({ queryKey: ["github-releases"] })}
             >
-              Refrescar
+              {t("p.integr.refresh")}
             </Button>
           </Stack>
 
@@ -994,7 +1040,7 @@ export default function GitHubPage() {
           ) : releaseList.length === 0 ? (
             <EmptyState
               icon={<Tag size={40} color="text.disabled" />}
-              message="No hay releases para mostrar."
+              message={t("p.integr.ghReleasesEmpty")}
             />
           ) : (
             <Stack spacing={2}>
@@ -1016,23 +1062,19 @@ export default function GitHubPage() {
                     {r.is_prerelease && (
                       <Chip
                         size="small"
-                        label="pre-release"
+                        label={t("p.integr.ghPrerelease")}
                         sx={{
                           height: 20,
                           fontSize: 11,
                           bgcolor: "warning.light",
-                          color: "#fff",
+                          color: "common.white",
                         }}
                       />
                     )}
                     <Typography variant="subtitle2" fontWeight={600}>
                       {r.name}
                     </Typography>
-                    <MuiLink
-                      href={r.html_url}
-                      target="_blank"
-                      rel="noopener noreferrer"
-                    >
+                    <MuiLink href={r.html_url} target="_blank" rel="noopener noreferrer">
                       <ExternalLink size={14} />
                     </MuiLink>
                   </Stack>
@@ -1046,17 +1088,16 @@ export default function GitHubPage() {
                       overflow: "hidden",
                     }}
                   >
-                    {r.body || "Sin descripción."}
+                    {r.body || t("p.integr.ghNoDescription")}
                   </Typography>
                   <Stack direction="row" spacing={2} mt={1}>
                     <Typography variant="caption" color="text.secondary">
-                      Autor: {r.author || "—"}
+                      {t("p.integr.ghAuthorLine", { author: r.author || "—" })}
                     </Typography>
                     <Typography variant="caption" color="text.secondary">
-                      Publicado:{" "}
-                      {r.published_at
-                        ? new Date(r.published_at).toLocaleString("es-ES")
-                        : "—"}
+                      {t("p.integr.ghPublishedLine", {
+                        date: r.published_at ? formatDateTime(r.published_at) : "—",
+                      })}
                     </Typography>
                   </Stack>
                 </Paper>
@@ -1074,17 +1115,15 @@ export default function GitHubPage() {
             mb={2}
           >
             <Typography variant="subtitle1" fontWeight={600}>
-              CI Check Runs
+              {t("p.integr.ghCiTitle")}
             </Typography>
             <Button
               variant="outlined"
               size="small"
               startIcon={<RefreshCw size={16} />}
-              onClick={() =>
-                qc.invalidateQueries({ queryKey: ["github-checks"] })
-              }
+              onClick={() => qc.invalidateQueries({ queryKey: ["github-checks"] })}
             >
-              Refrescar
+              {t("p.integr.refresh")}
             </Button>
           </Stack>
 
@@ -1093,18 +1132,18 @@ export default function GitHubPage() {
           ) : checkList.length === 0 ? (
             <EmptyState
               icon={<CheckCircle size={40} color="text.disabled" />}
-              message="No hay check runs para mostrar."
+              message={t("p.integr.ghCiEmpty")}
             />
           ) : (
             <TableContainer component={Paper} variant="outlined">
               <Table size="small">
                 <TableHead>
                   <TableRow>
-                    <TableCell>Nombre</TableCell>
-                    <TableCell>Estado</TableCell>
-                    <TableCell>Conclusión</TableCell>
-                    <TableCell>Duración</TableCell>
-                    <TableCell>URL</TableCell>
+                    <TableCell>{t("p.integr.ghColName")}</TableCell>
+                    <TableCell>{t("p.integr.status")}</TableCell>
+                    <TableCell>{t("p.integr.ghColConclusion")}</TableCell>
+                    <TableCell>{t("p.integr.ghColDuration")}</TableCell>
+                    <TableCell>{t("p.integr.url")}</TableCell>
                   </TableRow>
                 </TableHead>
                 <TableBody>
@@ -1113,31 +1152,27 @@ export default function GitHubPage() {
                       c.status === "in_progress"
                         ? "in_progress"
                         : c.status === "queued"
-                        ? "queued"
-                        : "completed";
+                          ? "queued"
+                          : "completed";
                     const statusColor =
                       statusLabel === "completed"
                         ? "success.light"
                         : statusLabel === "in_progress"
-                        ? "warning.light"
-                        : "grey.400";
+                          ? "warning.light"
+                          : "grey.400";
                     const conclusionLabel = c.conclusion || "—";
                     const conclusionColor =
                       c.conclusion === "success"
                         ? "success.light"
                         : c.conclusion === "failure"
-                        ? "error.light"
-                        : "grey.400";
+                          ? "error.light"
+                          : "grey.400";
                     const duration =
                       c.started_at && c.completed_at
-                        ? `${new Date(c.started_at).toLocaleTimeString(
-                            "es-ES"
-                          )} → ${new Date(c.completed_at).toLocaleTimeString(
-                            "es-ES"
-                          )}`
+                        ? `${formatTime(c.started_at)} → ${formatTime(c.completed_at)}`
                         : c.started_at
-                        ? new Date(c.started_at).toLocaleString("es-ES")
-                        : "—";
+                          ? formatDateTime(c.started_at)
+                          : "—";
                     return (
                       <TableRow key={i}>
                         <TableCell>
@@ -1151,7 +1186,7 @@ export default function GitHubPage() {
                               height: 20,
                               fontSize: 11,
                               bgcolor: statusColor,
-                              color: "#fff",
+                              color: "common.white",
                             }}
                           />
                         </TableCell>
@@ -1164,7 +1199,7 @@ export default function GitHubPage() {
                                 height: 20,
                                 fontSize: 11,
                                 bgcolor: conclusionColor,
-                                color: "#fff",
+                                color: "common.white",
                               }}
                             />
                           ) : (
@@ -1204,31 +1239,32 @@ export default function GitHubPage() {
         maxWidth="sm"
         fullWidth
       >
-        <DialogTitle>Importar issues</DialogTitle>
+        <DialogTitle>{t("p.integr.ghImportIssues")}</DialogTitle>
         <DialogContent>
           <Stack spacing={2} sx={{ mt: 1 }}>
             <Alert severity="info">
-              Se importarán los issues <strong>{issueState}</strong> del repo seleccionado
-              como tareas. Las ya vinculadas se omitirán.
+              <Trans i18nKey="p.integr.ghImportInfo" values={{ state: issueState }} />
             </Alert>
             <TextField
-              label="Filtro por label (opcional)"
+              label={t("p.integr.ghLabelFilter")}
               value={importLabel}
               onChange={(e) => setImportLabel(e.target.value)}
               fullWidth
               size="small"
-              helperText="Ej: bug, enhancement. Déjalo vacío para importar todos."
+              helperText={t("p.integr.ghLabelFilterHelp")}
             />
           </Stack>
         </DialogContent>
         <DialogActions>
-          <Button onClick={() => setImportDialogOpen(false)}>Cancelar</Button>
+          <Button onClick={() => setImportDialogOpen(false)}>
+            {t("p.integr.cancel")}
+          </Button>
           <Button
             variant="contained"
             onClick={() => importMut.mutate()}
             disabled={importMut.isPending}
           >
-            {importMut.isPending ? "Importando..." : "Importar"}
+            {importMut.isPending ? t("p.integr.ghImporting") : t("p.integr.ghImport")}
           </Button>
         </DialogActions>
       </Dialog>
@@ -1240,25 +1276,23 @@ export default function GitHubPage() {
         maxWidth="sm"
         fullWidth
       >
-        <DialogTitle>Crear link tarea ↔ issue</DialogTitle>
+        <DialogTitle>{t("p.integr.ghLinkDialogTitle")}</DialogTitle>
         <DialogContent>
           <Stack spacing={2} sx={{ mt: 1 }}>
             <TextField
-              label="ID de la tarea"
+              label={t("p.integr.ghTaskIdLabel")}
               value={linkForm.taskId}
-              onChange={(e) =>
-                setLinkForm({ ...linkForm, taskId: e.target.value })
-              }
+              onChange={(e) => setLinkForm({ ...linkForm, taskId: e.target.value })}
               fullWidth
               size="small"
               type="number"
-              helperText="Introduce el ID numérico de la tarea existente"
+              helperText={t("p.integr.ghTaskIdHelp")}
             />
             <FormControl fullWidth size="small">
-              <InputLabel>Repositorio</InputLabel>
+              <InputLabel>{t("p.integr.ghRepo")}</InputLabel>
               <Select
                 value={linkForm.repoId}
-                label="Repositorio"
+                label={t("p.integr.ghRepo")}
                 onChange={(e) =>
                   setLinkForm({
                     ...linkForm,
@@ -1267,7 +1301,7 @@ export default function GitHubPage() {
                 }
               >
                 <MenuItem value="">
-                  <em>— Selecciona —</em>
+                  <em>{t("p.integr.ghSelect")}</em>
                 </MenuItem>
                 {repoList.map((r) => (
                   <MenuItem key={r.id} value={r.id}>
@@ -1277,34 +1311,31 @@ export default function GitHubPage() {
               </Select>
             </FormControl>
             <TextField
-              label="Número de issue"
+              label={t("p.integr.ghIssueNumber")}
               value={linkForm.issueNumber}
-              onChange={(e) =>
-                setLinkForm({ ...linkForm, issueNumber: e.target.value })
-              }
+              onChange={(e) => setLinkForm({ ...linkForm, issueNumber: e.target.value })}
               fullWidth
               size="small"
               type="number"
-              helperText="Número del issue en GitHub (ej: 42)"
+              helperText={t("p.integr.ghIssueNumberHelp")}
             />
           </Stack>
         </DialogContent>
         <DialogActions>
-          <Button onClick={() => setLinkDialogOpen(false)}>Cancelar</Button>
+          <Button onClick={() => setLinkDialogOpen(false)}>{t("p.integr.cancel")}</Button>
           <Button
             variant="contained"
             onClick={() => createLinkMut.mutate()}
             disabled={
-              createLinkMut.isPending ||
-              !linkForm.taskId ||
-              linkForm.repoId === ""
+              createLinkMut.isPending || !linkForm.taskId || linkForm.repoId === ""
             }
           >
-            {createLinkMut.isPending ? "Creando..." : "Crear link"}
+            {createLinkMut.isPending
+              ? t("p.integr.ghCreating")
+              : t("p.integr.ghCreateLink")}
           </Button>
         </DialogActions>
       </Dialog>
     </Box>
   );
 }
-

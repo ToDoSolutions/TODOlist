@@ -1,12 +1,12 @@
 """Servicio para E2E encryption: gestión de claves y tareas cifradas."""
-from .models import UserPublicKey, EncryptedTask, EncryptedKeyShare
+from .models import EncryptedKeyShare, EncryptedTask, UserPublicKey
 
 
 def register_public_key(user, public_key, key_id, algorithm="RSA-OA-256"):
     """Registra una clave pública de usuario."""
     # Desactivar claves anteriores
     UserPublicKey.objects.filter(user=user, is_active=True).update(is_active=False)
-    key, created = UserPublicKey.objects.update_or_create(
+    key, _created = UserPublicKey.objects.update_or_create(
         user=user,
         key_id=key_id,
         defaults={

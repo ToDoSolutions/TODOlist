@@ -1,4 +1,5 @@
 import { createContext, useContext, useState, ReactNode } from "react";
+import { useUiStore } from "../store/uiStore";
 
 export interface SelectedProject {
   id: number;
@@ -21,6 +22,7 @@ export function ProjectProvider({ children }: { children: ReactNode }) {
     setProjectState(p);
     if (p) {
       localStorage.setItem("selectedProject", JSON.stringify(p));
+      useUiStore.getState().addRecentProject(p.id);
     } else {
       localStorage.removeItem("selectedProject");
     }

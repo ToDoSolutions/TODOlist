@@ -2,35 +2,43 @@ import { useEffect, useState } from "react";
 import { useNavigate, useSearchParams } from "react-router-dom";
 import { Box, CircularProgress, Typography, Alert } from "@mui/material";
 import { useAuth } from "../auth/AuthContext";
-import { githubApi } from "../api/resources";
+import { githubApi, type ApiError } from "../api/resources";
 import { notify } from "../notify";
+import { useTranslation } from "react-i18next";
+import "../i18n";
 
 export default function GitHubCallbackPage() {
+  const { t } = useTranslation();
   const [searchParams] = useSearchParams();
   const navigate = useNavigate();
   const { saveTokens } = useAuth();
-  const [error, setError] = useState("");
+  const [error, setError] = useState(() =>
+    searchParams.get("code") ? "" : t("p.auth.githubCallback.noCode"),
+  );
 
   useEffect(() => {
     const code = searchParams.get("code");
     const state = searchParams.get("state");
     if (!code) {
-      setError("No se recibió código de autorización");
       return;
     }
     githubApi
       .oauthCallback(code, state || "")
       .then(async (data) => {
         await saveTokens(data.access, data.refresh);
-        notify.success(`Sesión iniciada como ${data.github_username}`);
+        notify.success(
+          t("p.auth.githubCallback.signedInAs", {
+            username: data.github_username,
+          }),
+        );
         navigate("/app");
       })
-      .catch((e: any) => {
-        const msg = e.response?.data?.error || "Error en el callback de GitHub";
+      .catch((e: ApiError) => {
+        const msg = e.response?.data?.error || t("p.auth.errors.githubConnect");
         setError(msg);
         notify.error(msg);
       });
-  }, [searchParams, navigate, saveTokens]);
+  }, [searchParams, navigate, saveTokens, t]);
 
   return (
     <Box
@@ -47,7 +55,7 @@ export default function GitHubCallbackPage() {
         <>
           <CircularProgress />
           <Typography variant="body1" color="text.secondary">
-            Conectando con GitHub...
+            {t("p.auth.githubCallback.connecting")}
           </Typography>
         </>
       )}

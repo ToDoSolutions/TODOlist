@@ -1,10 +1,11 @@
-from rest_framework import viewsets, mixins, status
+from rest_framework import mixins, viewsets
 from rest_framework.decorators import action
 from rest_framework.permissions import IsAuthenticated
 from rest_framework.response import Response
+
 from .models import ChatIntegration, ChatMessageLog
 from .serializers import ChatIntegrationSerializer, ChatMessageLogSerializer
-from .services import send_slack_message, send_discord_message
+from .services import send_discord_message, send_slack_message
 
 
 class ChatIntegrationViewSet(viewsets.ModelViewSet):

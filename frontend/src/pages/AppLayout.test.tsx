@@ -5,6 +5,7 @@ import { MemoryRouter } from "react-router-dom";
 import { ThemeProvider } from "@mui/material";
 import AppLayout from "./AppLayout";
 import { createAppTheme } from "../theme";
+import "../i18n";
 
 // Mock auth
 vi.mock("../auth/AuthContext", () => ({
@@ -29,9 +30,11 @@ vi.mock("../auth/ProjectContext", () => ({
 // Mock API resources - simula respuestas paginadas del backend real
 vi.mock("../api/resources", () => ({
   projectsApi: {
-    list: vi.fn().mockResolvedValue([
-      { id: 1, name: "Proyecto Test", color: "#1976d2", tasks_count: 2 },
-    ]),
+    list: vi
+      .fn()
+      .mockResolvedValue([
+        { id: 1, name: "Proyecto Test", color: "#1976d2", tasks_count: 2 },
+      ]),
     create: vi.fn(),
     update: vi.fn(),
     remove: vi.fn(),
@@ -56,6 +59,17 @@ vi.mock("../api/resources", () => ({
     addComment: vi.fn(),
     updateSubtask: vi.fn(),
     removeSubtask: vi.fn(),
+    count: vi.fn().mockResolvedValue(0),
+    myWork: vi.fn().mockResolvedValue({
+      overdue: [],
+      due_today: [],
+      in_progress: [],
+      blocked: [],
+      upcoming: [],
+    }),
+  },
+  savedSearchesApi: {
+    list: vi.fn().mockResolvedValue([]),
   },
   notificationsApi: {
     list: vi.fn().mockResolvedValue({ results: [] }),
@@ -119,13 +133,7 @@ vi.mock("../theme-context", () => ({
   AppThemeProvider: ({ children }: any) => children,
 }));
 
-// Mock react-i18next
-vi.mock("react-i18next", () => ({
-  useTranslation: () => ({
-    t: (key: string) => key,
-    i18n: { language: "es", changeLanguage: vi.fn() },
-  }),
-}));
+// i18n real (import "../i18n" arriba): las labels del sidebar se traducen
 
 function renderWithProviders(ui: React.ReactElement) {
   const qc = new QueryClient({
@@ -136,15 +144,13 @@ function renderWithProviders(ui: React.ReactElement) {
       <ThemeProvider theme={createAppTheme(false)}>
         <MemoryRouter>{ui}</MemoryRouter>
       </ThemeProvider>
-    </QueryClientProvider>
+    </QueryClientProvider>,
   );
 }
 
 describe("AppLayout - render sin crash", () => {
   it("renderiza el sidebar con proyectos sin crashear", async () => {
-    const { container } = renderWithProviders(
-      <AppLayout />
-    );
+    const { container } = renderWithProviders(<AppLayout />);
     // Esperar a que el texto "Proyectos" aparezca
     const proyectosText = await screen.findAllByText(/Proyectos/i, undefined, {
       timeout: 3000,

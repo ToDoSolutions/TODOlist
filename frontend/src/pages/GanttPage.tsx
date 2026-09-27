@@ -1,5 +1,7 @@
 import { useQuery } from "@tanstack/react-query";
-import { advancedMetricsApi } from "../api/resources";
+import { useTranslation } from "react-i18next";
+import { advancedMetricsApi, type Sprint } from "../api/resources";
+import type { Task } from "../types";
 import {
   Box,
   Typography,
@@ -10,6 +12,8 @@ import {
   Stack,
   Divider,
   Tooltip,
+  useMediaQuery,
+  useTheme,
 } from "@mui/material";
 
 const STATE_COLORS: Record<string, string> = {
@@ -21,17 +25,6 @@ const STATE_COLORS: Record<string, string> = {
   blocked: "#d32f2f",
   cancelled: "#757575",
   archived: "#bdbdbd",
-};
-
-const STATE_LABELS: Record<string, string> = {
-  backlog: "Backlog",
-  pending: "Pendiente",
-  in_progress: "En progreso",
-  review: "En revisión",
-  completed: "Completada",
-  blocked: "Bloqueada",
-  cancelled: "Cancelada",
-  archived: "Archivada",
 };
 
 const DAY_MS = 24 * 3600 * 1000;
@@ -87,6 +80,17 @@ function resolveRange(
 }
 
 export default function GanttPage() {
+  // Hooks antes de cualquier early return (rules-of-hooks)
+  const { t } = useTranslation();
+  const noDatesLabel = t("p.plan.gantt.noDates");
+  const muiTheme = useTheme();
+  const isMobile = useMediaQuery(muiTheme.breakpoints.down("md"));
+  const stateLabel = (s: string) =>
+    t(`task.state.${s === "review" ? "in_review" : s}`, { defaultValue: s });
+  const noProjectLabel = t("p.plan.gantt.noProject");
+  const implicitLabel = t("p.plan.gantt.implicit");
+  const pointsLabel = (n: number) => t("p.plan.gantt.pointsShort", { count: n });
+
   const { data, isLoading, isError } = useQuery({
     queryKey: ["gantt"],
     queryFn: advancedMetricsApi.gantt,
@@ -97,15 +101,13 @@ export default function GanttPage() {
   if (isError) {
     return (
       <Box maxWidth={1200} mx="auto" mt={4}>
-        <Alert severity="error">
-          No se pudieron cargar los datos del Gantt.
-        </Alert>
+        <Alert severity="error">{t("p.plan.gantt.loadError")}</Alert>
       </Box>
     );
   }
 
-  const tasks: any[] = data?.tasks || [];
-  const sprints: any[] = data?.sprints || [];
+  const tasks: Task[] = data?.tasks || [];
+  const sprints: Sprint[] = data?.sprints || [];
 
   // Resolve date ranges per task (handles edge cases).
   const taskRanges: Record<number, ResolvedRange | null> = {};
@@ -165,29 +167,65 @@ export default function GanttPage() {
   }
 
   // Group tasks by project
-  const byProject: Record<string, any[]> = {};
+  const byProject: Record<string, Task[]> = {};
   for (const t of tasks) {
-    const key = t.project || "Sin proyecto";
+    const key = t.project || noProjectLabel;
     (byProject[key] ||= []).push(t);
   }
   const projects = Object.keys(byProject);
 
+  // Móvil: el Gantt no se comprime — vista agenda cronológica
+  if (isMobile) {
+    const sorted = [...tasks].sort(
+      (a, b) =>
+        (parseDate(a.start_date ?? a.due_date) ?? Infinity) -
+        (parseDate(b.start_date ?? b.due_date) ?? Infinity),
+    );
+    return (
+      <Box>
+        <Typography variant="h5" fontWeight={700} mb={2}>
+          {t("p.plan.gantt.mobileTitle")}
+        </Typography>
+        <Alert severity="info" sx={{ mb: 2 }}>
+          {t("p.plan.gantt.mobileHint")}
+        </Alert>
+        <Stack spacing={1}>
+          {sorted.map((t) => {
+            const s = parseDate(t.start_date);
+            const e = parseDate(t.due_date);
+            return (
+              <Paper key={t.id} variant="outlined" sx={{ p: 1.5 }}>
+                <Typography variant="body2" fontWeight={600}>
+                  {t.title}
+                </Typography>
+                <Typography variant="caption" color="text.secondary">
+                  {s ? fmtDayMonth(s) : "—"} → {e ? fmtDayMonth(e) : "—"}
+                  {t.project ? ` · ${t.project}` : ""}
+                </Typography>
+              </Paper>
+            );
+          })}
+          {sorted.length === 0 && (
+            <Typography variant="body2" color="text.secondary" textAlign="center" py={4}>
+              {t("p.plan.gantt.noDatedTasks")}
+            </Typography>
+          )}
+        </Stack>
+      </Box>
+    );
+  }
+
   return (
     <Box maxWidth={1280} mx="auto">
       <Typography variant="h5" fontWeight={700} mb={2}>
-        Gantt Chart
+        {t("p.plan.gantt.title")}
       </Typography>
 
       {/* Legend */}
       <Paper sx={{ p: 1.5, mb: 2 }}>
         <Stack direction="row" spacing={1} flexWrap="wrap" useFlexGap>
           {Object.keys(STATE_COLORS).map((k) => (
-            <Stack
-              key={k}
-              direction="row"
-              spacing={0.5}
-              alignItems="center"
-            >
+            <Stack key={k} direction="row" spacing={0.5} alignItems="center">
               <Box
                 sx={{
                   width: 14,
@@ -197,7 +235,7 @@ export default function GanttPage() {
                   border: "1px solid rgba(0,0,0,0.15)",
                 }}
               />
-              <Typography variant="caption">{STATE_LABELS[k]}</Typography>
+              <Typography variant="caption">{stateLabel(k)}</Typography>
             </Stack>
           ))}
         </Stack>
@@ -206,7 +244,9 @@ export default function GanttPage() {
       {/* Sprints overview */}
       {sprints.length > 0 && (
         <Paper sx={{ p: 2, mb: 2 }}>
-          <Typography variant="h6" mb={1}>Sprints</Typography>
+          <Typography variant="h6" mb={1}>
+            {t("p.plan.gantt.sprintsHeading")}
+          </Typography>
           <Box sx={{ overflowX: "auto" }}>
             <Box sx={{ width: LABEL_WIDTH + timelineWidth, minWidth: "100%" }}>
               <Stack spacing={0.75}>
@@ -305,21 +345,35 @@ export default function GanttPage() {
       {/* Gantt chart */}
       <Paper sx={{ p: 2 }}>
         <Typography variant="h6" mb={2}>
-          Tareas ({tasks.length})
+          {t("p.plan.gantt.tasksHeading", { count: tasks.length })}
         </Typography>
 
         {!hasData && (
           <Alert severity="info" sx={{ mt: 1 }}>
-            No hay tareas ni sprints con fechas para mostrar en el Gantt. Asigna
-            fechas de inicio o entrega a tus tareas para verlas aquí.
+            {t("p.plan.gantt.empty")}
           </Alert>
         )}
 
         {hasData && (
-          <Box sx={{ overflowX: "auto", border: "1px solid", borderColor: "divider", borderRadius: 1 }}>
+          <Box
+            sx={{
+              overflowX: "auto",
+              border: "1px solid",
+              borderColor: "divider",
+              borderRadius: 1,
+            }}
+          >
             <Box sx={{ width: LABEL_WIDTH + timelineWidth, minWidth: "100%" }}>
               {/* Timeline header */}
-              <Box sx={{ display: "flex", height: 26, borderBottom: "1px solid", borderColor: "divider", bgcolor: "grey.50" }}>
+              <Box
+                sx={{
+                  display: "flex",
+                  height: 26,
+                  borderBottom: "1px solid",
+                  borderColor: "divider",
+                  bgcolor: "grey.50",
+                }}
+              >
                 <Box
                   sx={{
                     width: LABEL_WIDTH,
@@ -336,10 +390,17 @@ export default function GanttPage() {
                   }}
                 >
                   <Typography variant="caption" fontWeight={700} color="text.secondary">
-                    Tarea
+                    {t("p.plan.gantt.taskColumn")}
                   </Typography>
                 </Box>
-                <Box sx={{ position: "relative", width: timelineWidth, flexShrink: 0, height: "100%" }}>
+                <Box
+                  sx={{
+                    position: "relative",
+                    width: timelineWidth,
+                    flexShrink: 0,
+                    height: "100%",
+                  }}
+                >
                   {/* weekend shading in header */}
                   {weekends.map((w, i) => (
                     <Box
@@ -396,9 +457,8 @@ export default function GanttPage() {
               {/* Rows grouped by project */}
               <Stack spacing={0}>
                 {projects.map((proj, projIdx) => {
-                  const projTasks = byProject[proj];
-                  const projColor =
-                    projTasks[0]?.project_color || "#1976d2";
+                  const projTasks = byProject[proj] ?? [];
+                  const projColor = projTasks[0]?.project_color || "#1976d2";
                   return (
                     <Box key={proj}>
                       {/* Project group header */}
@@ -526,7 +586,7 @@ export default function GanttPage() {
                                   const left = dayLeft(range.start);
                                   const width = dayWidth(range.start, range.end);
                                   const showText = width > 60;
-                                  const tooltipTitle = `${t.title} — ${t.start_date || "(implícita)"} → ${t.due_date || "(implícita)"} · ${STATE_LABELS[t.state] || t.state}`;
+                                  const tooltipTitle = `${t.title} — ${t.start_date || implicitLabel} → ${t.due_date || implicitLabel} · ${stateLabel(t.state)}`;
                                   return (
                                     <Tooltip title={tooltipTitle} arrow placement="top">
                                       <Box
@@ -542,7 +602,7 @@ export default function GanttPage() {
                                           alignItems: "center",
                                           px: 0.75,
                                           overflow: "hidden",
-                                          color: "#fff",
+                                          color: "common.white",
                                           boxShadow: 1,
                                           minWidth: 6,
                                         }}
@@ -551,10 +611,16 @@ export default function GanttPage() {
                                           <Typography
                                             variant="caption"
                                             noWrap
-                                            sx={{ fontSize: 10, lineHeight: 1, fontWeight: 600 }}
+                                            sx={{
+                                              fontSize: 10,
+                                              lineHeight: 1,
+                                              fontWeight: 600,
+                                            }}
                                           >
-                                            {t.story_points ? `${t.story_points}pt · ` : ""}
-                                            {STATE_LABELS[t.state] || t.state}
+                                            {t.story_points
+                                              ? `${pointsLabel(t.story_points)} · `
+                                              : ""}
+                                            {stateLabel(t.state)}
                                           </Typography>
                                         )}
                                       </Box>
@@ -573,7 +639,7 @@ export default function GanttPage() {
                                   }}
                                 >
                                   <Typography variant="caption" color="text.disabled">
-                                    Sin fechas
+                                    {noDatesLabel}
                                   </Typography>
                                 </Box>
                               )}

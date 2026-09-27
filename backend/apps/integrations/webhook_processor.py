@@ -1,10 +1,11 @@
 """Procesador de webhooks con idempotencia, reintentos y DLQ."""
 import logging
 from datetime import timedelta
+
+from django.db import transaction
 from django.utils import timezone
 
-from .models import WebhookDelivery, GitHubRepo, GitHubIssueLink
-from apps.tasks.models import Task
+from .models import GitHubIssueLink, GitHubRepo, WebhookDelivery
 
 logger = logging.getLogger(__name__)
 
@@ -17,52 +18,58 @@ def process_webhook_delivery(delivery_id, event_type, action, payload, repo_full
 
     Retorna (response_data, status_code).
     Si ya fue procesado, retorna 200 sin reprocesar.
+    El row-lock evita que dos entregas concurrentes con el mismo
+    delivery_id se procesen dos veces.
     """
-    # Idempotencia: buscar o crear el registro
-    delivery, created = WebhookDelivery.objects.get_or_create(
-        delivery_id=delivery_id,
-        defaults={
-            "event_type": event_type,
-            "action": action,
-            "payload": payload,
-            "repo_full_name": repo_full_name,
-        },
-    )
+    with transaction.atomic():
+        # Idempotencia: buscar o crear el registro
+        delivery, _created = WebhookDelivery.objects.get_or_create(
+            delivery_id=delivery_id,
+            defaults={
+                "event_type": event_type,
+                "action": action,
+                "payload": payload,
+                "repo_full_name": repo_full_name,
+            },
+        )
 
-    # Si ya fue procesado, no hacer nada (idempotencia)
-    if delivery.status == WebhookDelivery.Status.PROCESSED:
-        return {"message": f"Webhook {delivery_id} ya procesado"}, 200
+        # Lock de fila: serializa procesamiento concurrente del mismo id
+        delivery = WebhookDelivery.objects.select_for_update().get(pk=delivery.pk)
 
-    if delivery.status == WebhookDelivery.Status.DEAD_LETTER:
-        return {"message": f"Webhook {delivery_id} en DLQ, no se reprocesa"}, 200
+        # Si ya fue procesado, no hacer nada (idempotencia)
+        if delivery.status == WebhookDelivery.Status.PROCESSED:
+            return {"message": f"Webhook {delivery_id} ya procesado"}, 200
 
-    # Procesar
-    try:
-        result = _dispatch_event(event_type, action, payload)
-        delivery.status = WebhookDelivery.Status.PROCESSED
-        delivery.processed_at = timezone.now()
-        delivery.save(update_fields=["status", "processed_at"])
-        return result, 200
-    except Exception as e:
-        logger.error(f"Error procesando webhook {delivery_id}: {e}")
-        delivery.error_message = str(e)[:500]
-        delivery.retry_count += 1
+        if delivery.status == WebhookDelivery.Status.DEAD_LETTER:
+            return {"message": f"Webhook {delivery_id} en DLQ, no se reprocesa"}, 200
 
-        if delivery.retry_count >= delivery.max_retries:
-            delivery.status = WebhookDelivery.Status.DEAD_LETTER
-            delivery.next_retry_at = None
-        else:
-            delivery.status = WebhookDelivery.Status.RETRYING
-            delay = RETRY_DELAYS[min(delivery.retry_count - 1, len(RETRY_DELAYS) - 1)]
-            delivery.next_retry_at = timezone.now() + timedelta(seconds=delay)
+        # Procesar
+        try:
+            result = _dispatch_event(event_type, action, payload)
+            delivery.status = WebhookDelivery.Status.PROCESSED
+            delivery.processed_at = timezone.now()
+            delivery.save(update_fields=["status", "processed_at"])
+            return result, 200
+        except Exception as e:
+            logger.exception(f"Error procesando webhook {delivery_id}")
+            delivery.error_message = str(e)[:500]
+            delivery.retry_count += 1
 
-        delivery.save(update_fields=["status", "error_message", "retry_count", "next_retry_at"])
+            if delivery.retry_count >= delivery.max_retries:
+                delivery.status = WebhookDelivery.Status.DEAD_LETTER
+                delivery.next_retry_at = None
+            else:
+                delivery.status = WebhookDelivery.Status.RETRYING
+                delay = RETRY_DELAYS[min(delivery.retry_count - 1, len(RETRY_DELAYS) - 1)]
+                delivery.next_retry_at = timezone.now() + timedelta(seconds=delay)
 
-        return {
-            "error": f"Error procesando webhook: {str(e)}",
-            "retry_count": delivery.retry_count,
-            "next_retry_at": delivery.next_retry_at.isoformat() if delivery.next_retry_at else None,
-        }, 500
+            delivery.save(update_fields=["status", "error_message", "retry_count", "next_retry_at"])
+
+            return {
+                "error": "Error procesando webhook",
+                "retry_count": delivery.retry_count,
+                "next_retry_at": delivery.next_retry_at.isoformat() if delivery.next_retry_at else None,
+            }, 500
 
 
 def _dispatch_event(event_type, action, payload):
@@ -84,7 +91,7 @@ def _dispatch_event(event_type, action, payload):
 
 def _handle_issue_event(action, issue_data, repo_full_name=None):
     """Maneja eventos de issues."""
-    from .sync_service import sync_issue_to_task, import_issue_as_task
+    from .sync_service import import_issue_as_task, sync_issue_to_task
 
     issue = issue_data.get("issue", {})
     repo_info = issue_data.get("repository", {})
@@ -156,8 +163,8 @@ def _handle_installation_event(action, payload):
 
 def _handle_pr_event(action, payload):
     """Maneja eventos de pull requests: crea/actualiza el PR en la BD."""
+
     from .models import GitHubPullRequest, GitHubRepo
-    from django.utils import timezone
 
     pr_data = payload.get("pull_request", {})
     repo_info = payload.get("repository", {})
@@ -193,9 +200,8 @@ def _handle_pr_event(action, payload):
     # Detectar tareas referenciadas por #number en el body/title
     import re
     text = (pr_data.get("body") or "") + " " + pr_data.get("title", "")
-    issue_refs = set(int(m) for m in re.findall(r"#(\d+)", text))
+    issue_refs = {int(m) for m in re.findall(r"#(\d+)", text)}
     if issue_refs:
-        from apps.tasks.models import Task
         from .models import GitHubIssueLink
         for issue_num in issue_refs:
             link = GitHubIssueLink.objects.filter(
@@ -228,7 +234,7 @@ def _handle_release_event(action, payload):
     if not repo:
         return {"message": f"Repo {repo_full_name} not tracked"}
 
-    release, created = GitHubRelease.objects.update_or_create(
+    _release, created = GitHubRelease.objects.update_or_create(
         release_id=release_data.get("id", 0),
         defaults={
             "repo": repo,
@@ -251,7 +257,7 @@ def _handle_release_event(action, payload):
 
 def _handle_check_run_event(action, payload):
     """Maneja eventos de check_run (CI/CD)."""
-    from .models import GitHubCheckRun, GitHubRepo, GitHubPullRequest
+    from .models import GitHubCheckRun, GitHubPullRequest, GitHubRepo
 
     check_data = payload.get("check_run", {})
     repo_info = payload.get("repository", {})
@@ -298,9 +304,17 @@ def _handle_check_run_event(action, payload):
     }
 
 
-def retry_dead_letter_deliveries():
-    """Reintenta manualmente las entregas en DLQ. Ejecutado por admin o comando."""
+def retry_dead_letter_deliveries(repo_full_name=None, repo_full_name__in=None):
+    """Reintenta manualmente las entregas en DLQ. Ejecutado por admin o comando.
+
+    Si se pasa ``repo_full_name``, solo reintenta entregas de ese repo.
+    Si se pasa ``repo_full_name__in``, solo reintenta entregas de esos repos.
+    """
     dead = WebhookDelivery.objects.filter(status=WebhookDelivery.Status.DEAD_LETTER)
+    if repo_full_name:
+        dead = dead.filter(repo_full_name=repo_full_name)
+    elif repo_full_name__in:
+        dead = dead.filter(repo_full_name__in=repo_full_name__in)
     retried = 0
     for delivery in dead:
         delivery.status = WebhookDelivery.Status.PENDING

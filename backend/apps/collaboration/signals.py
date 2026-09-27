@@ -1,12 +1,17 @@
 """Signals para colaboración: menciones en comentarios y auditoría de login."""
-from django.db.models.signals import post_save
+from django.contrib.auth.signals import (
+    user_logged_in,
+    user_logged_out,
+    user_login_failed,
+)
+from django.db.models.signals import post_delete, post_save
 from django.dispatch import receiver
-from django.contrib.auth.signals import user_logged_in, user_logged_out, user_login_failed
-from django.utils import timezone
 
-from apps.tasks.models import Comment
+from apps.projects.models import Project
+from apps.tasks.models import Comment, Task
+
+from .audit import log_create, log_delete, log_login, log_login_failed
 from .mentions import process_mentions
-from .audit import log_login, log_login_failed
 
 
 @receiver(post_save, sender=Comment)
@@ -19,6 +24,72 @@ def handle_mentions_in_comment(sender, instance, created, **kwargs):
         comment=instance,
         task=instance.task,
         mentioned_by=instance.author,
+    )
+
+
+# --- Auditoría de Task y Project (create + delete) ---
+#
+# Los signals no tienen request context (usuario/IP), así que el actor
+# registrado es el owner del recurso (AuditLog.actor admite null). Los
+# diffs de update se cubren a nivel de vista (patrón TeamViewSet); aquí
+# solo se registran create + delete, que eran el hueco de cobertura.
+
+
+def _instance_owner(instance):
+    """Owner del objeto, tolerando que la fila ya no exista (cascadas)."""
+    try:
+        return instance.owner
+    except Exception:  # noqa: BLE001  # boundary intencional: audit nunca rompe el flujo
+        return None
+
+
+@receiver(post_save, sender=Task)
+def audit_task_created(sender, instance, created, **kwargs):
+    """Registra la creación de una tarea en el audit log."""
+    if not created:
+        return
+    log_create(
+        actor=_instance_owner(instance),
+        resource_type="task",
+        resource_id=instance.id,
+        resource_name=(instance.title or "")[:255],
+    )
+
+
+@receiver(post_delete, sender=Task)
+def audit_task_deleted(sender, instance, **kwargs):
+    """Registra el borrado de una tarea en el audit log."""
+    log_delete(
+        actor=_instance_owner(instance),
+        resource_type="task",
+        resource_id=instance.id,
+        resource_name=(instance.title or "")[:255],
+        old_values={"title": instance.title},
+    )
+
+
+@receiver(post_save, sender=Project)
+def audit_project_created(sender, instance, created, **kwargs):
+    """Registra la creación de un proyecto en el audit log."""
+    if not created:
+        return
+    log_create(
+        actor=_instance_owner(instance),
+        resource_type="project",
+        resource_id=instance.id,
+        resource_name=(instance.name or "")[:255],
+    )
+
+
+@receiver(post_delete, sender=Project)
+def audit_project_deleted(sender, instance, **kwargs):
+    """Registra el borrado de un proyecto en el audit log."""
+    log_delete(
+        actor=_instance_owner(instance),
+        resource_type="project",
+        resource_id=instance.id,
+        resource_name=(instance.name or "")[:255],
+        old_values={"name": instance.name},
     )
 
 
@@ -58,8 +129,31 @@ def audit_login_failed(sender, credentials, request, **kwargs):
 
 
 def _get_client_ip(request):
-    """Obtiene la IP del cliente desde el request."""
+    """Obtiene la IP del cliente desde el request.
+
+    Solo confía en X-Forwarded-For si REMOTE_ADDR es un proxy confiable
+    (configurable via DJANGO_TRUSTED_PROXY_IPS).
+    """
+    import ipaddress
+
+    from django.conf import settings
+
+    remote_addr = request.META.get("REMOTE_ADDR")
     x_forwarded_for = request.META.get("HTTP_X_FORWARDED_FOR")
-    if x_forwarded_for:
+
+    # Lista de proxies confiables (por defecto vacía, configurable)
+    trusted_proxies = getattr(settings, "TRUSTED_PROXY_IPS", [])
+    is_trusted = False
+    if remote_addr and trusted_proxies:
+        try:
+            remote_ip = ipaddress.ip_address(remote_addr)
+            is_trusted = any(
+                remote_ip in ipaddress.ip_network(proxy, strict=False)
+                for proxy in trusted_proxies
+            )
+        except ValueError:
+            pass
+
+    if x_forwarded_for and is_trusted:
         return x_forwarded_for.split(",")[0].strip()
-    return request.META.get("REMOTE_ADDR")
+    return remote_addr

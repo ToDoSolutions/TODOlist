@@ -1,9 +1,12 @@
-import { useState } from "react";
+import { formatDate } from "../lib/dates";
+import { useMemo, useState } from "react";
+import { RRule } from "rrule";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import {
   Box,
   Typography,
   CircularProgress,
+  Alert,
   Paper,
   Button,
   TextField,
@@ -19,57 +22,99 @@ import {
   TableContainer,
   TableHead,
   TableRow,
+  Stack,
 } from "@mui/material";
 import { Trash2, Plus, Repeat } from "lucide-react";
+import { useTranslation } from "react-i18next";
 import { recurrenceRulesApi } from "../api/resources";
+import type { RecurrenceRuleItem } from "../types";
 import { notify } from "../notify";
+import { useConfirm } from "../components/ConfirmDialog";
 
-const FREQ_LABELS: Record<string, string> = {
-  daily: "Diaria",
-  weekly: "Semanal",
-  monthly: "Mensual",
-  yearly: "Anual",
+// Preview de próximas fechas según frecuencia elegida (module-level:
+// constante, no depende del render)
+const FREQ_MAP: Record<string, number> = {
+  daily: RRule.DAILY,
+  weekly: RRule.WEEKLY,
+  monthly: RRule.MONTHLY,
+  yearly: RRule.YEARLY,
 };
 
 export default function RecurrenceRulesPage() {
+  const { t } = useTranslation();
   const qc = useQueryClient();
+
+  const FREQ_LABELS: Record<string, string> = {
+    daily: t("p.ops.recurrence.freq.daily"),
+    weekly: t("p.ops.recurrence.freq.weekly"),
+    monthly: t("p.ops.recurrence.freq.monthly"),
+    yearly: t("p.ops.recurrence.freq.yearly"),
+  };
+  const confirm = useConfirm();
   const [open, setOpen] = useState(false);
   const [frequency, setFrequency] = useState("weekly");
   const [interval, setInterval] = useState(1);
 
-  const { data, isLoading } = useQuery({
+  const { data, isLoading, isError } = useQuery({
     queryKey: ["recurrence-rules"],
     queryFn: recurrenceRulesApi.list,
   });
   const rules = data || [];
 
+  // Preview de las próximas 5 fechas según frecuencia+intervalo elegidos
+  const nextDates = useMemo(() => {
+    try {
+      const freq = FREQ_MAP[frequency];
+      if (freq === undefined || interval < 1) return [];
+      return new RRule({ freq, interval, dtstart: new Date() }).all((_, i) => i < 5);
+    } catch {
+      return [];
+    }
+  }, [frequency, interval]);
+
   const createMutation = useMutation({
-    mutationFn: () =>
-      recurrenceRulesApi.create({ frequency, interval }),
+    mutationFn: () => recurrenceRulesApi.create({ frequency, interval }),
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: ["recurrence-rules"] });
       setOpen(false);
-      notify.success("Regla de recurrencia creada");
+      notify.success(t("p.ops.recurrence.created"));
     },
-    onError: () => notify.error("Error al crear regla"),
+    onError: () => notify.error(t("p.ops.recurrence.createError")),
   });
 
   const deleteMutation = useMutation({
     mutationFn: (id: number) => recurrenceRulesApi.remove(id),
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: ["recurrence-rules"] });
-      notify.success("Regla eliminada");
+      notify.success(t("p.ops.recurrence.deleted"));
     },
   });
 
   if (isLoading) return <CircularProgress />;
+  if (isError)
+    return (
+      <Alert severity="error" sx={{ mt: 2 }}>
+        {t("p.ops.recurrence.loadError")}
+      </Alert>
+    );
 
   return (
     <Box>
-      <Box sx={{ display: "flex", justifyContent: "space-between", alignItems: "center", mb: 2 }}>
-        <Typography variant="h5">Reglas de recurrencia</Typography>
-        <Button variant="contained" startIcon={<Plus size={16} />} onClick={() => setOpen(true)}>
-          Nueva regla
+      <Box
+        sx={{
+          display: "flex",
+          justifyContent: "space-between",
+          alignItems: "center",
+          mb: 2,
+        }}
+      >
+        <Typography variant="h5">{t("p.ops.recurrence.title")}</Typography>
+        <Button
+          variant="contained"
+          startIcon={<Plus size={16} />}
+          onClick={() => setOpen(true)}
+        >
+          {t("p.ops.recurrence.new")}
         </Button>
       </Box>
 
@@ -78,25 +123,39 @@ export default function RecurrenceRulesPage() {
           <TableHead>
             <TableRow>
               <TableCell>ID</TableCell>
-              <TableCell>Frecuencia</TableCell>
-              <TableCell>Intervalo</TableCell>
-              <TableCell>Ocurrencias generadas</TableCell>
-              <TableCell>Fecha creación</TableCell>
+              <TableCell>{t("p.ops.recurrence.frequency")}</TableCell>
+              <TableCell>{t("p.ops.recurrence.interval")}</TableCell>
+              <TableCell>{t("p.ops.recurrence.occurrences")}</TableCell>
+              <TableCell>{t("p.ops.recurrence.createdAt")}</TableCell>
               <TableCell />
             </TableRow>
           </TableHead>
           <TableBody>
-            {rules.map((r: any) => (
+            {rules.map((r: RecurrenceRuleItem) => (
               <TableRow key={r.id}>
                 <TableCell>{r.id}</TableCell>
                 <TableCell>
-                  <Chip size="small" label={FREQ_LABELS[r.frequency] || r.frequency} icon={<Repeat size={14} />} />
+                  <Chip
+                    size="small"
+                    label={FREQ_LABELS[r.frequency] || r.frequency}
+                    icon={<Repeat size={14} />}
+                  />
                 </TableCell>
-                <TableCell>Cada {r.interval}</TableCell>
-                <TableCell>{r.occurrences_generated}</TableCell>
-                <TableCell>{new Date(r.created_at).toLocaleDateString()}</TableCell>
                 <TableCell>
-                  <IconButton size="small" onClick={() => deleteMutation.mutate(r.id)} title="Eliminar">
+                  {t("p.ops.recurrence.everyInterval", { interval: r.interval })}
+                </TableCell>
+                <TableCell>{r.occurrences_generated}</TableCell>
+                <TableCell>{formatDate(r.created_at)}</TableCell>
+                <TableCell>
+                  <IconButton
+                    size="small"
+                    color="error"
+                    onClick={async () => {
+                      if (await confirm(t("p.ops.recurrence.confirmDelete")))
+                        deleteMutation.mutate(r.id);
+                    }}
+                    title={t("common.delete")}
+                  >
                     <Trash2 size={16} />
                   </IconButton>
                 </TableCell>
@@ -105,7 +164,9 @@ export default function RecurrenceRulesPage() {
             {rules.length === 0 && (
               <TableRow>
                 <TableCell colSpan={6} align="center">
-                  <Typography color="text.secondary">No hay reglas de recurrencia</Typography>
+                  <Typography color="text.secondary">
+                    {t("p.ops.recurrence.empty")}
+                  </Typography>
                 </TableCell>
               </TableRow>
             )}
@@ -114,36 +175,58 @@ export default function RecurrenceRulesPage() {
       </TableContainer>
 
       <Dialog open={open} onClose={() => setOpen(false)}>
-        <DialogTitle>Nueva regla de recurrencia</DialogTitle>
+        <DialogTitle>{t("p.ops.recurrence.newTitle")}</DialogTitle>
         <DialogContent>
           <TextField
             fullWidth
             select
-            label="Frecuencia"
+            label={t("p.ops.recurrence.frequency")}
             value={frequency}
             onChange={(e) => setFrequency(e.target.value)}
             sx={{ mt: 1 }}
             SelectProps={{ native: true }}
           >
-            <option value="daily">Diaria</option>
-            <option value="weekly">Semanal</option>
-            <option value="monthly">Mensual</option>
-            <option value="yearly">Anual</option>
+            {Object.keys(FREQ_MAP).map((k) => (
+              <option key={k} value={k}>
+                {FREQ_LABELS[k]}
+              </option>
+            ))}
           </TextField>
           <TextField
             fullWidth
-            label="Intervalo (cada cuántos períodos)"
+            label={t("p.ops.recurrence.intervalLabel")}
             type="number"
             value={interval}
             onChange={(e) => setInterval(Number(e.target.value))}
             sx={{ mt: 2 }}
             inputProps={{ min: 1 }}
           />
+          {nextDates.length > 0 && (
+            <Box sx={{ mt: 2 }}>
+              <Typography variant="caption" color="text.secondary">
+                {t("p.ops.recurrence.nextDates")}
+              </Typography>
+              <Stack direction="row" spacing={0.5} flexWrap="wrap" sx={{ mt: 0.5 }}>
+                {nextDates.map((d) => (
+                  <Chip
+                    key={d.toISOString()}
+                    size="small"
+                    variant="outlined"
+                    label={formatDate(d)}
+                  />
+                ))}
+              </Stack>
+            </Box>
+          )}
         </DialogContent>
         <DialogActions>
-          <Button onClick={() => setOpen(false)}>Cancelar</Button>
-          <Button variant="contained" onClick={() => createMutation.mutate()} disabled={createMutation.isPending}>
-            Crear
+          <Button onClick={() => setOpen(false)}>{t("common.cancel")}</Button>
+          <Button
+            variant="contained"
+            onClick={() => createMutation.mutate()}
+            disabled={createMutation.isPending}
+          >
+            {t("common.create")}
           </Button>
         </DialogActions>
       </Dialog>

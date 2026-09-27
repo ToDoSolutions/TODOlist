@@ -1,6 +1,10 @@
 """Modelos para integración con GitHub."""
+import secrets
+
 from django.conf import settings
 from django.db import models
+
+from .fields import EncryptedTextField
 
 
 class WebhookDelivery(models.Model):
@@ -67,10 +71,11 @@ class GitHubInstallation(models.Model):
     avatar_url = models.URLField(max_length=500, blank=True, default="")
 
     # Token OAuth del usuario (para login con GitHub y API calls como usuario)
+    # Almacenados cifrados en reposo (EncryptedTextField)
     github_user_id = models.BigIntegerField(null=True, blank=True)
     github_username = models.CharField(max_length=255, blank=True, default="")
-    access_token = models.TextField(blank=True, default="")  # OAuth token
-    refresh_token = models.TextField(blank=True, default="")
+    access_token = EncryptedTextField(blank=True, default="")  # OAuth token
+    refresh_token = EncryptedTextField(blank=True, default="")
     token_expires_at = models.DateTimeField(null=True, blank=True)
 
     created_at = models.DateTimeField(auto_now_add=True)
@@ -295,3 +300,44 @@ class GitHubCheckRun(models.Model):
 
     def __str__(self):
         return f"{self.name} ({self.status}/{self.conclusion or '—'})"
+
+
+class InboundWebhook(models.Model):
+    """Webhook entrante genérico (estilo Zapier/Make).
+
+    Un POST anónimo a ``/api/inbound/{token}/`` con {title, ...} crea una
+    tarea a nombre de ``user`` en ``project`` (o el primer proyecto del
+    usuario si es None). ``last_used_at`` registra el último uso.
+    """
+
+    token = models.CharField(
+        max_length=64, unique=True, default=secrets.token_urlsafe,
+    )
+    user = models.ForeignKey(
+        settings.AUTH_USER_MODEL,
+        on_delete=models.CASCADE,
+        related_name="inbound_webhooks",
+    )
+    project = models.ForeignKey(
+        "projects.Project",
+        on_delete=models.CASCADE,
+        related_name="inbound_webhooks",
+        null=True,
+        blank=True,
+        help_text="Proyecto destino; si es nulo se usa el primer proyecto del usuario",
+    )
+    name = models.CharField(max_length=120)
+    is_active = models.BooleanField(default=True)
+    last_used_at = models.DateTimeField(null=True, blank=True)
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        ordering = ["-created_at"]
+
+    def __str__(self):
+        return f"{self.name} ({self.user.email})"
+
+    def save(self, *args, **kwargs):
+        if not self.token:
+            self.token = secrets.token_urlsafe(32)
+        super().save(*args, **kwargs)

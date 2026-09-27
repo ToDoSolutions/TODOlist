@@ -2,8 +2,15 @@
 from rest_framework import serializers
 
 from .models import (
-    GitHubInstallation, GitHubRepo, GitHubIssueLink, WebhookDelivery,
-    GitHubPullRequest, GitHubCommit, GitHubRelease, GitHubCheckRun,
+    GitHubCheckRun,
+    GitHubCommit,
+    GitHubInstallation,
+    GitHubIssueLink,
+    GitHubPullRequest,
+    GitHubRelease,
+    GitHubRepo,
+    InboundWebhook,
+    WebhookDelivery,
 )
 
 
@@ -30,6 +37,32 @@ class GitHubRepoSerializer(serializers.ModelSerializer):
             "id", "installation", "repo_id", "full_name", "name", "owner",
             "is_private", "default_branch", "created_at",
         ]
+
+
+class InboundWebhookSerializer(serializers.ModelSerializer):
+    """Webhook entrante genérico: el token solo se expone al owner."""
+
+    class Meta:
+        model = InboundWebhook
+        fields = [
+            "id", "name", "token", "project", "is_active",
+            "last_used_at", "created_at",
+        ]
+        read_only_fields = ["id", "token", "last_used_at", "created_at"]
+
+    def validate_project(self, value):
+        """El proyecto destino debe ser editable por el usuario."""
+        if value is None:
+            return value
+        from apps.projects.models import accessible_projects
+        request = self.context.get("request")
+        if request and not accessible_projects(
+            request.user, write=True
+        ).filter(pk=value.pk).exists():
+            raise serializers.ValidationError(
+                "Sin acceso de escritura a ese proyecto"
+            )
+        return value
 
 
 class GitHubIssueLinkSerializer(serializers.ModelSerializer):
@@ -73,7 +106,7 @@ class WebhookDeliverySerializer(serializers.ModelSerializer):
 
 class GitHubPullRequestSerializer(serializers.ModelSerializer):
     repo_full_name = serializers.CharField(source="repo.full_name", read_only=True)
-    task_ids = serializers.PrimaryKeyRelatedField(
+    task_ids: serializers.PrimaryKeyRelatedField = serializers.PrimaryKeyRelatedField(
         many=True, read_only=True, source="tasks"
     )
 
@@ -91,7 +124,7 @@ class GitHubPullRequestSerializer(serializers.ModelSerializer):
 
 class GitHubCommitSerializer(serializers.ModelSerializer):
     repo_full_name = serializers.CharField(source="repo.full_name", read_only=True)
-    task_ids = serializers.PrimaryKeyRelatedField(
+    task_ids: serializers.PrimaryKeyRelatedField = serializers.PrimaryKeyRelatedField(
         many=True, read_only=True, source="tasks"
     )
 
@@ -106,10 +139,10 @@ class GitHubCommitSerializer(serializers.ModelSerializer):
 
 class GitHubReleaseSerializer(serializers.ModelSerializer):
     repo_full_name = serializers.CharField(source="repo.full_name", read_only=True)
-    task_ids = serializers.PrimaryKeyRelatedField(
+    task_ids: serializers.PrimaryKeyRelatedField = serializers.PrimaryKeyRelatedField(
         many=True, read_only=True, source="tasks"
     )
-    pr_ids = serializers.PrimaryKeyRelatedField(
+    pr_ids: serializers.PrimaryKeyRelatedField = serializers.PrimaryKeyRelatedField(
         many=True, read_only=True, source="pull_requests"
     )
 

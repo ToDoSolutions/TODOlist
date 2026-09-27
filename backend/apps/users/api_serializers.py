@@ -1,5 +1,7 @@
 """Serializers para API keys."""
 from rest_framework import serializers
+
+from .api_auth import VALID_API_KEY_SCOPES
 from .models import APIKey
 
 
@@ -21,3 +23,11 @@ class APIKeyCreateSerializer(serializers.Serializer):
         child=serializers.CharField(), default=list, required=False
     )
     expires_at = serializers.DateTimeField(required=False, allow_null=True)
+
+    def validate_scopes(self, value):
+        invalid = set(value) - VALID_API_KEY_SCOPES
+        if invalid:
+            raise serializers.ValidationError(
+                f"Scopes inválidos: {sorted(invalid)}. Válidos: {sorted(VALID_API_KEY_SCOPES)}"
+            )
+        return value

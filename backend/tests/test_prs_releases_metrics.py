@@ -1,15 +1,20 @@
 """Tests de Fase 6 (PRs, releases, CI) y Fase 7 (métricas)."""
 import json
-import pytest
-from datetime import date, timedelta
-from django.utils import timezone
+from datetime import timedelta
 from unittest.mock import patch
 
-from apps.tasks.models import Task, Sprint, TaskActivity
+import pytest
+from django.utils import timezone
+
 from apps.integrations.models import (
-    GitHubInstallation, GitHubRepo, GitHubPullRequest, GitHubRelease,
-    GitHubCheckRun, GitHubIssueLink,
+    GitHubCheckRun,
+    GitHubInstallation,
+    GitHubIssueLink,
+    GitHubPullRequest,
+    GitHubRelease,
+    GitHubRepo,
 )
+from apps.tasks.models import Sprint, Task
 
 
 @pytest.fixture
@@ -79,7 +84,7 @@ class TestPullRequests:
         )
         resp = authed_client.get("/api/github/prs/")
         assert resp.status_code == 200
-        data = resp.data["results"] if "results" in resp.data else resp.data
+        data = resp.data.get("results", resp.data) if isinstance(resp.data, dict) else resp.data
         assert len(data) == 1
 
     def test_pr_detecta_tarea_por_referencia(self, api_client, github_repo, user):
@@ -242,7 +247,7 @@ class TestDashboardSummary:
     def test_dashboard_con_sprint_activo(self, authed_client, user):
         sprint = Sprint.objects.create(
             owner=user, name="S1", state="active",
-            start_date=date.today(), end_date=date.today() + timedelta(days=14),
+            start_date=timezone.localdate(), end_date=timezone.localdate() + timedelta(days=14),
         )
         Task.objects.create(owner=user, title="T1", state="completed", sprint=sprint)
         Task.objects.create(owner=user, title="T2", state="pending", sprint=sprint)
@@ -259,7 +264,7 @@ class TestSprintMetrics:
     def test_metricas_sprint(self, authed_client, user):
         sprint = Sprint.objects.create(
             owner=user, name="S1", state="active",
-            start_date=date.today(), end_date=date.today() + timedelta(days=14),
+            start_date=timezone.localdate(), end_date=timezone.localdate() + timedelta(days=14),
         )
         Task.objects.create(owner=user, title="T1", state="completed", sprint=sprint, story_points=5)
         Task.objects.create(owner=user, title="T2", state="in_progress", sprint=sprint, story_points=3)

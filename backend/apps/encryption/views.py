@@ -1,20 +1,20 @@
-from rest_framework import viewsets, status
+from django.utils import timezone
+from rest_framework import status, viewsets
 from rest_framework.decorators import action
 from rest_framework.permissions import IsAuthenticated
 from rest_framework.response import Response
 
-from .models import UserPublicKey, EncryptedTask, EncryptedKeyShare
+from .models import EncryptedKeyShare, EncryptedTask, UserPublicKey
 from .serializers import (
-    UserPublicKeySerializer,
-    EncryptedTaskSerializer,
     EncryptedKeyShareSerializer,
+    EncryptedTaskSerializer,
+    UserPublicKeySerializer,
 )
 from .services import (
-    register_public_key,
-    get_active_public_key,
-    create_encrypted_task,
     add_key_share,
+    get_active_public_key,
     list_shared_encrypted_tasks,
+    register_public_key,
 )
 
 
@@ -40,6 +40,96 @@ class UserPublicKeyViewSet(viewsets.ModelViewSet):
             return Response({"error": "No active key"}, status=404)
         return Response(UserPublicKeySerializer(key).data)
 
+    @action(detail=False, methods=["get"], url_path="lookup")
+    def lookup(self, request):
+        """GET /public-keys/lookup/?email=... — clave pública activa de otro
+        usuario. Necesaria para cifrarle un key share; las claves públicas
+        son públicas por definición (el modelo de amenaza ya asume que un
+        servidor malicioso podría sustituirlas).
+        """
+        email = (request.query_params.get("email") or "").strip()
+        from django.contrib.auth import get_user_model
+
+        User = get_user_model()
+        try:
+            target = User.objects.get(email__iexact=email)
+        except User.DoesNotExist:
+            return Response({"error": "User not found"}, status=404)
+        key = get_active_public_key(target)
+        if not key:
+            return Response(
+                {"error": "El usuario no tiene una clave activa"}, status=404
+            )
+        return Response(UserPublicKeySerializer(key).data)
+
+    @action(detail=True, methods=["post"])
+    def rotate(self, request, pk=None):
+        """Rota la clave pública actual: marca rotated_at, crea una nueva clave
+        y marca los EncryptedKeyShare que necesitan re-encriptación.
+
+        Los shares se mantienen (marcados como pendientes) hasta que el
+        cliente los re-encripte — nunca se borran de forma destructiva.
+        """
+        old_key = self.get_object()
+        new_public_key = request.data.get("public_key")
+        new_key_id = request.data.get("key_id")
+        new_algorithm = request.data.get("algorithm", old_key.algorithm)
+
+        if not new_public_key or not new_key_id:
+            return Response(
+                {"error": "public_key and key_id are required"},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+
+        # Marcar la clave antigua como rotada (sigue activa para descifrar
+        # datos existentes hasta que se re-encripten)
+        old_key.rotated_at = timezone.now()
+        old_key.save(update_fields=["rotated_at"])
+
+        # Crear la nueva clave activa
+        new_key = register_public_key(
+            user=request.user,
+            public_key=new_public_key,
+            key_id=new_key_id,
+            algorithm=new_algorithm,
+        )
+
+        # Contar shares que necesitan re-encriptación (NO se borran: el
+        # servidor no tiene la clave privada; borrarlos destruiría acceso)
+        shares = EncryptedKeyShare.objects.filter(user_public_key=old_key)
+
+        return Response(
+            {
+                "old_key": UserPublicKeySerializer(old_key).data,
+                "new_key": UserPublicKeySerializer(new_key).data,
+                "pending_reencryption_count": shares.count(),
+            },
+            status=status.HTTP_200_OK,
+        )
+
+    def destroy(self, request, *args, **kwargs):
+        """Elimina una clave pública solo si no hay key shares dependientes
+        o si el cliente confirma con force=true."""
+        instance = self.get_object()
+        force = request.query_params.get("force", "false").lower() == "true"
+
+        dependent_shares = EncryptedKeyShare.objects.filter(
+            user_public_key=instance
+        ).count()
+
+        if dependent_shares > 0 and not force:
+            return Response(
+                {
+                    "error": "Cannot delete key with dependent encrypted key shares",
+                    "dependent_shares": dependent_shares,
+                    "hint": "Add ?force=true to confirm deletion",
+                },
+                status=status.HTTP_409_CONFLICT,
+            )
+
+        self.perform_destroy(instance)
+        return Response(status=status.HTTP_204_NO_CONTENT)
+
 
 class EncryptedTaskViewSet(viewsets.ModelViewSet):
     serializer_class = EncryptedTaskSerializer
@@ -59,6 +149,12 @@ class EncryptedTaskViewSet(viewsets.ModelViewSet):
         encrypted_key = request.data.get("encrypted_key")
         public_key_id = request.data.get("public_key_id")
 
+        if not user_email or not encrypted_key or not public_key_id:
+            return Response(
+                {"error": "user_email, encrypted_key y public_key_id requeridos"},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+
         from django.contrib.auth import get_user_model
         User = get_user_model()
         try:
@@ -66,10 +162,22 @@ class EncryptedTaskViewSet(viewsets.ModelViewSet):
         except User.DoesNotExist:
             return Response({"error": "User not found"}, status=404)
 
+        # La clave debe existir, pertenecer al destinatario y estar activa
         try:
-            pk_obj = UserPublicKey.objects.get(id=public_key_id, user=target_user)
+            pk_obj = UserPublicKey.objects.get(
+                id=public_key_id, user=target_user, is_active=True
+            )
         except UserPublicKey.DoesNotExist:
-            return Response({"error": "Public key not found"}, status=404)
+            return Response({"error": "Public key not found or inactive"}, status=404)
+
+        # Duplicado → error controlado (no sobreescribir shares)
+        if EncryptedKeyShare.objects.filter(
+            encrypted_task=task, user=target_user
+        ).exists():
+            return Response(
+                {"error": "Ya existe un share para este usuario"},
+                status=status.HTTP_409_CONFLICT,
+            )
 
         share = add_key_share(task, target_user, encrypted_key, pk_obj)
         return Response(EncryptedKeyShareSerializer(share).data, status=201)

@@ -1,12 +1,15 @@
 """Views para automatizaciones."""
-from rest_framework import viewsets, mixins, status
+from rest_framework import mixins, viewsets
 from rest_framework.decorators import action
 from rest_framework.permissions import IsAuthenticated
 from rest_framework.response import Response
 
-from .models import AutomationRule, AutomationLog
-from .serializers import AutomationRuleSerializer, AutomationLogSerializer
-from .engine import trigger_automation
+from .models import AutomationLog, AutomationRule, SlaPolicy
+from .serializers import (
+    AutomationLogSerializer,
+    AutomationRuleSerializer,
+    SlaPolicySerializer,
+)
 
 
 class AutomationRuleViewSet(viewsets.ModelViewSet):
@@ -18,17 +21,42 @@ class AutomationRuleViewSet(viewsets.ModelViewSet):
         return AutomationRule.objects.filter(owner=self.request.user)
 
     def perform_create(self, serializer):
+        # Cuota por usuario: evita abuso de recursos (cada regla evalúa en cada trigger)
+        from django.conf import settings
+        from rest_framework.exceptions import ValidationError
+
+        max_rules = getattr(settings, "MAX_AUTOMATION_RULES_PER_USER", 100)
+        if AutomationRule.objects.filter(owner=self.request.user).count() >= max_rules:
+            raise ValidationError(
+                {"detail": f"Límite de {max_rules} reglas de automatización alcanzado"}
+            )
         serializer.save(owner=self.request.user)
 
     @action(detail=True, methods=["post"])
     def test(self, request, pk=None):
-        """Prueba una regla con un contexto simulado."""
+        """Simula una regla con un contexto de prueba, sin ejecutar acciones.
+
+        Solo evalúa las condiciones de ESTA regla contra una tarea real del
+        usuario y reporta qué haría — nunca dispara otras reglas ni aplica
+        efectos secundarios.
+        """
         rule = self.get_object()
         from apps.tasks.models import Task
+
+        from .engine import evaluate_conditions
         task = Task.objects.filter(owner=request.user).first()
         context = {"task": task, "user": request.user}
-        results = trigger_automation(rule.trigger, context)
-        return Response({"results": results})
+        conditions_met = evaluate_conditions(rule.conditions or [], context) if rule.conditions else True
+        return Response({
+            "rule": rule.name,
+            "trigger": rule.trigger,
+            "enabled": rule.enabled,
+            "task_evaluated": task.id if task else None,
+            "conditions_met": conditions_met,
+            "would_execute": rule.enabled and conditions_met and task is not None,
+            "action": rule.action,
+            "action_params": rule.action_params,
+        })
 
     @action(detail=True, methods=["get"])
     def logs(self, request, pk=None):
@@ -37,6 +65,18 @@ class AutomationRuleViewSet(viewsets.ModelViewSet):
         logs = AutomationLog.objects.filter(rule=rule)[:50]
         serializer = AutomationLogSerializer(logs, many=True)
         return Response(serializer.data)
+
+
+class SlaPolicyViewSet(viewsets.ModelViewSet):
+    """CRUD de políticas SLA del usuario."""
+    serializer_class = SlaPolicySerializer
+    permission_classes = [IsAuthenticated]
+
+    def get_queryset(self):
+        return SlaPolicy.objects.filter(owner=self.request.user)
+
+    def perform_create(self, serializer):
+        serializer.save(owner=self.request.user)
 
 
 class AutomationLogViewSet(

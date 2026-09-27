@@ -1,30 +1,40 @@
 """URL configuration for TODOlist backend."""
-from django.contrib import admin
-from django.urls import include, path
 from django.conf import settings
 from django.conf.urls.static import static
-from rest_framework_simplejwt.views import (
-    TokenObtainPairView,
-    TokenRefreshView,
-)
+from django.contrib import admin
+from django.urls import include, path
 from drf_spectacular.views import (
     SpectacularAPIView,
-    SpectacularSwaggerView,
     SpectacularRedocView,
+    SpectacularSwaggerView,
 )
 from graphene_django.views import GraphQLView
 
-from apps.users.views import RegisterView, MeView, change_password
+from apps.users.views import (
+    CookieTokenRefreshView,
+    LoginView,
+    MeView,
+    RegisterView,
+    change_password,
+    password_reset_confirm,
+    password_reset_request,
+    send_verification_email,
+    verify_email,
+)
 
 urlpatterns = [
     path("admin/", admin.site.urls),
 
-    # Auth
-    path("api/auth/login/", TokenObtainPairView.as_view(), name="token_obtain_pair"),
-    path("api/auth/refresh/", TokenRefreshView.as_view(), name="token_refresh"),
+    # Auth (login con enforcement de 2FA)
+    path("api/auth/login/", LoginView.as_view(), name="token_obtain_pair"),
+    path("api/auth/refresh/", CookieTokenRefreshView.as_view(), name="token_refresh"),
     path("api/auth/register/", RegisterView.as_view(), name="auth_register"),
     path("api/auth/me/", MeView.as_view(), name="auth_me"),
     path("api/auth/change-password/", change_password, name="change_password"),
+    path("api/auth/password-reset/", password_reset_request, name="password_reset"),
+    path("api/auth/password-reset/confirm/", password_reset_confirm, name="password_reset_confirm"),
+    path("api/auth/send-verification/", send_verification_email, name="send_verification"),
+    path("api/auth/verify-email/", verify_email, name="verify_email"),
 
     # API Keys
     path("api/", include("apps.users.api_urls")),
@@ -50,7 +60,7 @@ urlpatterns = [
     # Offline sync
     path("api/", include("apps.offline_sync.urls")),
 
-    # E2E Encryption
+    # Cifrado a nivel de aplicación (field-level encryption)
     path("api/", include("apps.encryption.urls")),
 
     # Resources
@@ -63,14 +73,17 @@ urlpatterns = [
     path("api/", include("apps.notifications.urls")),
     path("api/", include("apps.automations.urls")),
     path("api/", include("apps.collaboration.urls")),
+    path("api/", include("apps.wiki.urls")),
+    path("api/", include("apps.intake.urls")),
+    path("api/", include("apps.dashboards.urls")),
 
     # OpenAPI docs
     path("api/schema/", SpectacularAPIView.as_view(), name="api_schema"),
     path("api/docs/", SpectacularSwaggerView.as_view(url_name="api_schema"), name="api_docs"),
     path("api/redoc/", SpectacularRedocView.as_view(url_name="api_schema"), name="api_redoc"),
 
-    # GraphQL
-    path("graphql/", GraphQLView.as_view(graphiql=True), name="graphql"),
+    # GraphQL (IDE/introspection solo en DEBUG)
+    path("graphql/", GraphQLView.as_view(graphiql=settings.DEBUG), name="graphql"),
 ]
 
 if settings.DEBUG:

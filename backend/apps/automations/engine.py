@@ -1,14 +1,32 @@
 """Motor de ejecución de reglas de automatización."""
 import logging
+import threading
 from datetime import timedelta
+
+from django.db.models import F
 from django.utils import timezone
 
-from apps.tasks.models import Task, Sprint
 from apps.notifications.services import notify
+from apps.tasks.models import Sprint, Task
 
-from .models import AutomationRule, AutomationLog
+from .models import AutomationLog, AutomationRule
 
 logger = logging.getLogger(__name__)
+
+# Profundidad máxima de automatizaciones encadenadas: una acción puede
+# disparar signals que vuelven a llamar a trigger_automation (p.ej.
+# CREATE_TASK dispara TASK_CREATED). Sin límite, una regla que crea tareas
+# en TASK_CREATED se auto-dispara hasta RecursionError.
+_MAX_AUTOMATION_DEPTH = 3
+_local = threading.local()
+
+
+def _metric(status):
+    try:
+        from apps.monitoring.metrics import AUTOMATION_EXECUTIONS
+        AUTOMATION_EXECUTIONS.labels(status=status).inc()
+    except Exception:  # las métricas nunca deben romper el flujo
+        logger.debug("metrics increment failed", exc_info=True)
 
 
 def evaluate_conditions(conditions, context):
@@ -47,87 +65,262 @@ def evaluate_conditions(conditions, context):
     return True
 
 
+def _valid_priorities():
+    return [c[0] for c in Task.Priority.choices] if hasattr(Task, 'Priority') else [1, 2, 3, 4, 5]
+
+
+def _action_set_priority(rule, params, task, sprint, user):
+    try:
+        priority = int(params.get("priority", 3))
+    except (TypeError, ValueError):
+        return {"error": "Invalid priority"}
+    if priority not in _valid_priorities():
+        return {"error": f"Priority {priority} out of range"}
+    old_priority = task.priority
+    task.priority = priority
+    task.save(update_fields=["priority"])
+    return {"old_priority": old_priority, "new_priority": priority}
+
+
+def _action_set_state(rule, params, task, sprint, user):
+    new_state = params.get("state", "pending")
+    if new_state not in [c[0] for c in Task.State.choices]:
+        return {"error": f"Invalid state '{new_state}'"}
+    old_state = task.state
+    task.state = new_state
+    task.save(update_fields=["state"])
+    return {"old_state": old_state, "new_state": new_state}
+
+
+def _action_set_due_date(rule, params, task, sprint, user):
+    try:
+        days = int(params.get("days_from_now", 7))
+    except (TypeError, ValueError):
+        return {"error": "Invalid days_from_now"}
+    if not 0 <= days <= 3650:
+        return {"error": "days_from_now out of range (0-3650)"}
+    task.due_date = timezone.now() + timedelta(days=days)
+    task.save(update_fields=["due_date"])
+    return {"due_date": str(task.due_date)}
+
+
+def _action_move_to_sprint(rule, params, task, sprint, user):
+    sprint_id = params.get("sprint_id")
+    if not sprint_id:
+        return {"skipped": "no sprint_id in action_params"}
+    try:
+        target_sprint = Sprint.objects.get(id=sprint_id, owner=user)
+        # Coherencia: el sprint debe pertenecer al proyecto de la tarea
+        if task.project_id and target_sprint.project_id != task.project_id:
+            return {"error": "Sprint does not belong to task's project"}
+        old_sprint = task.sprint
+        task.sprint = target_sprint
+        task.save(update_fields=["sprint"])
+        return {"old_sprint": str(old_sprint), "new_sprint": target_sprint.name}
+    except Sprint.DoesNotExist:
+        return {"error": f"Sprint {sprint_id} not found"}
+
+
+def _action_subtasks_in_progress(rule, params, task, sprint, user):
+    # Subtask usa is_done boolean, no state. Mover las tareas hijas
+    # pendientes del padre a in_progress:
+    children = Task.objects.filter(parent=task, state__in=["pending", "backlog"])
+    moved = children.update(state="in_progress")
+    return {"moved_subtasks": moved}
+
+
+def _action_create_notification(rule, params, task, sprint, user):
+    notify(
+        recipient=user,
+        notification_type="automation_triggered",
+        title=params.get("title", f"Automatización: {rule.name}"),
+        body=params.get("body", ""),
+        task=task,
+        sprint=sprint,
+        action_url=params.get("action_url", ""),
+    )
+    return {"notification_created": True}
+
+
+def _action_create_task(rule, params, task, sprint, user):
+    title = params.get("title", "Tarea creada por automatización")
+    state_param = params.get("state", "pending")
+    if state_param not in [c[0] for c in Task.State.choices]:
+        state_param = "pending"
+    try:
+        priority = int(params.get("priority", 3))
+    except (TypeError, ValueError):
+        priority = 3
+    if priority not in _valid_priorities():
+        priority = 3
+    new_task = Task.objects.create(
+        owner=user,
+        title=str(title)[:500],
+        description=str(params.get("description", ""))[:5000],
+        priority=priority,
+        state=state_param,
+    )
+    return {"created_task_id": new_task.id, "created_task_title": new_task.title}
+
+
+def _action_set_assignee(rule, params, task, sprint, user):
+    from django.contrib.auth import get_user_model
+    User = get_user_model()
+    assignee_id = params.get("assignee_id")
+    assignee_email = params.get("assignee_email")
+    old_assignee = task.assignee
+    new_assignee = None
+    if assignee_id:
+        try:
+            new_assignee = User.objects.get(id=assignee_id)
+        except User.DoesNotExist:
+            return {"error": f"User {assignee_id} not found"}
+    elif assignee_email:
+        try:
+            new_assignee = User.objects.get(email=assignee_email)
+        except User.DoesNotExist:
+            return {"error": f"User {assignee_email} not found"}
+    if not new_assignee:
+        return {"skipped": "no assignee_id/assignee_email in action_params"}
+    # Verificar que el assignee tiene acceso al proyecto
+    if task.project:
+        has_access = (
+            new_assignee == task.project.owner
+            or task.project.members.filter(user=new_assignee).exists()
+        )
+        if not has_access:
+            return {"error": f"User {new_assignee.email} has no access to project"}
+    task.assignee = new_assignee
+    task.save(update_fields=["assignee"])
+    return {
+        "old_assignee": str(old_assignee) if old_assignee else None,
+        "new_assignee": new_assignee.email,
+    }
+
+
+def _action_add_tag(rule, params, task, sprint, user):
+    from apps.tags.models import Tag
+    tag_name = params.get("tag_name", "")
+    if not tag_name:
+        return {"skipped": "no tag_name in action_params"}
+    tag, created = Tag.objects.get_or_create(
+        name=tag_name,
+        owner=user,
+        defaults={"color": params.get("tag_color", "#1976d2")},
+    )
+    task.tags.add(tag)
+    return {"tag_added": tag_name, "tag_created": created}
+
+
+def _action_create_subtask(rule, params, task, sprint, user):
+    """Crea un item del checklist (modelo Subtask — el mismo que usa la UI
+    de tareas vía POST /tasks/{id}/subtasks/)."""
+    from apps.tasks.models import Subtask
+    title = str(params.get("title", "")).strip()
+    if not title:
+        return {"skipped": "no title in action_params"}
+    subtask = Subtask.objects.create(task=task, title=title[:255])
+    return {"created_subtask_id": subtask.id, "title": subtask.title}
+
+
+def _action_set_due_offset(rule, params, task, sprint, user):
+    """Fija task.due_date = ahora + N días (params: {days})."""
+    try:
+        days = int(params.get("days"))
+    except (TypeError, ValueError):
+        return {"error": "Invalid days"}
+    if not -3650 <= days <= 3650:
+        return {"error": "days out of range (-3650..3650)"}
+    task.due_date = timezone.now() + timedelta(days=days)
+    task.save(update_fields=["due_date"])
+    return {"due_date": str(task.due_date)}
+
+
+def _action_post_comment(rule, params, task, sprint, user):
+    """Publica un comentario en la tarea a nombre del owner de la regla
+    (o del owner de la tarea si la regla no tiene owner)."""
+    from apps.tasks.models import Comment
+    text = str(params.get("text", "")).strip()
+    if not text:
+        return {"skipped": "no text in action_params"}
+    comment = Comment.objects.create(
+        task=task, author=user or task.owner, body=text
+    )
+    return {"comment_id": comment.id}
+
+
+def _action_move_to_project(rule, params, task, sprint, user):
+    """Mueve la tarea a otro proyecto (params: {project_id}).
+
+    El proyecto destino debe ser editable por el owner de la regla
+    (misma validación de acceso que usa la API).
+    """
+    project_id = params.get("project_id")
+    if not project_id:
+        return {"skipped": "no project_id in action_params"}
+    from apps.projects.models import accessible_projects
+    target = accessible_projects(user, write=True).filter(
+        pk=project_id
+    ).first()
+    if target is None:
+        return {"error": f"Project {project_id} not found or not editable"}
+    old_project = task.project
+    task.project = target
+    task.save(update_fields=["project"])
+    return {
+        "old_project": str(old_project) if old_project else None,
+        "new_project": target.name,
+    }
+
+
+_ACTION_HANDLERS = {
+    AutomationRule.Action.SET_PRIORITY: _action_set_priority,
+    AutomationRule.Action.SET_STATE: _action_set_state,
+    AutomationRule.Action.SET_DUE_DATE: _action_set_due_date,
+    AutomationRule.Action.MOVE_TO_SPRINT: _action_move_to_sprint,
+    AutomationRule.Action.SUBTASKS_IN_PROGRESS: _action_subtasks_in_progress,
+    AutomationRule.Action.CREATE_NOTIFICATION: _action_create_notification,
+    AutomationRule.Action.CREATE_TASK: _action_create_task,
+    AutomationRule.Action.SET_ASSIGNEE: _action_set_assignee,
+    AutomationRule.Action.ADD_TAG: _action_add_tag,
+    AutomationRule.Action.CREATE_SUBTASK: _action_create_subtask,
+    AutomationRule.Action.SET_DUE_OFFSET: _action_set_due_offset,
+    AutomationRule.Action.POST_COMMENT: _action_post_comment,
+    AutomationRule.Action.MOVE_TO_PROJECT: _action_move_to_project,
+}
+
+
+_TASK_ACTIONS = {
+    AutomationRule.Action.SET_PRIORITY,
+    AutomationRule.Action.SET_STATE,
+    AutomationRule.Action.SET_DUE_DATE,
+    AutomationRule.Action.MOVE_TO_SPRINT,
+    AutomationRule.Action.SUBTASKS_IN_PROGRESS,
+    AutomationRule.Action.SET_ASSIGNEE,
+    AutomationRule.Action.ADD_TAG,
+    AutomationRule.Action.CREATE_SUBTASK,
+    AutomationRule.Action.SET_DUE_OFFSET,
+    AutomationRule.Action.POST_COMMENT,
+    AutomationRule.Action.MOVE_TO_PROJECT,
+}
+
+
 def execute_action(rule, context):
     """Ejecuta la acción de una regla sobre el contexto dado."""
     action = rule.action
-    params = rule.action_params or {}
-    result = {}
-
     task = context.get("task")
-    sprint = context.get("sprint")
-    user = rule.owner
-
-    if action == AutomationRule.Action.SET_PRIORITY and task:
-        priority = int(params.get("priority", 3))
-        old_priority = task.priority
-        task.priority = priority
-        task.save(update_fields=["priority"])
-        result = {"old_priority": old_priority, "new_priority": priority}
-
-    elif action == AutomationRule.Action.SET_STATE and task:
-        new_state = params.get("state", "pending")
-        old_state = task.state
-        task.state = new_state
-        task.save(update_fields=["state"])
-        result = {"old_state": old_state, "new_state": new_state}
-
-    elif action == AutomationRule.Action.SET_DUE_DATE and task:
-        days = int(params.get("days_from_now", 7))
-        from datetime import date
-        task.due_date = date.today() + timedelta(days=days)
-        task.save(update_fields=["due_date"])
-        result = {"due_date": str(task.due_date)}
-
-    elif action == AutomationRule.Action.MOVE_TO_SPRINT and task:
-        sprint_id = params.get("sprint_id")
-        if sprint_id:
-            try:
-                target_sprint = Sprint.objects.get(id=sprint_id, owner=user)
-                old_sprint = task.sprint
-                task.sprint = target_sprint
-                task.save(update_fields=["sprint"])
-                result = {"old_sprint": str(old_sprint), "new_sprint": target_sprint.name}
-            except Sprint.DoesNotExist:
-                result = {"error": f"Sprint {sprint_id} not found"}
-
-    elif action == AutomationRule.Action.SUBTASKS_IN_PROGRESS and task:
-        # Mover todas las subtareas pendientes a in_progress
-        from apps.tasks.models import Subtask
-        subtasks = Subtask.objects.filter(task=task, completed=False)
-        count = subtasks.count()
-        # Subtask usa completed boolean, no state. Asumimos que "in_progress"
-        # se refleja en la tarea padre. Para tareas hijas:
-        children = Task.objects.filter(parent=task, state__in=["pending", "backlog"])
-        moved = children.update(state="in_progress")
-        result = {"moved_subtasks": moved}
-
-    elif action == AutomationRule.Action.CREATE_NOTIFICATION:
-        notify(
-            recipient=user,
-            notification_type="automation_triggered",
-            title=params.get("title", f"Automatización: {rule.name}"),
-            body=params.get("body", ""),
-            task=task,
-            sprint=sprint,
-            action_url=params.get("action_url", ""),
-        )
-        result = {"notification_created": True}
-
-    elif action == AutomationRule.Action.CREATE_TASK:
-        title = params.get("title", "Tarea creada por automatización")
-        new_task = Task.objects.create(
-            owner=user,
-            title=title,
-            description=params.get("description", ""),
-            priority=int(params.get("priority", 3)),
-            state=params.get("state", "pending"),
-        )
-        result = {"created_task_id": new_task.id, "created_task_title": new_task.title}
-
-    else:
-        result = {"error": f"Action {action} not implemented"}
-
-    return result
+    if action in _TASK_ACTIONS and not task:
+        return {"error": f"Action {action} requires a task in context"}
+    handler = _ACTION_HANDLERS.get(action)
+    if handler is None:
+        return {"error": f"Action {action} not implemented"}
+    return handler(
+        rule,
+        rule.action_params or {},
+        task,
+        context.get("sprint"),
+        rule.owner,
+    )
 
 
 def _serialize_context(context):
@@ -152,9 +345,16 @@ def trigger_automation(trigger_type, context=None):
     """Ejecuta todas las reglas habilitadas para un trigger dado.
 
     context debe contener al menos 'user' o 'task' con owner.
+    Las acciones pueden disparar nuevas automatizaciones vía signals;
+    se limita la profundidad para evitar bucles infinitos.
     """
     if context is None:
         context = {}
+
+    depth = getattr(_local, "depth", 0)
+    if depth >= _MAX_AUTOMATION_DEPTH:
+        logger.warning("Automatización: profundidad máxima alcanzada, posible bucle de reglas")
+        return []
 
     # Determinar el usuario desde el contexto
     user = context.get("user")
@@ -169,41 +369,159 @@ def trigger_automation(trigger_type, context=None):
         owner=user, trigger=trigger_type, enabled=True
     )
 
+    # Revalidación de permisos: si el usuario perdió acceso al proyecto de la
+    # tarea que disparó el trigger, sus reglas no deben actuar sobre ella.
+    if task is not None and getattr(task, "project_id", None):
+        from apps.projects.models import accessible_projects
+        if not accessible_projects(user).filter(pk=task.project_id).exists():
+            logger.info(
+                "Automatización: usuario %s sin acceso al proyecto %s; reglas omitidas",
+                user.pk, task.project_id,
+            )
+            return []
+
     results = []
-    for rule in rules:
-        # Evaluar condiciones
-        if rule.conditions and not evaluate_conditions(rule.conditions, context):
-            AutomationLog.objects.create(
-                rule=rule,
-                status=AutomationLog.Status.SKIPPED,
-                trigger_data=_serialize_context(context),
-            )
-            continue
+    _local.depth = depth + 1
+    try:
+        for rule in rules:
+            # Evaluar condiciones
+            if rule.conditions and not evaluate_conditions(rule.conditions, context):
+                AutomationLog.objects.create(
+                    rule=rule,
+                    status=AutomationLog.Status.SKIPPED,
+                    trigger_data=_serialize_context(context),
+                )
+                continue
 
-        # Ejecutar acción
-        try:
-            action_result = execute_action(rule, context)
-            rule.trigger_count += 1
-            rule.last_triggered_at = timezone.now()
-            rule.save(update_fields=["trigger_count", "last_triggered_at"])
+            # Ejecutar acción
+            try:
+                action_result = execute_action(rule, context)
+                AutomationRule.objects.filter(pk=rule.pk).update(
+                    trigger_count=F("trigger_count") + 1,
+                    last_triggered_at=timezone.now(),
+                )
 
-            AutomationLog.objects.create(
-                rule=rule,
-                status=AutomationLog.Status.SUCCESS,
-                trigger_data=_serialize_context(context),
-                action_result=action_result,
-            )
-            results.append({"rule": rule.name, "result": action_result})
-        except Exception as e:
-            logger.error(f"Error ejecutando regla {rule.name}: {e}")
-            AutomationLog.objects.create(
-                rule=rule,
-                status=AutomationLog.Status.FAILED,
-                trigger_data=_serialize_context(context),
-                error_message=str(e)[:500],
-            )
-            results.append({"rule": rule.name, "error": str(e)})
+                AutomationLog.objects.create(
+                    rule=rule,
+                    status=AutomationLog.Status.SUCCESS,
+                    trigger_data=_serialize_context(context),
+                    action_result=action_result,
+                )
+                results.append({"rule": rule.name, "result": action_result})
+                _metric("success")
+            except Exception as e:
+                logger.exception(f"Error ejecutando regla {rule.name}")
+                AutomationLog.objects.create(
+                    rule=rule,
+                    status=AutomationLog.Status.FAILED,
+                    trigger_data=_serialize_context(context),
+                    error_message=str(e)[:500],
+                )
+                _metric("failed")
+                results.append({"rule": rule.name, "error": str(e)})
+    finally:
+        _local.depth = depth
 
+    return results
+
+
+def _run_sla_escalations(now):
+    """Escalado SLA: tareas que superan resolution_hours se escalan.
+
+    - bump_priority: sube un nivel (hasta P0/P1 según la escala)
+    - notify: notifica a owner/assignee del incumplimiento
+    - Se marca con el tag 'sla-breached' para no re-escalar el mismo
+      incumplimiento cada día (la notificación se repite si sigue vencida).
+    - response_hours: tareas que siguen en 'pending' pasado el plazo se
+      marcan 'sla-no-response' y notifican (una sola vez por tarea).
+    """
+    from apps.notifications.services import notify
+    from apps.tags.models import Tag
+    from apps.tasks.models import Task
+
+    from .models import SlaPolicy
+
+    results = []
+    policies = SlaPolicy.objects.filter(enabled=True).select_related("owner")
+    for policy in policies:
+        cutoff = now - timedelta(hours=policy.resolution_hours)
+        breached = Task.objects.filter(
+            owner=policy.owner,
+            priority=policy.priority,
+            created_at__lt=cutoff,
+        ).exclude(state__in=["completed", "cancelled", "archived"])
+        for task in breached.iterator():
+            already_marked = task.tags.filter(name="sla-breached").exists()
+            escalated = False
+            if policy.bump_priority and task.priority > 1 and not already_marked:
+                task.priority -= 1
+                task.save(update_fields=["priority"])
+                escalated = True
+            if not already_marked:
+                tag, _ = Tag.objects.get_or_create(
+                    owner=policy.owner, name="sla-breached"
+                )
+                task.tags.add(tag)
+            if policy.notify_owner:
+                notify(
+                    task.owner,
+                    "sla_breach",
+                    f"SLA incumplido: {task.title}",
+                    body=f"La tarea supera las {policy.resolution_hours}h de la política '{policy.name}'.",
+                    task=task,
+                )
+            if policy.notify_assignee and task.assignee and task.assignee != task.owner:
+                notify(
+                    task.assignee,
+                    "sla_breach",
+                    f"SLA incumplido: {task.title}",
+                    body=f"La tarea asignada supera las {policy.resolution_hours}h de la política '{policy.name}'.",
+                    task=task,
+                )
+            results.append({
+                "sla_breach": True,
+                "task": task.id,
+                "policy": policy.id,
+                "escalated": escalated,
+            })
+
+        # SLA de primera respuesta: tareas que siguen 'pending' pasado
+        # response_hours. Una sola notificación por tarea (tag 'sla-no-response').
+        response_cutoff = now - timedelta(hours=policy.response_hours)
+        unanswered = Task.objects.filter(
+            owner=policy.owner,
+            priority=policy.priority,
+            created_at__lt=response_cutoff,
+            state=Task.State.PENDING,
+        )
+        for task in unanswered.iterator():
+            if task.tags.filter(name="sla-no-response").exists():
+                continue
+            tag, _ = Tag.objects.get_or_create(
+                owner=policy.owner, name="sla-no-response"
+            )
+            task.tags.add(tag)
+            if policy.notify_owner:
+                notify(
+                    task.owner,
+                    "sla_breach",
+                    f"SLA de respuesta incumplido: {task.title}",
+                    body=f"La tarea sigue pendiente tras {policy.response_hours}h de la política '{policy.name}'.",
+                    task=task,
+                )
+            if policy.notify_assignee and task.assignee and task.assignee != task.owner:
+                notify(
+                    task.assignee,
+                    "sla_breach",
+                    f"SLA de respuesta incumplido: {task.title}",
+                    body=f"La tarea asignada sigue pendiente tras {policy.response_hours}h de la política '{policy.name}'.",
+                    task=task,
+                )
+            results.append({
+                "sla_response_breach": True,
+                "task": task.id,
+                "policy": policy.id,
+            })
     return results
 
 
@@ -212,11 +530,31 @@ def run_daily_checks():
     now = timezone.now()
     results = []
 
-    # Tareas vencidas
+    # DAILY_CHECK: disparar reglas de chequeo diario genéricas
+    # Se ejecuta para cada usuario que tenga reglas DAILY_CHECK habilitadas
+    users_with_daily = AutomationRule.objects.filter(
+        trigger=AutomationRule.Trigger.DAILY_CHECK,
+        enabled=True,
+    ).values_list("owner", flat=True).distinct()
+    for user_id in users_with_daily:
+        from django.contrib.auth import get_user_model
+        User = get_user_model()
+        try:
+            user = User.objects.get(id=user_id)
+        except User.DoesNotExist:
+            continue
+        r = trigger_automation(
+            AutomationRule.Trigger.DAILY_CHECK,
+            {"user": user, "check_time": str(now)},
+        )
+        if r:
+            results.extend(r)
+
+    # Tareas vencidas (iterador: no cargar todas en memoria)
     overdue_tasks = Task.objects.filter(
-        due_date__lt=now.date(),
+        due_date__lt=now,
         state__in=["pending", "in_progress", "review", "blocked"],
-    )
+    ).iterator()
     for task in overdue_tasks:
         r = trigger_automation(
             AutomationRule.Trigger.TASK_OVERDUE,
@@ -224,6 +562,46 @@ def run_daily_checks():
         )
         if r:
             results.extend(r)
+
+    # SCHEDULED: reglas programadas por intervalo (cada N horas).
+    # Se ejecuta la acción directamente por regla (no via trigger_automation,
+    # que dispararía TODAS las reglas SCHEDULED del usuario en cada iteración).
+    scheduled_rules = AutomationRule.objects.filter(
+        trigger=AutomationRule.Trigger.SCHEDULED,
+        enabled=True,
+    ).select_related("owner")
+    for rule in scheduled_rules:
+        interval = timedelta(hours=rule.schedule_hours or 24)
+        if rule.last_triggered_at and rule.last_triggered_at + interval > now:
+            continue  # aún no toca
+        context = {"user": rule.owner, "check_time": str(now)}
+        try:
+            action_result = execute_action(rule, context)
+            AutomationRule.objects.filter(pk=rule.pk).update(
+                trigger_count=F("trigger_count") + 1,
+                last_triggered_at=now,
+            )
+            AutomationLog.objects.create(
+                rule=rule,
+                status=AutomationLog.Status.SUCCESS,
+                trigger_data=_serialize_context(context),
+                action_result=action_result,
+            )
+            results.append({"rule": rule.name, "result": action_result})
+            _metric("success")
+        except Exception as e:
+            logger.exception(f"Error ejecutando regla programada {rule.name}")
+            AutomationLog.objects.create(
+                rule=rule,
+                status=AutomationLog.Status.FAILED,
+                trigger_data=_serialize_context(context),
+                error_message=str(e)[:500],
+            )
+            _metric("failed")
+
+    # SLA: escalado de tareas que superan el resolution_hours de su política
+    sla_results = _run_sla_escalations(now)
+    results.extend(sla_results)
 
     # Sprints por terminar (end_date en los próximos 2 días)
     soon_sprints = Sprint.objects.filter(

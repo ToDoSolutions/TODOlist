@@ -1,3 +1,4 @@
+import { formatDate } from "../lib/dates";
 import { useState } from "react";
 import {
   Box,
@@ -28,14 +29,33 @@ import {
   TableHead,
   TableRow,
   Collapse,
+  useTheme,
 } from "@mui/material";
-import { Users, Plus, Trash2, UserPlus, AtSign, Mail } from "lucide-react";
+import { Users, Plus, Trash2, UserPlus, AtSign, Mail, Pencil } from "lucide-react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
-import { collaborationApi, projectsApi, invitationsApi } from "../api/resources";
+import {
+  collaborationApi,
+  projectsApi,
+  invitationsApi,
+  type ApiPayload,
+} from "../api/resources";
+import type {
+  Team,
+  TeamMember,
+  MentionItem,
+  ProjectMember,
+  Invitation,
+  Project,
+} from "../types";
 import { notify } from "../notify";
+import { useConfirm } from "../components/ConfirmDialog";
+import { useTranslation, Trans } from "react-i18next";
 
 export default function TeamsPage() {
+  const { t } = useTranslation();
+  const theme = useTheme();
   const qc = useQueryClient();
+  const confirm = useConfirm();
   const [tab, setTab] = useState(0);
 
   // --- Teams tab state ---
@@ -44,6 +64,8 @@ export default function TeamsPage() {
   const [expandedTeam, setExpandedTeam] = useState<number | null>(null);
   const [addMemberTeamId, setAddMemberTeamId] = useState<number | null>(null);
   const [memberForm, setMemberForm] = useState({ userId: "", role: "member" });
+  const [editTeam, setEditTeam] = useState<Team | null>(null);
+  const [deleteTeamId, setDeleteTeamId] = useState<number | null>(null);
 
   // --- Project members tab state ---
   const [selectedProjectId, setSelectedProjectId] = useState<number | "">("");
@@ -69,19 +91,49 @@ export default function TeamsPage() {
   const createMut = useMutation({
     mutationFn: collaborationApi.teams.create,
     onSuccess: () => {
-      notify.success("Equipo creado");
+      notify.success(t("p.shell.teams.teamCreated"));
       qc.invalidateQueries({ queryKey: ["teams"] });
       setCreateOpen(false);
+      setCreateForm({ name: "", description: "" });
     },
   });
 
-  const addMemberMut = useMutation({
-    mutationFn: ({ teamId, userId, role }: { teamId: number; userId: number; role: string }) =>
-      collaborationApi.teams.addMember(teamId, userId, role),
+  const updateTeamMut = useMutation({
+    mutationFn: ({ id, data }: { id: number; data: ApiPayload }) =>
+      collaborationApi.teams.update(id, data),
     onSuccess: () => {
-      notify.success("Miembro añadido");
+      notify.success(t("p.shell.teams.teamUpdated"));
+      qc.invalidateQueries({ queryKey: ["teams"] });
+      setEditTeam(null);
+    },
+    onError: () => notify.error(t("p.shell.teams.teamUpdateError")),
+  });
+
+  const deleteTeamMut = useMutation({
+    mutationFn: (id: number) => collaborationApi.teams.remove(id),
+    onSuccess: () => {
+      notify.success(t("p.shell.teams.teamDeleted"));
+      qc.invalidateQueries({ queryKey: ["teams"] });
+      setDeleteTeamId(null);
+    },
+    onError: () => notify.error(t("p.shell.teams.teamDeleteError")),
+  });
+
+  const addMemberMut = useMutation({
+    mutationFn: ({
+      teamId,
+      userId,
+      role,
+    }: {
+      teamId: number;
+      userId: number;
+      role: string;
+    }) => collaborationApi.teams.addMember(teamId, userId, role),
+    onSuccess: () => {
+      notify.success(t("p.shell.teams.memberAdded"));
       setAddMemberTeamId(null);
-      if (expandedTeam !== null) qc.invalidateQueries({ queryKey: ["team-members", expandedTeam] });
+      if (expandedTeam !== null)
+        qc.invalidateQueries({ queryKey: ["team-members", expandedTeam] });
     },
   });
 
@@ -89,13 +141,14 @@ export default function TeamsPage() {
     mutationFn: ({ teamId, memberId }: { teamId: number; memberId: number }) =>
       collaborationApi.teams.removeMember(teamId, memberId),
     onSuccess: () => {
-      notify.info("Miembro eliminado");
-      if (expandedTeam !== null) qc.invalidateQueries({ queryKey: ["team-members", expandedTeam] });
+      notify.info(t("p.shell.teams.memberRemoved"));
+      if (expandedTeam !== null)
+        qc.invalidateQueries({ queryKey: ["team-members", expandedTeam] });
     },
   });
 
   // --- Project members queries ---
-  const { data: projects, isLoading: projectsLoading } = useQuery({
+  const { data: projects } = useQuery({
     queryKey: ["projects"],
     queryFn: projectsApi.list,
   });
@@ -107,14 +160,40 @@ export default function TeamsPage() {
   });
 
   const inviteMemberMut = useMutation({
-    mutationFn: ({ projectId, email, role }: { projectId: number; email: string; role: string }) =>
-      collaborationApi.projectMembers.invite(projectId, { email, role }),
+    mutationFn: ({
+      projectId,
+      email,
+      role,
+    }: {
+      projectId: number;
+      email: string;
+      role: string;
+    }) => collaborationApi.projectMembers.invite(projectId, { email, role }),
     onSuccess: () => {
-      notify.success("Invitación enviada");
+      notify.success(t("p.shell.teams.inviteSent"));
       qc.invalidateQueries({ queryKey: ["project-members", selectedProjectId] });
       qc.invalidateQueries({ queryKey: ["invitations"] });
       setInviteOpen(false);
     },
+  });
+
+  const updateMemberRoleMut = useMutation({
+    mutationFn: ({ id, role }: { id: number; role: string }) =>
+      collaborationApi.projectMembers.update(id, { role }),
+    onSuccess: () => {
+      notify.success(t("p.shell.teams.roleUpdated"));
+      qc.invalidateQueries({ queryKey: ["project-members", selectedProjectId] });
+    },
+    onError: () => notify.error(t("p.shell.teams.roleUpdateError")),
+  });
+
+  const removeProjectMemberMut = useMutation({
+    mutationFn: (id: number) => collaborationApi.projectMembers.remove(id),
+    onSuccess: () => {
+      notify.success(t("p.shell.teams.memberRemovedProject"));
+      qc.invalidateQueries({ queryKey: ["project-members", selectedProjectId] });
+    },
+    onError: () => notify.error(t("p.shell.teams.memberRemoveError")),
   });
 
   // --- Invitations ---
@@ -122,28 +201,41 @@ export default function TeamsPage() {
     queryKey: ["invitations"],
     queryFn: invitationsApi.list,
   });
-  const invitationList = (invitationsData as any)?.results ?? (invitationsData as any) ?? [];
+  const invitationList: Invitation[] =
+    (invitationsData as { results?: Invitation[] })?.results ??
+    (invitationsData as Invitation[]) ??
+    [];
 
   const acceptInvMut = useMutation({
     mutationFn: (id: number) => invitationsApi.accept(id),
     onSuccess: () => {
-      notify.success("Invitación aceptada");
+      notify.success(t("p.shell.teams.inviteAccepted"));
       qc.invalidateQueries({ queryKey: ["invitations"] });
     },
   });
   const declineInvMut = useMutation({
     mutationFn: (id: number) => invitationsApi.decline(id),
     onSuccess: () => {
-      notify.info("Invitación rechazada");
+      notify.info(t("p.shell.teams.inviteDeclined"));
       qc.invalidateQueries({ queryKey: ["invitations"] });
     },
   });
 
-  const teamList = (teams as any)?.results ?? (teams as any) ?? [];
-  const mentionList = (mentions as any)?.results ?? (mentions as any) ?? [];
-  const memberList = (membersQuery.data as any)?.results ?? (membersQuery.data as any) ?? [];
-  const projectList = (projects as any) ?? [];
-  const projectMemberList = (projectMembersQuery.data as any)?.results ?? (projectMembersQuery.data as any) ?? [];
+  const teamList: Team[] =
+    (teams as { results?: Team[] })?.results ?? (teams as Team[]) ?? [];
+  const mentionList: MentionItem[] =
+    (mentions as { results?: MentionItem[] })?.results ??
+    (mentions as MentionItem[]) ??
+    [];
+  const memberList: TeamMember[] =
+    (membersQuery.data as { results?: TeamMember[] })?.results ??
+    (membersQuery.data as TeamMember[]) ??
+    [];
+  const projectList = (projects as Project[]) ?? [];
+  const projectMemberList: ProjectMember[] =
+    (projectMembersQuery.data as { results?: ProjectMember[] })?.results ??
+    (projectMembersQuery.data as ProjectMember[]) ??
+    [];
 
   const handleCreate = () => {
     if (!createForm.name) return;
@@ -171,21 +263,32 @@ export default function TeamsPage() {
   return (
     <Box maxWidth={900} mx="auto">
       <Stack direction="row" alignItems="center" spacing={1} mb={1}>
-        <Users size={24} color="#1976d2" />
-        <Typography variant="h5" fontWeight={700}>Equipos y Colaboración</Typography>
+        <Users size={24} style={{ color: theme.palette.primary.main }} />
+        <Typography variant="h5" fontWeight={700}>
+          {t("p.shell.teams.title")}
+        </Typography>
       </Stack>
       <Typography variant="body2" color="text.secondary" mb={2}>
-        Gestiona equipos de trabajo, invita miembros a proyectos y consulta menciones.
-        Los <strong>equipos</strong> agrupan personas por área (frontend, backend, devops).
-        Los <strong>miembros de proyecto</strong> controlan quién tiene acceso a cada proyecto y con qué rol.
-        Las <strong>menciones</strong> te avisan cuando alguien te etiqueta en una tarea o comentario.
+        <Trans i18nKey="p.shell.teams.description" />
       </Typography>
 
       <Tabs value={tab} onChange={(_, v) => setTab(v)} sx={{ mb: 2 }}>
-        <Tab icon={<Users size={16} />} iconPosition="start" label="Equipos" />
-        <Tab icon={<AtSign size={16} />} iconPosition="start" label="Menciones" />
-        <Tab icon={<UserPlus size={16} />} iconPosition="start" label="Miembros de Proyecto" />
-        <Tab icon={<Mail size={16} />} iconPosition="start" label="Invitaciones" />
+        <Tab icon={<Users size={16} />} iconPosition="start" label={t("nav.teams")} />
+        <Tab
+          icon={<AtSign size={16} />}
+          iconPosition="start"
+          label={t("p.shell.teams.tabMentions")}
+        />
+        <Tab
+          icon={<UserPlus size={16} />}
+          iconPosition="start"
+          label={t("p.shell.teams.tabProjectMembers")}
+        />
+        <Tab
+          icon={<Mail size={16} />}
+          iconPosition="start"
+          label={t("p.shell.teams.tabInvitations")}
+        />
       </Tabs>
 
       {/* ===================== TAB 1: Equipos ===================== */}
@@ -195,9 +298,12 @@ export default function TeamsPage() {
             <Button
               variant="contained"
               startIcon={<Plus size={18} />}
-              onClick={() => { setCreateForm({ name: "", description: "" }); setCreateOpen(true); }}
+              onClick={() => {
+                setCreateForm({ name: "", description: "" });
+                setCreateOpen(true);
+              }}
             >
-              Nuevo equipo
+              {t("p.shell.teams.newTeam")}
             </Button>
           </Stack>
 
@@ -209,46 +315,83 @@ export default function TeamsPage() {
             <Paper variant="outlined" sx={{ p: 6, textAlign: "center" }}>
               <Users size={48} color="text.disabled" />
               <Typography color="text.secondary" mt={1}>
-                No tienes equipos. Crea uno para empezar a colaborar.
+                {t("p.shell.teams.noTeams")}
               </Typography>
             </Paper>
           ) : (
             <Stack spacing={2}>
-              {teamList.map((t: any) => (
-                <Paper key={t.id} variant="outlined">
+              {teamList.map((team) => (
+                <Paper key={team.id} variant="outlined">
                   <Stack
                     direction="row"
                     alignItems="center"
                     justifyContent="space-between"
                     sx={{ p: 2, cursor: "pointer" }}
-                    onClick={() => setExpandedTeam(expandedTeam === t.id ? null : t.id)}
+                    onClick={() =>
+                      setExpandedTeam(expandedTeam === team.id ? null : team.id)
+                    }
                   >
                     <Stack direction="row" alignItems="center" spacing={1.5}>
-                      <Users size={20} color="#1976d2" />
+                      <Users size={20} style={{ color: theme.palette.primary.main }} />
                       <Box>
-                        <Typography variant="subtitle1" fontWeight={600}>{t.name}</Typography>
-                        {t.description && (
+                        <Typography variant="subtitle1" fontWeight={600}>
+                          {team.name}
+                        </Typography>
+                        {team.description && (
                           <Typography variant="caption" color="text.secondary">
-                            {t.description}
+                            {team.description}
                           </Typography>
                         )}
                       </Box>
                     </Stack>
                     <Stack direction="row" alignItems="center" spacing={1}>
-                      {typeof t.member_count === "number" && (
-                        <Chip size="small" label={`${t.member_count} miembros`} variant="outlined" />
+                      {typeof team.member_count === "number" && (
+                        <Chip
+                          size="small"
+                          label={t("p.shell.teams.memberCount", {
+                            count: team.member_count,
+                          })}
+                          variant="outlined"
+                        />
                       )}
                       <Button
                         size="small"
                         startIcon={<UserPlus size={14} />}
-                        onClick={(e) => { e.stopPropagation(); setAddMemberTeamId(t.id); setMemberForm({ userId: "", role: "member" }); }}
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          setAddMemberTeamId(team.id);
+                          setMemberForm({ userId: "", role: "member" });
+                        }}
                       >
-                        Añadir
+                        {t("p.shell.teams.add")}
                       </Button>
+                      <Tooltip title={t("p.shell.teams.editTeam")}>
+                        <IconButton
+                          size="small"
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            setEditTeam(team);
+                          }}
+                        >
+                          <Pencil size={14} />
+                        </IconButton>
+                      </Tooltip>
+                      <Tooltip title={t("p.shell.teams.deleteTeam")}>
+                        <IconButton
+                          size="small"
+                          color="error"
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            setDeleteTeamId(team.id);
+                          }}
+                        >
+                          <Trash2 size={14} />
+                        </IconButton>
+                      </Tooltip>
                     </Stack>
                   </Stack>
 
-                  <Collapse in={expandedTeam === t.id}>
+                  <Collapse in={expandedTeam === team.id}>
                     <Box sx={{ p: 2, pt: 0 }}>
                       {membersQuery.isLoading ? (
                         <Box display="flex" justifyContent="center" py={2}>
@@ -256,35 +399,58 @@ export default function TeamsPage() {
                         </Box>
                       ) : memberList.length === 0 ? (
                         <Typography color="text.secondary" variant="body2" sx={{ py: 1 }}>
-                          Este equipo no tiene miembros.
+                          {t("p.shell.teams.noMembers")}
                         </Typography>
                       ) : (
                         <TableContainer component={Paper} variant="outlined">
                           <Table size="small">
                             <TableHead>
                               <TableRow>
-                                <TableCell>Usuario</TableCell>
-                                <TableCell>Rol</TableCell>
-                                <TableCell>Acciones</TableCell>
+                                <TableCell>{t("p.shell.teams.colUser")}</TableCell>
+                                <TableCell>{t("p.shell.teams.colRole")}</TableCell>
+                                <TableCell>{t("p.shell.teams.colActions")}</TableCell>
                               </TableRow>
                             </TableHead>
                             <TableBody>
-                              {memberList.map((m: any) => (
+                              {memberList.map((m) => (
                                 <TableRow key={m.id}>
                                   <TableCell>
                                     <Typography variant="body2" fontWeight={600}>
-                                      {m.user_display || m.user_email || `Usuario #${m.user}`}
+                                      {m.user_display ||
+                                        m.user_email ||
+                                        t("p.shell.teams.userNumber", {
+                                          id: m.user,
+                                        })}
                                     </Typography>
                                   </TableCell>
                                   <TableCell>
-                                    <Chip size="small" label={m.role || "member"} variant="outlined" />
+                                    <Chip
+                                      size="small"
+                                      label={m.role || "member"}
+                                      variant="outlined"
+                                    />
                                   </TableCell>
                                   <TableCell>
-                                    <Tooltip title="Eliminar miembro">
+                                    <Tooltip title={t("p.shell.teams.removeMember")}>
                                       <IconButton
                                         size="small"
                                         color="error"
-                                        onClick={() => removeMemberMut.mutate({ teamId: t.id, memberId: m.id })}
+                                        onClick={async () => {
+                                          if (
+                                            await confirm(
+                                              t("p.shell.teams.confirmRemoveMember", {
+                                                name:
+                                                  m.user_display ||
+                                                  m.user_email ||
+                                                  t("p.shell.teams.thisMember"),
+                                              }),
+                                            )
+                                          )
+                                            removeMemberMut.mutate({
+                                              teamId: team.id,
+                                              memberId: m.id,
+                                            });
+                                        }}
                                       >
                                         <Trash2 size={14} />
                                       </IconButton>
@@ -316,7 +482,7 @@ export default function TeamsPage() {
             <Paper variant="outlined" sx={{ p: 6, textAlign: "center" }}>
               <AtSign size={48} color="text.disabled" />
               <Typography color="text.secondary" mt={1}>
-                No tienes menciones recientes.
+                {t("p.shell.teams.noMentions")}
               </Typography>
             </Paper>
           ) : (
@@ -324,38 +490,54 @@ export default function TeamsPage() {
               <Table size="small">
                 <TableHead>
                   <TableRow>
-                    <TableCell>Tarea</TableCell>
-                    <TableCell>Autor</TableCell>
-                    <TableCell>Contenido</TableCell>
-                    <TableCell>Estado</TableCell>
+                    <TableCell>{t("p.shell.teams.colTask")}</TableCell>
+                    <TableCell>{t("p.shell.teams.colAuthor")}</TableCell>
+                    <TableCell>{t("p.shell.teams.colContent")}</TableCell>
+                    <TableCell>{t("p.shell.teams.colStatus")}</TableCell>
                   </TableRow>
                 </TableHead>
                 <TableBody>
-                  {mentionList.map((m: any) => (
+                  {mentionList.map((m) => (
                     <TableRow key={m.id}>
                       <TableCell>
                         <Typography variant="body2" fontWeight={600}>
-                          {m.task_title || `Tarea #${m.task}`}
+                          {m.task_title || t("p.shell.teams.taskNumber", { id: m.task })}
                         </Typography>
                       </TableCell>
                       <TableCell>
                         <Typography variant="body2">
-                          {m.author_display || m.author_email || `Usuario #${m.author}`}
+                          {m.author_display ||
+                            m.author_email ||
+                            t("p.shell.teams.userNumber", { id: m.author })}
                         </Typography>
                       </TableCell>
                       <TableCell>
-                        <Typography variant="body2" color="text.secondary" sx={{ maxWidth: 320, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
+                        <Typography
+                          variant="body2"
+                          color="text.secondary"
+                          sx={{
+                            maxWidth: 320,
+                            overflow: "hidden",
+                            textOverflow: "ellipsis",
+                            whiteSpace: "nowrap",
+                          }}
+                        >
                           {m.content}
                         </Typography>
                       </TableCell>
                       <TableCell>
                         <Chip
                           size="small"
-                          label={m.is_read ? "Leída" : "Sin leer"}
+                          label={
+                            m.is_read
+                              ? t("p.shell.teams.mentionRead")
+                              : t("p.shell.teams.mentionUnread")
+                          }
                           sx={{
-                            height: 18, fontSize: 10,
+                            height: 18,
+                            fontSize: 10,
                             bgcolor: m.is_read ? "success.main" : "warning.main",
-                            color: "#fff",
+                            color: "common.white",
                           }}
                         />
                       </TableCell>
@@ -373,17 +555,19 @@ export default function TeamsPage() {
         <Box>
           <Stack direction="row" alignItems="center" spacing={2} mb={2}>
             <FormControl size="small" sx={{ minWidth: 260 }}>
-              <InputLabel>Proyecto</InputLabel>
+              <InputLabel>{t("p.shell.project")}</InputLabel>
               <Select
                 value={selectedProjectId}
-                label="Proyecto"
+                label={t("p.shell.project")}
                 onChange={(e) => setSelectedProjectId(e.target.value as number | "")}
               >
                 <MenuItem value="">
-                  <em>Selecciona un proyecto</em>
+                  <em>{t("p.shell.teams.selectProject")}</em>
                 </MenuItem>
-                {projectList.map((p: any) => (
-                  <MenuItem key={p.id} value={p.id}>{p.name}</MenuItem>
+                {projectList.map((p) => (
+                  <MenuItem key={p.id} value={p.id}>
+                    {p.name}
+                  </MenuItem>
                 ))}
               </Select>
             </FormControl>
@@ -392,9 +576,12 @@ export default function TeamsPage() {
               variant="contained"
               startIcon={<UserPlus size={18} />}
               disabled={!selectedProjectId}
-              onClick={() => { setInviteForm({ email: "", role: "member" }); setInviteOpen(true); }}
+              onClick={() => {
+                setInviteForm({ email: "", role: "member" });
+                setInviteOpen(true);
+              }}
             >
-              Invitar miembro
+              {t("p.shell.teams.inviteMember")}
             </Button>
           </Stack>
 
@@ -402,7 +589,7 @@ export default function TeamsPage() {
             <Paper variant="outlined" sx={{ p: 6, textAlign: "center" }}>
               <Users size={48} color="text.disabled" />
               <Typography color="text.secondary" mt={1}>
-                Selecciona un proyecto para ver sus miembros.
+                {t("p.shell.teams.selectProjectHint")}
               </Typography>
             </Paper>
           ) : projectMembersQuery.isLoading ? (
@@ -410,12 +597,12 @@ export default function TeamsPage() {
               <CircularProgress />
             </Box>
           ) : projectMembersQuery.isError ? (
-            <Alert severity="error">Error al cargar los miembros del proyecto.</Alert>
+            <Alert severity="error">{t("p.shell.teams.loadMembersError")}</Alert>
           ) : projectMemberList.length === 0 ? (
             <Paper variant="outlined" sx={{ p: 6, textAlign: "center" }}>
               <Users size={48} color="text.disabled" />
               <Typography color="text.secondary" mt={1}>
-                Este proyecto no tiene miembros todavía.
+                {t("p.shell.teams.noProjectMembers")}
               </Typography>
             </Paper>
           ) : (
@@ -423,30 +610,72 @@ export default function TeamsPage() {
               <Table size="small">
                 <TableHead>
                   <TableRow>
-                    <TableCell>Usuario</TableCell>
-                    <TableCell>Rol</TableCell>
-                    <TableCell>Fecha de ingreso</TableCell>
+                    <TableCell>{t("p.shell.teams.colUser")}</TableCell>
+                    <TableCell>{t("p.shell.teams.colRole")}</TableCell>
+                    <TableCell>{t("p.shell.teams.colJoined")}</TableCell>
+                    <TableCell align="right">{t("p.shell.teams.colActions")}</TableCell>
                   </TableRow>
                 </TableHead>
                 <TableBody>
-                  {projectMemberList.map((m: any) => (
+                  {projectMemberList.map((m) => (
                     <TableRow key={m.id}>
                       <TableCell>
                         <Typography variant="body2" fontWeight={600}>
-                          {m.user_display || m.user_email || m.email || `Usuario #${m.user}`}
+                          {m.user_display ||
+                            m.user_email ||
+                            m.email ||
+                            t("p.shell.teams.userNumber", { id: m.user })}
                         </Typography>
                       </TableCell>
                       <TableCell>
-                        <Chip
+                        <Select
                           size="small"
-                          label={m.role || "member"}
+                          value={m.role || "viewer"}
+                          onChange={(e) =>
+                            updateMemberRoleMut.mutate({ id: m.id, role: e.target.value })
+                          }
                           variant="outlined"
-                        />
+                          sx={{ minWidth: 110 }}
+                        >
+                          <MenuItem value="owner">
+                            {t("p.shell.teams.roleOwner")}
+                          </MenuItem>
+                          <MenuItem value="editor">
+                            {t("p.shell.teams.roleEditor")}
+                          </MenuItem>
+                          <MenuItem value="viewer">
+                            {t("p.shell.teams.roleViewer")}
+                          </MenuItem>
+                        </Select>
                       </TableCell>
                       <TableCell>
                         <Typography variant="body2" color="text.secondary">
-                          {m.joined_at || m.created_at ? new Date(m.joined_at || m.created_at).toLocaleDateString() : "—"}
+                          {m.joined_at || m.created_at
+                            ? formatDate(m.joined_at || m.created_at)
+                            : "—"}
                         </Typography>
+                      </TableCell>
+                      <TableCell align="right">
+                        <IconButton
+                          size="small"
+                          color="error"
+                          onClick={async () => {
+                            if (
+                              await confirm(
+                                t("p.shell.teams.confirmRemoveProjectMember", {
+                                  name:
+                                    m.user_display ||
+                                    m.user_email ||
+                                    t("p.shell.teams.thisMember"),
+                                }),
+                              )
+                            ) {
+                              removeProjectMemberMut.mutate(m.id);
+                            }
+                          }}
+                        >
+                          <Trash2 size={16} />
+                        </IconButton>
                       </TableCell>
                     </TableRow>
                   ))}
@@ -468,7 +697,7 @@ export default function TeamsPage() {
             <Paper variant="outlined" sx={{ p: 6, textAlign: "center" }}>
               <Mail size={48} color="text.disabled" />
               <Typography color="text.secondary" mt={1}>
-                No tienes invitaciones.
+                {t("p.shell.teams.noInvitations")}
               </Typography>
             </Paper>
           ) : (
@@ -476,46 +705,69 @@ export default function TeamsPage() {
               <Table size="small">
                 <TableHead>
                   <TableRow>
-                    <TableCell>Email</TableCell>
-                    <TableCell>Rol</TableCell>
-                    <TableCell>Estado</TableCell>
-                    <TableCell>Fecha</TableCell>
-                    <TableCell>Acciones</TableCell>
+                    <TableCell>{t("auth.email")}</TableCell>
+                    <TableCell>{t("p.shell.teams.colRole")}</TableCell>
+                    <TableCell>{t("p.shell.teams.colStatus")}</TableCell>
+                    <TableCell>{t("p.shell.teams.colDate")}</TableCell>
+                    <TableCell>{t("p.shell.teams.colActions")}</TableCell>
                   </TableRow>
                 </TableHead>
                 <TableBody>
-                  {invitationList.map((inv: any) => (
+                  {invitationList.map((inv) => (
                     <TableRow key={inv.id}>
                       <TableCell>
-                        <Typography variant="body2" fontWeight={600}>{inv.email}</Typography>
+                        <Typography variant="body2" fontWeight={600}>
+                          {inv.email}
+                        </Typography>
                       </TableCell>
                       <TableCell>
-                        <Chip size="small" label={inv.role || "member"} variant="outlined" />
+                        <Chip
+                          size="small"
+                          label={inv.role || "member"}
+                          variant="outlined"
+                        />
                       </TableCell>
                       <TableCell>
                         <Chip
                           size="small"
                           label={inv.status}
                           sx={{
-                            height: 18, fontSize: 10,
-                            bgcolor: inv.status === "pending" ? "warning.main" : inv.status === "accepted" ? "success.main" : "error.main",
-                            color: "#fff",
+                            height: 18,
+                            fontSize: 10,
+                            bgcolor:
+                              inv.status === "pending"
+                                ? "warning.main"
+                                : inv.status === "accepted"
+                                  ? "success.main"
+                                  : "error.main",
+                            color: "common.white",
                           }}
                         />
                       </TableCell>
                       <TableCell>
                         <Typography variant="body2" color="text.secondary">
-                          {inv.created_at ? new Date(inv.created_at).toLocaleDateString() : "—"}
+                          {inv.created_at ? formatDate(inv.created_at) : "—"}
                         </Typography>
                       </TableCell>
                       <TableCell>
                         {inv.status === "pending" && (
                           <Stack direction="row" spacing={1}>
-                            <Button size="small" variant="outlined" onClick={() => acceptInvMut.mutate(inv.id)} disabled={acceptInvMut.isPending}>
-                              Aceptar
+                            <Button
+                              size="small"
+                              variant="outlined"
+                              onClick={() => acceptInvMut.mutate(inv.id)}
+                              disabled={acceptInvMut.isPending}
+                            >
+                              {t("p.shell.teams.accept")}
                             </Button>
-                            <Button size="small" color="error" variant="outlined" onClick={() => declineInvMut.mutate(inv.id)} disabled={declineInvMut.isPending}>
-                              Rechazar
+                            <Button
+                              size="small"
+                              color="error"
+                              variant="outlined"
+                              onClick={() => declineInvMut.mutate(inv.id)}
+                              disabled={declineInvMut.isPending}
+                            >
+                              {t("p.shell.teams.decline")}
                             </Button>
                           </Stack>
                         )}
@@ -530,21 +782,28 @@ export default function TeamsPage() {
       )}
 
       {/* ===================== Dialog: Crear equipo ===================== */}
-      <Dialog open={createOpen} onClose={() => setCreateOpen(false)} maxWidth="sm" fullWidth>
-        <DialogTitle>Crear equipo</DialogTitle>
+      <Dialog
+        open={createOpen}
+        onClose={() => setCreateOpen(false)}
+        maxWidth="sm"
+        fullWidth
+      >
+        <DialogTitle>{t("p.shell.teams.createTitle")}</DialogTitle>
         <DialogContent>
           <Stack spacing={2} sx={{ mt: 1 }}>
             <TextField
-              label="Nombre"
+              label={t("common.name")}
               value={createForm.name}
               onChange={(e) => setCreateForm({ ...createForm, name: e.target.value })}
               fullWidth
               size="small"
             />
             <TextField
-              label="Descripción"
+              label={t("p.shell.teams.fieldDescription")}
               value={createForm.description}
-              onChange={(e) => setCreateForm({ ...createForm, description: e.target.value })}
+              onChange={(e) =>
+                setCreateForm({ ...createForm, description: e.target.value })
+              }
               fullWidth
               size="small"
               multiline
@@ -553,86 +812,171 @@ export default function TeamsPage() {
           </Stack>
         </DialogContent>
         <DialogActions>
-          <Button onClick={() => setCreateOpen(false)}>Cancelar</Button>
-          <Button variant="contained" onClick={handleCreate} disabled={!createForm.name || createMut.isPending}>
-            Crear
+          <Button onClick={() => setCreateOpen(false)}>{t("common.cancel")}</Button>
+          <Button
+            variant="contained"
+            onClick={handleCreate}
+            disabled={!createForm.name || createMut.isPending}
+          >
+            {t("common.create")}
           </Button>
         </DialogActions>
       </Dialog>
 
       {/* ===================== Dialog: Añadir miembro ===================== */}
-      <Dialog open={addMemberTeamId !== null} onClose={() => setAddMemberTeamId(null)} maxWidth="sm" fullWidth>
-        <DialogTitle>Añadir miembro</DialogTitle>
+      <Dialog
+        open={addMemberTeamId !== null}
+        onClose={() => setAddMemberTeamId(null)}
+        maxWidth="sm"
+        fullWidth
+      >
+        <DialogTitle>{t("p.shell.teams.addMemberTitle")}</DialogTitle>
         <DialogContent>
           <Stack spacing={2} sx={{ mt: 1 }}>
             <TextField
-              label="ID de usuario"
+              label={t("p.shell.teams.userIdLabel")}
               value={memberForm.userId}
               onChange={(e) => setMemberForm({ ...memberForm, userId: e.target.value })}
               fullWidth
               size="small"
-              helperText="Introduce el ID numérico del usuario"
+              helperText={t("p.shell.teams.userIdHelp")}
             />
             <FormControl fullWidth size="small">
-              <InputLabel>Rol</InputLabel>
+              <InputLabel>{t("p.shell.teams.colRole")}</InputLabel>
               <Select
                 value={memberForm.role}
-                label="Rol"
+                label={t("p.shell.teams.colRole")}
                 onChange={(e) => setMemberForm({ ...memberForm, role: e.target.value })}
               >
-                <MenuItem value="member">Miembro</MenuItem>
-                <MenuItem value="admin">Administrador</MenuItem>
+                <MenuItem value="member">{t("p.shell.teams.roleMember")}</MenuItem>
+                <MenuItem value="admin">{t("p.shell.teams.roleAdmin")}</MenuItem>
               </Select>
             </FormControl>
           </Stack>
         </DialogContent>
         <DialogActions>
-          <Button onClick={() => setAddMemberTeamId(null)}>Cancelar</Button>
-          <Button variant="contained" onClick={handleAddMember} disabled={!memberForm.userId || addMemberMut.isPending}>
-            Añadir
+          <Button onClick={() => setAddMemberTeamId(null)}>{t("common.cancel")}</Button>
+          <Button
+            variant="contained"
+            onClick={handleAddMember}
+            disabled={!memberForm.userId || addMemberMut.isPending}
+          >
+            {t("p.shell.teams.add")}
           </Button>
         </DialogActions>
       </Dialog>
 
       {/* ===================== Dialog: Invitar miembro a proyecto ===================== */}
-      <Dialog open={inviteOpen} onClose={() => setInviteOpen(false)} maxWidth="sm" fullWidth>
-        <DialogTitle>Invitar miembro</DialogTitle>
+      <Dialog
+        open={inviteOpen}
+        onClose={() => setInviteOpen(false)}
+        maxWidth="sm"
+        fullWidth
+      >
+        <DialogTitle>{t("p.shell.teams.inviteMember")}</DialogTitle>
         <DialogContent>
           <Stack spacing={2} sx={{ mt: 1 }}>
             <TextField
-              label="Email o nombre de usuario"
+              label={t("p.shell.teams.inviteEmailLabel")}
               value={inviteForm.email}
               onChange={(e) => setInviteForm({ ...inviteForm, email: e.target.value })}
               fullWidth
               size="small"
-              helperText="Introduce el email o username del usuario a invitar"
+              helperText={t("p.shell.teams.inviteEmailHelp")}
             />
             <FormControl fullWidth size="small">
-              <InputLabel>Rol</InputLabel>
+              <InputLabel>{t("p.shell.teams.colRole")}</InputLabel>
               <Select
                 value={inviteForm.role}
-                label="Rol"
+                label={t("p.shell.teams.colRole")}
                 onChange={(e) => setInviteForm({ ...inviteForm, role: e.target.value })}
               >
-                <MenuItem value="admin">Administrador</MenuItem>
-                <MenuItem value="member">Miembro</MenuItem>
-                <MenuItem value="viewer">Lector</MenuItem>
+                <MenuItem value="admin">{t("p.shell.teams.roleAdmin")}</MenuItem>
+                <MenuItem value="member">{t("p.shell.teams.roleMember")}</MenuItem>
+                <MenuItem value="viewer">{t("p.shell.teams.roleReader")}</MenuItem>
               </Select>
             </FormControl>
           </Stack>
         </DialogContent>
         <DialogActions>
-          <Button onClick={() => setInviteOpen(false)}>Cancelar</Button>
+          <Button onClick={() => setInviteOpen(false)}>{t("common.cancel")}</Button>
           <Button
             variant="contained"
             onClick={handleInviteMember}
             disabled={!inviteForm.email || inviteMemberMut.isPending}
           >
-            Invitar
+            {t("p.shell.teams.invite")}
+          </Button>
+        </DialogActions>
+      </Dialog>
+
+      {/* Edit team dialog */}
+      <Dialog open={!!editTeam} onClose={() => setEditTeam(null)} fullWidth maxWidth="sm">
+        <DialogTitle>{t("p.shell.teams.editTeam")}</DialogTitle>
+        <DialogContent>
+          <Stack spacing={2} sx={{ mt: 1 }}>
+            <TextField
+              label={t("common.name")}
+              fullWidth
+              defaultValue={editTeam?.name || ""}
+              onChange={(e) =>
+                setEditTeam((prev) => (prev ? { ...prev, name: e.target.value } : prev))
+              }
+            />
+            <TextField
+              label={t("p.shell.teams.fieldDescription")}
+              fullWidth
+              multiline
+              rows={2}
+              defaultValue={editTeam?.description || ""}
+              onChange={(e) =>
+                setEditTeam((prev) =>
+                  prev ? { ...prev, description: e.target.value } : prev,
+                )
+              }
+            />
+          </Stack>
+        </DialogContent>
+        <DialogActions>
+          <Button onClick={() => setEditTeam(null)}>{t("common.cancel")}</Button>
+          <Button
+            variant="contained"
+            disabled={updateTeamMut.isPending}
+            onClick={() =>
+              editTeam &&
+              updateTeamMut.mutate({
+                id: editTeam.id,
+                data: { name: editTeam.name, description: editTeam.description },
+              })
+            }
+          >
+            {t("common.save")}
+          </Button>
+        </DialogActions>
+      </Dialog>
+
+      {/* Delete team confirmation */}
+      <Dialog
+        open={deleteTeamId !== null}
+        onClose={() => setDeleteTeamId(null)}
+        maxWidth="xs"
+      >
+        <DialogTitle>{t("p.shell.teams.deleteTeam")}</DialogTitle>
+        <DialogContent>
+          <Alert severity="warning">{t("p.shell.teams.deleteWarning")}</Alert>
+        </DialogContent>
+        <DialogActions>
+          <Button onClick={() => setDeleteTeamId(null)}>{t("common.cancel")}</Button>
+          <Button
+            color="error"
+            variant="contained"
+            disabled={deleteTeamMut.isPending}
+            onClick={() => deleteTeamMut.mutate(deleteTeamId!)}
+          >
+            {t("common.delete")}
           </Button>
         </DialogActions>
       </Dialog>
     </Box>
   );
 }
-

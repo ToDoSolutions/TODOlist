@@ -1,7 +1,8 @@
 """Tests de Fase 15: 2FA con TOTP y códigos de backup."""
-import pytest
 import pyotp
-from apps.users.models import TwoFactorSecret, User
+import pytest
+
+from apps.users.models import TwoFactorSecret
 
 
 @pytest.mark.django_db

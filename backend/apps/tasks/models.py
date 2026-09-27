@@ -1,15 +1,46 @@
+from datetime import timedelta
+
 from django.conf import settings
 from django.db import models
 from django.utils import timezone
-from datetime import timedelta
 
-from apps.projects.models import Project
+from apps.projects.models import Project, ProjectSection
 from apps.tags.models import Tag
 
 
 class TaskQuerySet(models.QuerySet):
-    def for_user(self, user):
-        return self.filter(owner=user)
+    def for_user(self, user, write=False):
+        """Tareas accesibles por el usuario.
+
+        Incluye las propias y las de proyectos donde es miembro.
+        Con ``write=True`` solo proyectos donde tiene rol editor/owner
+        (los viewers solo pueden leer).
+        """
+        from django.db.models import Q
+
+        qs = Q(owner=user)
+        if write:
+            qs |= Q(
+                project__members__user=user,
+                project__members__role__in=["owner", "editor"],
+            )
+            # Org owner/admin → escritura en proyectos de la organización
+            qs |= Q(
+                project__organization__memberships__user=user,
+                project__organization__memberships__role__in=["owner", "admin"],
+            )
+            # Multi-assignee: los asignados pueden editar la tarea
+            qs |= Q(assignees=user)
+        else:
+            qs |= Q(project__members__user=user)
+            # Org member → lectura en proyectos de la organización
+            qs |= Q(
+                project__organization__memberships__user=user,
+                project__organization__memberships__role__in=["owner", "admin", "member"],
+            )
+            # Asignados y watchers pueden leer la tarea
+            qs |= Q(assignees=user) | Q(watchers=user)
+        return self.filter(qs).distinct()
 
 
 class RecurrenceRule(models.Model):
@@ -28,6 +59,13 @@ class RecurrenceRule(models.Model):
     until = models.DateTimeField(null=True, blank=True)
     count = models.PositiveIntegerField(null=True, blank=True)
     occurrences_generated = models.PositiveIntegerField(default=0)
+    owner = models.ForeignKey(
+        settings.AUTH_USER_MODEL,
+        on_delete=models.CASCADE,
+        related_name="recurrence_rules",
+        null=True,
+        blank=True,
+    )
 
     created_at = models.DateTimeField(auto_now_add=True)
 
@@ -41,9 +79,13 @@ class RecurrenceRule(models.Model):
         elif self.frequency == self.Frequency.WEEKLY:
             return base + timedelta(weeks=self.interval)
         elif self.frequency == self.Frequency.MONTHLY:
-            return base + timedelta(days=30 * self.interval)
+            # Meses calendario reales (timedelta(days=30) derivaba: feb=28d)
+            from dateutil.relativedelta import relativedelta
+            return base + relativedelta(months=self.interval)
         elif self.frequency == self.Frequency.YEARLY:
-            return base + timedelta(days=365 * self.interval)
+            # Años calendario reales (timedelta(days=365) falla en bisiestos)
+            from dateutil.relativedelta import relativedelta
+            return base + relativedelta(years=self.interval)
         return None
 
     def should_continue(self):
@@ -52,9 +94,7 @@ class RecurrenceRule(models.Model):
         """
         if self.until and timezone.now() > self.until:
             return False
-        if self.count and self.occurrences_generated >= self.count:
-            return False
-        return True
+        return not (self.count and self.occurrences_generated >= self.count)
 
 
 class Task(models.Model):
@@ -110,6 +150,25 @@ class Task(models.Model):
     start_date = models.DateTimeField(null=True, blank=True)
     completed_at = models.DateTimeField(null=True, blank=True)
 
+    # Orden manual en la vista de lista (drag & drop, ordering=position)
+    position = models.PositiveIntegerField(default=0)
+
+    # Fijar arriba de la lista (Linear/Todoist "pin"): ordena antes que el
+    # resto cuando el ordering por defecto incluye -is_pinned.
+    is_pinned = models.BooleanField(default=False)
+
+    # Hito (Asana/Jira): la tarea marca un punto de control en el roadmap.
+    is_milestone = models.BooleanField(default=False)
+
+    # Favoritos por usuario (estrella Jira/Asana): M2M porque en proyectos
+    # compartidos cada miembro tiene sus propios favoritos.
+    favorited_by = models.ManyToManyField(
+        settings.AUTH_USER_MODEL,
+        blank=True,
+        related_name="favorite_tasks",
+        help_text="Usuarios que marcaron la tarea como favorita",
+    )
+
     # Estimacion
     story_points = models.PositiveIntegerField(null=True, blank=True)
     estimate_hours = models.DecimalField(
@@ -132,6 +191,32 @@ class Task(models.Model):
         blank=True,
     )
     tags = models.ManyToManyField(Tag, blank=True, related_name="tasks")
+    assignee = models.ForeignKey(
+        settings.AUTH_USER_MODEL,
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="assigned_tasks",
+        help_text="Usuario asignado a la tarea",
+    )
+    # Multi-asignación: responsables adicionales (el FK assignee sigue
+    # siendo el responsable principal)
+    assignees = models.ManyToManyField(
+        settings.AUTH_USER_MODEL,
+        blank=True,
+        related_name="assigned_tasks_multi",
+        help_text="Usuarios asignados adicionales a la tarea",
+    )
+    # Watchers: usuarios que siguen la tarea (lectura + notificaciones)
+    watchers = models.ManyToManyField(
+        settings.AUTH_USER_MODEL,
+        blank=True,
+        related_name="watched_tasks",
+        help_text="Usuarios que observan la tarea",
+    )
+    # Recordatorio puntual (lo envía el beat send-due-reminders)
+    reminder_at = models.DateTimeField(null=True, blank=True)
+    reminder_sent = models.BooleanField(default=False)
     recurrence = models.ForeignKey(
         RecurrenceRule,
         on_delete=models.SET_NULL,
@@ -164,14 +249,33 @@ class Task(models.Model):
         null=True,
         blank=True,
     )
+    # Sección dentro del proyecto (columnas tipo Todoist/Asana).
+    # Debe pertenecer al mismo proyecto que la tarea (validado en el
+    # serializer); al borrar la sección la tarea queda sin sección.
+    section = models.ForeignKey(
+        ProjectSection,
+        on_delete=models.SET_NULL,
+        related_name="tasks",
+        null=True,
+        blank=True,
+    )
+    # Secuencia por proyecto para refs legibles (estilo Linear/Jira:
+    # "MP-12"). Se asigna en TaskViewSet.perform_create como
+    # max(seq del proyecto)+1; 0 = sin asignar (tareas antiguas o
+    # creadas fuera del API) y el ref cae al id.
+    # NO hay unique_together (project, seq): updates masivos/reorders
+    # podrían colisionar transitoriamente.
+    seq = models.PositiveIntegerField(default=0)
 
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
+    version = models.IntegerField(default=1, help_text="Versión del recurso, se incrementa en cada save")
 
     objects = TaskQuerySet.as_manager()
 
     class Meta:
-        ordering = ["-created_at"]
+        # Las fijadas van primero en el orden por defecto (pin al top).
+        ordering = ["-is_pinned", "-created_at"]
         indexes = [
             models.Index(fields=["state"]),
             models.Index(fields=["priority"]),
@@ -180,10 +284,25 @@ class Task(models.Model):
             models.Index(fields=["sprint"]),
             models.Index(fields=["epic"]),
             models.Index(fields=["parent"]),
+            # Compuestos para las vistas calientes (kanban, métricas,
+            # calendario): el filtro dominante es siempre owner/project+state
+            models.Index(fields=["owner", "state"], name="task_owner_state_idx"),
+            models.Index(fields=["project", "state"], name="task_proj_state_idx"),
+            models.Index(fields=["owner", "due_date"], name="task_owner_due_idx"),
+            models.Index(fields=["sprint", "state"], name="task_sprint_state_idx"),
+            models.Index(fields=["owner", "completed_at"], name="task_owner_done_idx"),
         ]
 
     def __str__(self) -> str:
         return self.title
+
+    def save(self, *args, **kwargs):
+        """Incrementa la versión en cada save (excepto si se indica lo contrario)."""
+        increment = kwargs.pop("increment_version", True)
+        if increment and self.pk:
+            # Solo incrementar si ya existe (update), no en create
+            self.version = (self.version or 1) + 1
+        super().save(*args, **kwargs)
 
     def generate_next_occurrence(self):
         """Genera la siguiente instancia de una tarea recurrente."""
@@ -216,13 +335,19 @@ class Task(models.Model):
 
     @property
     def subtask_progress(self):
-        """Progreso de subtareas: (completadas, total)."""
-        children = self.subtasks_children.all()
-        total = children.count()
-        if total == 0:
+        """Progreso de subtareas: (completadas, total).
+
+        Itera en memoria para aprovechar prefetch_related: filter().count()
+        lanzaría una query por tarea aunque la relación esté precargada.
+        """
+        children = list(self.subtasks_children.all())
+        if not children:
             return (0, 0)
-        done = children.filter(state__in=[Task.State.COMPLETED, Task.State.CANCELLED]).count()
-        return (done, total)
+        done = sum(
+            1 for c in children
+            if c.state in (Task.State.COMPLETED, Task.State.CANCELLED)
+        )
+        return (done, len(children))
 
 
 class TaskRelation(models.Model):
@@ -430,6 +555,16 @@ class Comment(models.Model):
         related_name="comments",
     )
     body = models.TextField()
+    # Respuestas anidadas (un nivel de threading como en Linear/Slack)
+    parent = models.ForeignKey(
+        "self",
+        on_delete=models.CASCADE,
+        null=True,
+        blank=True,
+        related_name="replies",
+    )
+    # Reacciones emoji: {"👍": [user_id, ...], "🎉": [...]}
+    reactions = models.JSONField(default=dict, blank=True)
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
 
@@ -453,6 +588,9 @@ class TimeEntry(models.Model):
     description = models.TextField(blank=True, default="")
     started_at = models.DateTimeField(null=True, blank=True)
     ended_at = models.DateTimeField(null=True, blank=True)
+    # Cronómetro en vivo: solo una entrada running por usuario (se fuerza
+    # en el endpoint timer_start, no hace falta constraint)
+    is_running = models.BooleanField(default=False)
     created_at = models.DateTimeField(auto_now_add=True)
 
     class Meta:
@@ -476,7 +614,8 @@ class Attachment(models.Model):
         on_delete=models.CASCADE,
         related_name="attachments",
     )
-    file = models.FileField(upload_to="attachments/")
+    file = models.FileField(upload_to="attachments/", blank=True)
+    external_url = models.URLField(blank=True, default="")
     filename = models.CharField(max_length=255)
     file_size = models.PositiveIntegerField(default=0)
     content_type = models.CharField(max_length=100, blank=True, default="")
@@ -604,3 +743,50 @@ class OutgoingWebhook(models.Model):
 
     def __str__(self):
         return f"{self.url} ({', '.join(self.events)})"
+
+
+class TaskApproval(models.Model):
+    """Solicitud de aprobación sobre una tarea (paridad Asana/Monday).
+
+    El requester pide a un ``approver`` que decida; solo el approver del
+    ÚLTIMO approval pendiente puede aprobar/rechazar (enforcement en el
+    ViewSet: approve/reject).
+    """
+
+    class Status(models.TextChoices):
+        PENDING = "pending", "Pendiente"
+        APPROVED = "approved", "Aprobada"
+        REJECTED = "rejected", "Rechazada"
+
+    task = models.ForeignKey(
+        Task, on_delete=models.CASCADE, related_name="approvals"
+    )
+    requester = models.ForeignKey(
+        settings.AUTH_USER_MODEL,
+        on_delete=models.CASCADE,
+        related_name="approvals_requested",
+    )
+    approver = models.ForeignKey(
+        settings.AUTH_USER_MODEL,
+        on_delete=models.CASCADE,
+        related_name="approvals_to_decide",
+    )
+    status = models.CharField(
+        max_length=10, choices=Status.choices, default=Status.PENDING
+    )
+    note = models.TextField(blank=True, default="")
+    decision_note = models.TextField(blank=True, default="")
+    created_at = models.DateTimeField(auto_now_add=True)
+    decided_at = models.DateTimeField(null=True, blank=True)
+
+    class Meta:
+        # -id como desempate: created_at puede repetirse en el mismo tick
+        # del reloj (mismo criterio que ProjectStatusUpdate) y el "último
+        # pendiente" que decide approve/reject debe ser determinista.
+        ordering = ["-created_at", "-id"]
+
+    def __str__(self):
+        return (
+            f"Aprobación {self.status} de tarea {self.task_id} "
+            f"(approver {self.approver_id})"
+        )
