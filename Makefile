@@ -361,3 +361,45 @@ all: check test build ## Check + tests + build (verificación completa)
 .PHONY: ci
 ci: typecheck test-frontend test-backend-fast build ## Simula CI localmente
 	@echo ">>> CI local completado."
+
+# ============================================================
+#  WORKERS / TAREAS EN SEGUNDO PLANO (dev)
+# ============================================================
+
+.PHONY: celery celery-beat generate-recurring
+celery: ## Worker de Celery en local (recurrencia, outbox, digests, sync)
+	cd backend && celery -A config worker -l info
+
+celery-beat: ## Scheduler de Celery beat en local (tareas periódicas)
+	cd backend && celery -A config beat -l info
+
+generate-recurring: ## Genera las tareas recurrentes manualmente (management command)
+	$(MANAGE) generate_recurring
+
+# ============================================================
+#  TESTS AVANZADOS / MÉTRICAS
+# ============================================================
+
+.PHONY: test-mutation i18n-check loadtest
+test-mutation: ## Mutation testing del backend con mutmut 3.x
+	cd backend && mutmut run
+
+i18n-check: ## Audita claves i18n usadas vs definidas (frontend)
+	cd $(FRONTEND_DIR) && node _check_i18n.mjs
+
+loadtest: ## Load testing con Locust — uso: make loadtest HOST=http://localhost:8000
+	cd loadtest && locust -f locustfile.py --host $(or $(HOST),http://localhost:8000)
+
+# ============================================================
+#  APPS NATIVAS (Capacitor)
+# ============================================================
+
+.PHONY: cap-sync cap-android cap-ios
+cap-sync: ## Build + sync de Capacitor (web assets → proyectos nativos)
+	cd $(FRONTEND_DIR) && npm run cap:sync
+
+cap-android: ## Abre el proyecto Android (requiere cap-sync previo)
+	cd $(FRONTEND_DIR) && npm run cap:android
+
+cap-ios: ## Abre el proyecto iOS (solo macOS)
+	cd $(FRONTEND_DIR) && npm run cap:ios
