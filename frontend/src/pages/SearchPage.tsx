@@ -11,13 +11,14 @@ import {
   TextField,
   Tabs,
   Tab,
-  CircularProgress,
   InputAdornment,
-  Alert,
 } from "@mui/material";
 import { Search, CheckSquare, MessageSquare, BookOpen, Folder } from "lucide-react";
 import PageHeader from "../components/ui/PageHeader";
-import { EmptyState } from "../components/ui/states";
+import { EmptyState, ErrorState } from "../components/ui/states";
+import { TaskListSkeleton } from "../components/ui/skeletons";
+import { TASK_STATE_I18N_KEYS } from "../i18n/batchTaskUi";
+import type { TaskState } from "../types";
 import { tasksApi, type GlobalSearchResults } from "../api/resources";
 
 type TabKey = "all" | "tasks" | "comments" | "wiki" | "projects";
@@ -57,7 +58,7 @@ export default function SearchPage() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [q]);
 
-  const { data, isLoading, isError } = useQuery<GlobalSearchResults>({
+  const { data, isLoading, isError, refetch } = useQuery<GlobalSearchResults>({
     queryKey: ["global-search", query],
     queryFn: () => tasksApi.globalSearch(query),
     enabled: query.length >= 2,
@@ -122,7 +123,15 @@ export default function SearchPage() {
             <Typography variant="body2" fontWeight={600} sx={{ flex: 1 }}>
               {task.title}
             </Typography>
-            <Chip size="small" variant="outlined" label={String(task.state ?? "")} />
+            <Chip
+              size="small"
+              variant="outlined"
+              label={t(
+                TASK_STATE_I18N_KEYS[task.state as TaskState] ??
+                  `task.state.${task.state}`,
+                String(task.state ?? ""),
+              )}
+            />
             <Chip size="small" variant="outlined" label={`P${task.priority}`} />
             {task.project ? <Chip size="small" label={String(task.project)} /> : null}
           </Stack>
@@ -232,6 +241,7 @@ export default function SearchPage() {
         value={q}
         onChange={(e) => setQ(e.target.value)}
         placeholder={t("p.work.tasks.searchPlaceholder")}
+        inputProps={{ "aria-label": t("p.work.tasks.searchPlaceholder") }}
         fullWidth
         autoFocus
         InputProps={{
@@ -274,11 +284,12 @@ export default function SearchPage() {
           description={t("p.work.search.typeToSearchDesc")}
         />
       ) : isLoading ? (
-        <Box display="flex" justifyContent="center" py={6}>
-          <CircularProgress />
-        </Box>
+        <TaskListSkeleton rows={6} />
       ) : isError ? (
-        <Alert severity="error">{t("p.work.search.error")}</Alert>
+        <ErrorState
+          title={t("p.work.search.error")}
+          onRetry={() => void refetch()}
+        />
       ) : total === 0 ? (
         <EmptyState
           title={t("p.work.search.noResultsFor", { query })}

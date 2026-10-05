@@ -1,5 +1,5 @@
 import { formatDateTime } from "../lib/dates";
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import {
   Box,
   Typography,
@@ -32,12 +32,17 @@ import {
   Download,
   History,
   GitCompareArrows,
+  X,
 } from "lucide-react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { offlineSyncApi, syncOperationsApi, type ApiPayload } from "../api/resources";
 import type { OfflineDevice, SyncOperationItem, PullResult } from "../types";
+import { offlineQueue } from "../lib/offlineQueue";
 import { notify } from "../notify";
 import { useTranslation } from "react-i18next";
+import PageHeader from "../components/ui/PageHeader";
+import { ErrorState } from "../components/ui/states";
+import { TableSkeleton } from "../components/ui/skeletons";
 
 export default function OfflineSyncPage() {
   const { t } = useTranslation();
@@ -98,10 +103,29 @@ export default function OfflineSyncPage() {
     registerMut.mutate({ deviceId, deviceName });
   };
 
+  // --- Cola offline real (lib/offlineQueue): mutaciones encoladas
+  // por error de red; se reenvían al reconectar o manualmente aquí.
+  const [queuedOps, setQueuedOps] = useState(() => offlineQueue.list());
+  useEffect(
+    () => offlineQueue.subscribe(() => setQueuedOps(offlineQueue.list())),
+    [],
+  );
+  const flushMut = useMutation({
+    mutationFn: () => offlineQueue.flush(),
+    onSuccess: ({ sent, failed }) => {
+      if (sent > 0) {
+        notify.success(t("p.integr.opsReplayed", { count: sent }));
+        qc.invalidateQueries();
+      }
+      if (failed > 0) notify.error(t("p.integr.opsLoadError"));
+    },
+  });
+
   const {
     data: operationsData,
     isLoading: opsLoading,
     isError: opsError,
+    refetch: refetchOps,
   } = useQuery({
     queryKey: ["sync-operations"],
     queryFn: syncOperationsApi.list,
@@ -135,12 +159,14 @@ export default function OfflineSyncPage() {
 
   return (
     <Box maxWidth={900} mx="auto">
-      <Stack direction="row" alignItems="center" spacing={1} mb={3}>
-        <RefreshCw size={24} style={{ color: theme.palette.primary.main }} />
-        <Typography variant="h5" fontWeight={700}>
-          {t("p.integr.syncTitle")}
-        </Typography>
-      </Stack>
+      <PageHeader
+        title={
+          <>
+            <RefreshCw size={22} style={{ color: theme.palette.primary.main, verticalAlign: "text-bottom", marginRight: 8 }} />
+            {t("p.integr.syncTitle")}
+          </>
+        }
+      />
 
       {/* Sync status indicator */}
       <Alert
@@ -156,6 +182,70 @@ export default function OfflineSyncPage() {
       </Alert>
 
       <Stack spacing={3}>
+        {/* ===================== Cola de escrituras pendientes ===================== */}
+        {queuedOps.length > 0 && (
+          <Paper
+            variant="outlined"
+            sx={{ p: 3, borderColor: "warning.main" }}
+          >
+            <Stack
+              direction="row"
+              alignItems="center"
+              spacing={1}
+              mb={2}
+            >
+              <Upload size={20} style={{ color: theme.palette.warning.main }} />
+              <Typography variant="subtitle1" fontWeight={600}>
+                {t("p.integr.queueTitle")} ({queuedOps.length})
+              </Typography>
+              <Box flex={1} />
+              <Button
+                size="small"
+                variant="outlined"
+                onClick={() => flushMut.mutate()}
+                disabled={flushMut.isPending}
+              >
+                {t("p.integr.queueFlush")}
+              </Button>
+            </Stack>
+            <Table size="small">
+              <TableBody>
+                {queuedOps.map((op) => (
+                  <TableRow key={op.id}>
+                    <TableCell sx={{ width: 80 }}>
+                      <Chip size="small" label={op.method} variant="outlined" />
+                    </TableCell>
+                    <TableCell>
+                      <Typography
+                        variant="body2"
+                        fontFamily="monospace"
+                        noWrap
+                        sx={{ maxWidth: 320 }}
+                      >
+                        {op.url}
+                      </Typography>
+                    </TableCell>
+                    <TableCell align="right">
+                      <Typography variant="caption" color="text.secondary">
+                        {formatDateTime(op.queuedAt)}
+                      </Typography>
+                    </TableCell>
+                    <TableCell align="right" sx={{ width: 40 }}>
+                      <IconButton
+                        size="small"
+                        aria-label={`drop-${op.id}`}
+                        onClick={() => offlineQueue.drop(op.id)}
+                      >
+                        <X size={14} />
+                      </IconButton>
+                    </TableCell>
+                  </TableRow>
+                ))}
+              </TableBody>
+            </Table>
+          </Paper>
+        )}
+
         {/* ===================== Register device ===================== */}
         <Paper variant="outlined" sx={{ p: 3 }}>
           <Stack direction="row" alignItems="center" spacing={1} mb={2}>
@@ -349,11 +439,12 @@ export default function OfflineSyncPage() {
           </Typography>
         </Stack>
         {opsLoading ? (
-          <Box display="flex" justifyContent="center" py={3}>
-            <CircularProgress size={24} />
-          </Box>
+          <TableSkeleton rows={4} cols={5} />
         ) : opsError ? (
-          <Alert severity="error">{t("p.integr.opsLoadError")}</Alert>
+          <ErrorState
+            title={t("p.integr.opsLoadError")}
+            onRetry={() => void refetchOps()}
+          />
         ) : operations.length === 0 ? (
           <Paper variant="outlined" sx={{ p: 4, textAlign: "center" }}>
             <Typography color="text.secondary">{t("p.integr.opsEmpty")}</Typography>

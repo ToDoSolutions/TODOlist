@@ -149,11 +149,16 @@ class TestShareLinks:
         titles = [t["title"] for t in data["tasks"]]
         assert task.title in titles
         assert "vieja" not in titles
-        # Solo lectura: los campos expuestos son los del contrato
+        # Solo lectura: los campos expuestos son los del contrato;
+        # el asignado se publica como nombre visible, nunca email (PII)
         assert set(data["tasks"][0]) == {
             "id", "title", "state", "priority", "due_date",
-            "assignee_email",
+            "assignee_name",
         }
+        assert all(
+            t["assignee_name"] is None or "@" not in t["assignee_name"]
+            for t in data["tasks"]
+        )
 
     def test_publico_solo_lectura(self, authed_client, api_client, project):
         token = authed_client.post(
@@ -424,10 +429,13 @@ class TestInboundEmail:
         )
         assert resp.status_code == 404
 
-    def test_token_expuesto_en_perfil(self, authed_client, user):
-        token = self._token(authed_client, user)
+    def test_token_opaco_en_perfil(self, authed_client, user):
+        """El token solo se devuelve al rotarlo; el perfil expone
+        `has_inbound_email` (credencial opaca, no legible después)."""
+        self._token(authed_client, user)
         resp = authed_client.get("/api/auth/me/")
-        assert resp.json()["inbound_email_token"] == token
+        assert "inbound_email_token" not in resp.json()
+        assert resp.json()["has_inbound_email"] is True
 
 
 @pytest.mark.django_db

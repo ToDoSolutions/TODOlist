@@ -1,5 +1,8 @@
-import { formatDateTime } from "../lib/dates";
+﻿import { formatDateTime } from "../lib/dates";
 import { useState } from "react";
+import { TableSkeleton } from "../components/ui/skeletons";
+import PageHeader from "../components/ui/PageHeader";
+import { ErrorState } from "../components/ui/states";
 import {
   Box,
   Typography,
@@ -16,15 +19,43 @@ import {
   TableContainer,
   TableHead,
   TableRow,
-  CircularProgress,
-  Alert,
+  Button,
   useTheme,
 } from "@mui/material";
-import { ScrollText } from "lucide-react";
+import { ScrollText, Download } from "lucide-react";
+import { saveAs } from "file-saver";
 import { useQuery } from "@tanstack/react-query";
 import { collaborationApi } from "../api/resources";
-import type { AuditLogEntry } from "../types";
+import type { AuditLogEntry, TaskState, TaskPriority } from "../types";
+import { STATE_LABELS, PRIORITY_LABELS } from "../types";
 import { useTranslation } from "react-i18next";
+
+const FIELD_LABELS: Record<string, string> = {
+  state: "estado",
+  description: "descripción",
+  title: "título",
+  priority: "prioridad",
+  due_date: "fecha límite",
+  assignee: "asignado",
+  name: "nombre",
+  role: "rol",
+};
+
+/** Humaniza el diff old→new del audit log: state/priority vienen como
+ * claves crudas ("in_progress", 2) y se traducen a las etiquetas UI. */
+function humanDiff(values: Record<string, unknown> | undefined): string {
+  if (!values || Object.keys(values).length === 0) return "";
+  return Object.entries(values)
+    .map(([k, v]) => {
+      let label = String(v);
+      if (k === "state" && typeof v === "string" && v in STATE_LABELS)
+        label = STATE_LABELS[v as TaskState];
+      else if (k === "priority" && v != null)
+        label = PRIORITY_LABELS[Number(v) as TaskPriority] ?? String(v);
+      return `${FIELD_LABELS[k] ?? k}: ${label}`;
+    })
+    .join(", ");
+}
 
 const ACTION_KEYS: Record<string, string> = {
   login: "p.admin.audit.actions.login",
@@ -58,7 +89,7 @@ export default function AuditPage() {
   const [actionFilter, setActionFilter] = useState("");
   const [resourceFilter, setResourceFilter] = useState("");
 
-  const { data, isLoading, isError } = useQuery({
+  const { data, isLoading, isError, refetch } = useQuery({
     queryKey: ["audit-logs", actionFilter, resourceFilter],
     queryFn: () =>
       collaborationApi.auditLogs.list({
@@ -67,16 +98,46 @@ export default function AuditPage() {
       }),
   });
 
-  const logs = data?.results || data || [];
+  const logs = data ?? [];
+
+  const exportLogs = async (fmt: "csv" | "jsonl") => {
+    const blob = await collaborationApi.auditLogs.export(fmt);
+    saveAs(
+      blob,
+      `audit-logs-${new Date().toISOString().slice(0, 10)}.${fmt === "jsonl" ? "jsonl" : "csv"}`,
+    );
+  };
 
   return (
     <Box maxWidth={1000} mx="auto">
-      <Stack direction="row" alignItems="center" spacing={1} mb={3}>
-        <ScrollText size={24} style={{ color: theme.palette.secondary.main }} />
-        <Typography variant="h5" fontWeight={700}>
-          {t("nav.audit")}
-        </Typography>
-      </Stack>
+      <PageHeader
+        title={
+          <>
+            <ScrollText size={22} style={{ color: theme.palette.secondary.main, verticalAlign: "text-bottom", marginRight: 8 }} />
+            {t("nav.audit")}
+          </>
+        }
+        actions={
+          <>
+            <Button
+              size="small"
+              variant="outlined"
+              startIcon={<Download size={14} />}
+              onClick={() => exportLogs("csv")}
+            >
+              CSV
+            </Button>
+            <Button
+              size="small"
+              variant="outlined"
+              startIcon={<Download size={14} />}
+              onClick={() => exportLogs("jsonl")}
+            >
+              JSONL
+            </Button>
+          </>
+        }
+      />
 
       {/* Filtros */}
       <Stack direction="row" spacing={2} mb={2}>
@@ -112,14 +173,13 @@ export default function AuditPage() {
       </Stack>
 
       {isError && (
-        <Alert severity="error" sx={{ mb: 2 }}>
-          {t("p.admin.audit.loadError")}
-        </Alert>
+        <ErrorState
+          title={t("p.admin.audit.loadError")}
+          onRetry={() => void refetch()}
+        />
       )}
       {isLoading ? (
-        <Box display="flex" justifyContent="center" py={5}>
-          <CircularProgress />
-        </Box>
+        <TableSkeleton />
       ) : logs.length === 0 ? (
         <Paper variant="outlined" sx={{ p: 6, textAlign: "center" }}>
           <Typography color="text.secondary">{t("p.admin.audit.empty")}</Typography>
@@ -172,8 +232,8 @@ export default function AuditPage() {
                           color="text.secondary"
                           display="block"
                         >
-                          {JSON.stringify(log.old_values)} →{" "}
-                          {JSON.stringify(log.new_values)}
+                          {humanDiff(log.old_values)} →{" "}
+                          {humanDiff(log.new_values)}
                         </Typography>
                       )}
                     </Typography>

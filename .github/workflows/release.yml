@@ -1,0 +1,30 @@
+name: release
+
+on:
+  push:
+    tags: ["v*"]
+
+permissions:
+  contents: write
+
+jobs:
+  # Gate de release = la imagen Docker completa (backend + frontend);
+  # la batería fina de tests ya corre en ci.yml en cada push.
+  verify:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Build backend image
+        run: docker build -t todolist-backend ./backend
+      - name: Build frontend image
+        run: docker build -t todolist-frontend ./frontend
+
+  publish:
+    needs: verify
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Publicar release
+        uses: softprops/action-gh-release@v2
+        with:
+          generate_release_notes: true

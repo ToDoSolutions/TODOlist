@@ -86,6 +86,8 @@ export interface Task {
   estimate_hours: number | null;
   size: TaskSize | "";
   project: number | null;
+  /** Multi-homing (Asana): hogares extra donde también aparece la tarea. */
+  extra_projects?: number[];
   project_color?: string; // solo en respuestas enriquecidas (gantt)
   tags: number[];
   tags_ids: number[];
@@ -140,6 +142,8 @@ export interface TaskInput {
   estimate_hours?: number | null;
   size?: TaskSize | "";
   project?: number | null;
+  /** Multi-homing: hogares adicionales (writable en create/PATCH). */
+  extra_projects?: number[];
   tags?: number[];
   parent?: number | null;
   sprint?: number | null;
@@ -315,6 +319,10 @@ export interface Invitation {
   email: string;
   role?: string;
   status: string;
+  target_type?: "team" | "project";
+  target_id?: number;
+  target_name?: string;
+  invited_by_email?: string;
   created_at?: string;
 }
 export interface OutgoingWebhook {
@@ -442,11 +450,12 @@ export interface GitHubCheckRun {
   html_url?: string;
 }
 export interface AiBlocker {
-  type?: string;
+  blocker_type?: string;
   task_id?: number;
   task_title?: string;
-  message?: string;
-  description?: string;
+  detail?: string;
+  blocking_task_id?: number;
+  blocking_task_title?: string;
   severity?: string;
 }
 export interface OfflineDevice {

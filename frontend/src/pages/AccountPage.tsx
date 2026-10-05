@@ -97,7 +97,6 @@ export default function AccountPage() {
       <PageHeader
         title={t("p.misc.account.title")}
         description={user?.email ?? ""}
-        breadcrumbs={[{ label: t("p.misc.account.breadcrumb") }]}
       />
 
       {/* Apariencia: ajustes inline, efecto inmediato */}

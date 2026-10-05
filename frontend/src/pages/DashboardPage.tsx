@@ -7,7 +7,6 @@ import {
   Chip,
   Stack,
   LinearProgress,
-  Alert,
   Divider,
   useTheme,
 } from "@mui/material";
@@ -25,6 +24,8 @@ import { useTranslation } from "react-i18next";
 import { tasksApi } from "../api/resources";
 import { STATE_COLORS, TYPE_COLORS } from "../types";
 import { DashboardSkeleton } from "../components/ui/skeletons";
+import PageHeader from "../components/ui/PageHeader";
+import { ErrorState } from "../components/ui/states";
 import OnboardingChecklist from "../components/OnboardingChecklist";
 
 export default function DashboardPage() {
@@ -37,6 +38,7 @@ export default function DashboardPage() {
     data: dashboard,
     isLoading: loadingDash,
     isError: errorDash,
+    refetch: refetchDash,
   } = useQuery({
     queryKey: ["metrics-dashboard"],
     queryFn: tasksApi.metricsDashboard,
@@ -68,7 +70,10 @@ export default function DashboardPage() {
   if (errorDash) {
     return (
       <Box maxWidth={1000} mx="auto" mt={4}>
-        <Alert severity="error">{t("p.collab.dashboard.errorLoad")}</Alert>
+        <ErrorState
+          title={t("p.collab.dashboard.errorLoad")}
+          onRetry={() => void refetchDash()}
+        />
       </Box>
     );
   }
@@ -98,9 +103,7 @@ export default function DashboardPage() {
 
   return (
     <Box maxWidth={1000} mx="auto">
-      <Typography variant="h5" fontWeight={700} mb={3}>
-        {t("p.collab.dashboard.title")}
-      </Typography>
+      <PageHeader title={t("p.collab.dashboard.title")} />
 
       {/* Checklist de primeros pasos (auto-ocultable) */}
       <OnboardingChecklist />
@@ -446,7 +449,9 @@ export default function DashboardPage() {
                     variant="outlined"
                   />
                   <Chip
-                    label={`Bloqueadas: ${dashboard.active_sprint.blocked}`}
+                    label={t("p.collab.dashboard.blockedChip", {
+                      count: dashboard.active_sprint.blocked,
+                    })}
                     size="small"
                     color={dashboard.active_sprint.blocked > 0 ? "error" : "default"}
                   />

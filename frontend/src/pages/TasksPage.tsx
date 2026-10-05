@@ -14,10 +14,10 @@ import {
   IconButton,
   ToggleButton,
   ToggleButtonGroup,
-  Alert,
   Checkbox,
   Tooltip,
   FormControl,
+  FormControlLabel,
   InputLabel,
   Select,
   Dialog,
@@ -33,7 +33,7 @@ import {
   Badge,
 } from "@mui/material";
 import PageHeader from "../components/ui/PageHeader";
-import { EmptyState, EmptyFilterState } from "../components/ui/states";
+import { EmptyState, EmptyFilterState, ErrorState } from "../components/ui/states";
 import {
   TaskListSkeleton,
   KanbanSkeleton,
@@ -59,6 +59,7 @@ import {
   ArrowUp,
   ArrowDown,
   Pencil,
+  Share2,
 } from "lucide-react";
 import Papa from "papaparse";
 import { saveAs } from "file-saver";
@@ -159,8 +160,10 @@ export default function TasksPage({
   const [bulkSprint, setBulkSprint] = useState<number | "">("");
   const [saveSearchDialog, setSaveSearchDialog] = useState(false);
   const [searchName, setSearchName] = useState("");
+  const [searchShared, setSearchShared] = useState(false);
   const [editSearchId, setEditSearchId] = useState<number | null>(null);
   const [editSearchName, setEditSearchName] = useState("");
+  const [editSearchShared, setEditSearchShared] = useState(false);
   const [advancedSearch, setAdvancedSearch] = useState(false);
   const [showMoreFilters, setShowMoreFilters] = useState(false);
   const [quickAddText, setQuickAddText] = useState("");
@@ -270,6 +273,7 @@ export default function TasksPage({
     data: tasksData,
     isLoading,
     error,
+    refetch,
   } = useQuery({
     queryKey: ["tasks", filters],
     queryFn: () => tasksApi.list(filters),
@@ -389,6 +393,7 @@ export default function TasksPage({
       qc.invalidateQueries({ queryKey: ["saved-searches"] });
       setSaveSearchDialog(false);
       setSearchName("");
+      setSearchShared(false);
     },
     onError: () => notify.error(t("p.work.tasks.searchSaveError")),
   });
@@ -402,8 +407,15 @@ export default function TasksPage({
   });
 
   const updateSearchMut = useMutation({
-    mutationFn: ({ id, name }: { id: number; name: string }) =>
-      savedSearchesApi.update(id, { name }),
+    mutationFn: ({
+      id,
+      name,
+      is_shared,
+    }: {
+      id: number;
+      name?: string;
+      is_shared?: boolean;
+    }) => savedSearchesApi.update(id, { name, is_shared }),
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: ["saved-searches"] });
       notify.success(t("p.work.tasks.searchRenamed"));
@@ -473,7 +485,9 @@ export default function TasksPage({
     onSuccess: (data) => {
       const results = Array.isArray(data) ? data : data?.results || [];
       notify.info(t("p.work.tasks.advSearchResults", { count: results.length }));
-      qc.setQueryData(["tasks", params.toString()], results);
+      // La query de la lista usa ["tasks", filters] — escribir bajo
+      // params.toString() cacheaba los resultados sin mostrarlos.
+      qc.setQueryData(["tasks", filters], results);
     },
     onError: () => notify.error(t("p.work.tasks.advSearchError")),
   });
@@ -499,12 +513,16 @@ export default function TasksPage({
     }
   };
 
-  // Deep link /app/tasks/:id → abre el panel de la tarea
+  // Deep link /app/tasks/:id → abre el panel de la tarea.
+  // También acepta ?task=N (formato legacy de action_url en notificaciones).
+  const taskParam = Number(params.get("task")) || undefined;
+  const effectiveOpenTaskId = openTaskId ?? taskParam;
   useEffect(() => {
-    if (!openTaskId) return;
+    if (!effectiveOpenTaskId) return;
+    const taskId = effectiveOpenTaskId;
     let cancelled = false;
     tasksApi
-      .get(openTaskId)
+      .get(taskId)
       .then((t) => {
         if (!cancelled) {
           setEditing(t);
@@ -517,7 +535,7 @@ export default function TasksPage({
     return () => {
       cancelled = true;
     };
-  }, [openTaskId, t]);
+  }, [effectiveOpenTaskId, t]);
 
   const openNew = () => {
     setEditing(null);
@@ -640,7 +658,11 @@ export default function TasksPage({
     if (params.get("sprint")) filters.sprint = params.get("sprint");
     if (params.get("epic")) filters.epic = params.get("epic");
     if (params.get("q")) filters.search = params.get("q");
-    saveSearchMut.mutate({ name: searchName, filters: JSON.stringify(filters) });
+    saveSearchMut.mutate({
+      name: searchName,
+      filters: JSON.stringify(filters),
+      is_shared: searchShared,
+    });
   };
 
   const loadSavedSearch = (ss: SavedSearch) => {
@@ -835,7 +857,15 @@ export default function TasksPage({
   return (
     <Box>
       <PageHeader
-        title={inbox ? t("nav.inbox") : title || t("p.taskx.palette.navTasks")}
+        title={
+          inbox
+            ? t("nav.inbox")
+            : favoritesOnly
+              ? t("nav.favorites")
+              : completedOnly
+                ? t("nav.completed")
+                : title || t("p.taskx.palette.navTasks")
+        }
         description={t("p.work.tasks.count", { count: tasks.length })}
         breadcrumbs={
           effectiveProjectId && ctxProject
@@ -1156,33 +1186,57 @@ export default function TasksPage({
           <Typography variant="caption" color="text.secondary" sx={{ pt: 0.5 }}>
             {t("p.work.tasks.savedSearches")}
           </Typography>
-          {savedSearchList.map((ss: SavedSearch) => (
-            <Chip
-              key={ss.id}
-              size="small"
-              label={ss.name}
-              onClick={() => loadSavedSearch(ss)}
-              onDelete={async () => {
-                if (
-                  await confirm(t("p.work.tasks.confirmDeleteSearch", { name: ss.name }))
-                )
-                  deleteSearchMut.mutate(ss.id);
-              }}
-              deleteIcon={<Trash2 size={14} />}
-              avatar={
-                <Edit3
-                  size={14}
-                  style={{ cursor: "pointer" }}
-                  onClick={(e) => {
-                    e.stopPropagation();
-                    setEditSearchId(ss.id);
-                    setEditSearchName(ss.name);
-                  }}
-                />
-              }
-              variant="outlined"
-            />
-          ))}
+          {savedSearchList.map((ss: SavedSearch) => {
+            // Las compartidas por otros son read-only en backend —
+            // sin edit/delete para no ofrecer acciones que dan 403.
+            const mine = ss.is_owner !== false;
+            return (
+              <Chip
+                key={ss.id}
+                size="small"
+                label={ss.name}
+                onClick={() => loadSavedSearch(ss)}
+                {...(mine
+                  ? {
+                      onDelete: async () => {
+                        if (
+                          await confirm(
+                            t("p.work.tasks.confirmDeleteSearch", {
+                              name: ss.name,
+                            }),
+                            { confirmLabel: t("common.delete") },
+                          )
+                        )
+                          deleteSearchMut.mutate(ss.id);
+                      },
+                      deleteIcon: <Trash2 size={14} />,
+                    }
+                  : {})}
+                avatar={
+                  mine ? (
+                    <Edit3
+                      size={14}
+                      style={{ cursor: "pointer" }}
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        setEditSearchId(ss.id);
+                        setEditSearchName(ss.name);
+                        setEditSearchShared(ss.is_shared);
+                      }}
+                    />
+                  ) : (
+                    <Tooltip title={t("p.work.tasks.sharedSearch")}>
+                      <Share2 size={13} />
+                    </Tooltip>
+                  )
+                }
+                variant="outlined"
+                {...(mine && ss.is_shared
+                  ? { color: "primary" as const }
+                  : {})}
+              />
+            );
+          })}
         </Stack>
       )}
 
@@ -1267,7 +1321,10 @@ export default function TasksPage({
           <TaskListSkeleton />
         )
       ) : error ? (
-        <Alert severity="error">{t("p.work.tasks.loadError")}</Alert>
+        <ErrorState
+          title={t("p.work.tasks.loadError")}
+          onRetry={() => void refetch()}
+        />
       ) : tasks.length === 0 ? (
         activeFilters.length > 0 ? (
           <EmptyFilterState
@@ -1462,6 +1519,15 @@ export default function TasksPage({
               }
             }}
           />
+          <FormControlLabel
+            control={
+              <Checkbox
+                checked={searchShared}
+                onChange={(e) => setSearchShared(e.target.checked)}
+              />
+            }
+            label={t("p.work.tasks.shareSearch")}
+          />
         </DialogContent>
         <DialogActions>
           <Button onClick={() => setSaveSearchDialog(false)}>{t("common.cancel")}</Button>
@@ -1481,6 +1547,7 @@ export default function TasksPage({
         onClose={() => {
           setEditSearchId(null);
           setEditSearchName("");
+          setEditSearchShared(false);
         }}
         fullWidth
         maxWidth="xs"
@@ -1501,9 +1568,19 @@ export default function TasksPage({
                   updateSearchMut.mutate({
                     id: editSearchId,
                     name: editSearchName.trim(),
+                    is_shared: editSearchShared,
                   });
               }
             }}
+          />
+          <FormControlLabel
+            control={
+              <Checkbox
+                checked={editSearchShared}
+                onChange={(e) => setEditSearchShared(e.target.checked)}
+              />
+            }
+            label={t("p.work.tasks.shareSearch")}
           />
         </DialogContent>
         <DialogActions>
@@ -1511,6 +1588,7 @@ export default function TasksPage({
             onClick={() => {
               setEditSearchId(null);
               setEditSearchName("");
+              setEditSearchShared(false);
             }}
           >
             {t("common.cancel")}
@@ -1520,7 +1598,11 @@ export default function TasksPage({
             disabled={!editSearchName.trim() || updateSearchMut.isPending}
             onClick={() => {
               if (editSearchId !== null)
-                updateSearchMut.mutate({ id: editSearchId, name: editSearchName.trim() });
+                updateSearchMut.mutate({
+                  id: editSearchId,
+                  name: editSearchName.trim(),
+                  is_shared: editSearchShared,
+                });
             }}
           >
             {t("common.save")}

@@ -282,6 +282,93 @@ class TestSavedSearchUpdate:
         resp = authed_client.patch(f"/api/saved-searches/{ss.id}/", {"name": "Hackeado"})
         assert resp.status_code == 404
 
+    def test_shared_search_listed_with_is_owner_false(self, authed_client, other_user):
+        """Las búsquedas compartidas ajenas aparecen con is_owner=false
+        (el frontend lo usa para ocultar edit/delete)."""
+        from apps.tasks.models import SavedSearch
+        ss = SavedSearch.objects.create(
+            owner=other_user,
+            name="Compartida de B",
+            filters="{}",
+            is_shared=True,
+        )
+        resp = authed_client.get("/api/saved-searches/")
+        assert resp.status_code == 200
+        row = next(r for r in resp.data if r["id"] == ss.id)
+        assert row["is_owner"] is False
+        assert row["is_shared"] is True
+
+    def test_shared_search_not_listed_when_not_shared(self, authed_client, other_user):
+        """is_shared=false: la búsqueda ajena no aparece en mi listado."""
+        from apps.tasks.models import SavedSearch
+        SavedSearch.objects.create(
+            owner=other_user,
+            name="Privada de B",
+            filters="{}",
+            is_shared=False,
+        )
+        resp = authed_client.get("/api/saved-searches/")
+        assert resp.status_code == 200
+        assert all(r["name"] != "Privada de B" for r in resp.data)
+
+    def test_shared_search_readonly_for_non_owner(self, authed_client, other_user):
+        """PATCH a una compartida ajena → 403 (read-only)."""
+        from apps.tasks.models import SavedSearch
+        ss = SavedSearch.objects.create(
+            owner=other_user,
+            name="Compartida de B",
+            filters="{}",
+            is_shared=True,
+        )
+        resp = authed_client.patch(f"/api/saved-searches/{ss.id}/", {"name": "X"})
+        assert resp.status_code == 403
+
+
+# --- Subtask reorder ---
+
+@pytest.mark.django_db
+class TestSubtaskReorder:
+    """POST /api/tasks/{id}/subtasks_reorder/ reenumera order.
+    Los subtasks nacen con order=0 — un swap parcial no podía reordenar."""
+
+    def _make(self, task):
+        from apps.tasks.models import Subtask
+        return [Subtask.objects.create(task=task, title=f"s{i}") for i in range(3)]
+
+    def test_reorder_applies_full_order(self, authed_client, task):
+        subs = self._make(task)
+        ids = [subs[2].id, subs[0].id, subs[1].id]
+        resp = authed_client.post(
+            f"/api/tasks/{task.id}/subtasks_reorder/", {"order": ids},
+            format="json",
+        )
+        assert resp.status_code == 200
+        for s in subs:
+            s.refresh_from_db()
+        assert subs[2].order == 0
+        assert subs[0].order == 1
+        assert subs[1].order == 2
+
+    def test_reorder_rejects_partial_list(self, authed_client, task):
+        subs = self._make(task)
+        resp = authed_client.post(
+            f"/api/tasks/{task.id}/subtasks_reorder/", {"order": [subs[0].id]},
+            format="json",
+        )
+        assert resp.status_code == 400
+
+    def test_reorder_rejects_foreign_subtask(self, authed_client, task, other_user):
+        from apps.tasks.models import Subtask, Task
+        subs = self._make(task)
+        foreign = Task.objects.create(owner=other_user, title="otra")
+        foreign_sub = Subtask.objects.create(task=foreign, title="f")
+        resp = authed_client.post(
+            f"/api/tasks/{task.id}/subtasks_reorder/",
+            {"order": [subs[0].id, subs[1].id, foreign_sub.id]},
+            format="json",
+        )
+        assert resp.status_code == 400
+
 
 # --- ProjectMember update/remove ---
 

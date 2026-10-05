@@ -62,6 +62,107 @@ spec:
       targetPort: 8000
   type: ClusterIP
 ---
+# Migraciones como Job previo al rollout (ejecutar antes de escalar el
+# backend nuevo: kubectl apply + esperar completion, o hook de despliegue).
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: todolist-migrate
+  namespace: todolist
+  labels:
+    app: todolist
+    component: migrate
+spec:
+  backoffLimit: 3
+  template:
+    spec:
+      restartPolicy: Never
+      containers:
+        - name: migrate
+          image: todolist-backend:latest
+          command: ["python", "manage.py", "migrate", "--noinput"]
+          envFrom:
+            - configMapRef:
+                name: todolist-config
+            - secretRef:
+                name: todolist-secrets
+---
+# Celery worker: tareas async (sync GitHub, webhooks, digests, outbox).
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: todolist-celery-worker
+  namespace: todolist
+  labels:
+    app: todolist
+    component: celery-worker
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: todolist
+      component: celery-worker
+  template:
+    metadata:
+      labels:
+        app: todolist
+        component: celery-worker
+    spec:
+      containers:
+        - name: celery
+          image: todolist-backend:latest
+          command: ["celery", "-A", "config", "worker", "--loglevel=info"]
+          envFrom:
+            - configMapRef:
+                name: todolist-config
+            - secretRef:
+                name: todolist-secrets
+          resources:
+            requests:
+              memory: "256Mi"
+              cpu: "100m"
+            limits:
+              memory: "512Mi"
+              cpu: "500m"
+---
+# Celery beat: scheduler de tareas periódicas (solo 1 réplica).
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: todolist-celery-beat
+  namespace: todolist
+  labels:
+    app: todolist
+    component: celery-beat
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: todolist
+      component: celery-beat
+  template:
+    metadata:
+      labels:
+        app: todolist
+        component: celery-beat
+    spec:
+      containers:
+        - name: celery-beat
+          image: todolist-backend:latest
+          command: ["celery", "-A", "config", "beat", "--loglevel=info"]
+          envFrom:
+            - configMapRef:
+                name: todolist-config
+            - secretRef:
+                name: todolist-secrets
+          resources:
+            requests:
+              memory: "128Mi"
+              cpu: "50m"
+            limits:
+              memory: "256Mi"
+              cpu: "200m"
+---
 apiVersion: apps/v1
 kind: Deployment
 metadata:

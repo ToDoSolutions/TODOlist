@@ -1,4 +1,4 @@
-import { formatDate } from "../lib/dates";
+﻿import { formatDate } from "../lib/dates";
 import { useState } from "react";
 import { useTranslation } from "react-i18next";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
@@ -7,10 +7,12 @@ import { setKeyResultLinkedTasks, type LinkedTaskRef } from "../api/featComp";
 import { STATE_COLORS, type Task } from "../types";
 import { notify } from "../notify";
 import { useConfirm } from "../components/ConfirmDialog";
+import PageHeader from "../components/ui/PageHeader";
+import { EmptyState } from "../components/ui/states";
+import { TaskListSkeleton } from "../components/ui/skeletons";
 import {
   Box,
   Typography,
-  CircularProgress,
   Paper,
   Button,
   TextField,
@@ -56,6 +58,7 @@ interface KeyResult {
   target_value: number;
   current_value: number;
   unit: string;
+  direction?: "increase" | "decrease";
   owner?: number;
   progress: number;
   updates?: KrUpdate[];
@@ -64,12 +67,13 @@ interface KeyResult {
   linked_progress?: number;
 }
 
-const STATUSES = ["on_track", "at_risk", "behind", "achieved"];
-const STATUS_COLORS: Record<string, "default" | "warning" | "error" | "success"> = {
-  on_track: "default",
-  at_risk: "warning",
-  behind: "error",
+// Deben coincidir con Objective.STATUS_CHOICES del backend.
+const STATUSES = ["planned", "in_progress", "achieved", "missed"];
+const STATUS_COLORS: Record<string, "default" | "warning" | "error" | "success" | "primary"> = {
+  planned: "default",
+  in_progress: "primary",
   achieved: "success",
+  missed: "error",
 };
 
 export default function OkrsPage() {
@@ -85,7 +89,7 @@ export default function OkrsPage() {
     description: "",
     quarter: "Q1",
     year: new Date().getFullYear(),
-    status: "on_track",
+    status: "in_progress",
   });
 
   const [krDialogForObj, setKrDialogForObj] = useState<number | null>(null);
@@ -94,6 +98,7 @@ export default function OkrsPage() {
     target_value: 100,
     current_value: 0,
     unit: "%",
+    direction: "increase" as "increase" | "decrease",
   });
 
   const [updateDialogKr, setUpdateDialogKr] = useState<KeyResult | null>(null);
@@ -103,7 +108,7 @@ export default function OkrsPage() {
     queryKey: ["objectives"],
     queryFn: okrsApi.listObjectives,
   });
-  const objectives: Objective[] = data?.results || data || [];
+  const objectives = (data ?? []) as unknown as Objective[];
 
   const createObj = useMutation({
     mutationFn: (d: ApiPayload) => okrsApi.createObjective(d),
@@ -221,6 +226,7 @@ export default function OkrsPage() {
     target_value: 100,
     current_value: 0,
     unit: "%",
+    direction: "increase" as "increase" | "decrease",
   });
   const updateKr = useMutation({
     mutationFn: ({ id, data }: { id: number; data: ApiPayload }) =>
@@ -239,6 +245,7 @@ export default function OkrsPage() {
       target_value: kr.target_value,
       current_value: kr.current_value,
       unit: kr.unit || "%",
+      direction: kr.direction || "increase",
     });
     setEditKrDialog(kr);
   };
@@ -249,12 +256,12 @@ export default function OkrsPage() {
       description: "",
       quarter: "Q1",
       year: new Date().getFullYear(),
-      status: "on_track",
+      status: "in_progress",
     });
     setEditingObj(null);
   };
   const resetKrForm = () => {
-    setKrForm({ title: "", target_value: 100, current_value: 0, unit: "%" });
+    setKrForm({ title: "", target_value: 100, current_value: 0, unit: "%", direction: "increase" });
   };
 
   const openEditObj = (obj: Objective) => {
@@ -294,39 +301,38 @@ export default function OkrsPage() {
     });
   };
 
-  if (isLoading) return <CircularProgress />;
+  if (isLoading) return <TaskListSkeleton />;
 
   return (
     <Box sx={{ maxWidth: 900, mx: "auto" }}>
-      <Box
-        sx={{
-          display: "flex",
-          justifyContent: "space-between",
-          alignItems: "center",
-          mb: 3,
-        }}
-      >
-        <Box>
-          <Typography variant="h5" fontWeight={700}>
-            {t("p.collab.okrs.title")}
-          </Typography>
-          <Typography variant="body2" color="text.secondary">
-            {t("p.collab.okrs.subtitle")}
-          </Typography>
-        </Box>
-        <Button
-          variant="contained"
-          startIcon={<Plus size={18} />}
-          onClick={openCreateObj}
-        >
-          {t("p.collab.okrs.newObjective")}
-        </Button>
-      </Box>
+      <PageHeader
+        title={t("p.collab.okrs.title")}
+        description={t("p.collab.okrs.subtitle")}
+        actions={
+          <Button
+            variant="contained"
+            startIcon={<Plus size={18} />}
+            onClick={openCreateObj}
+          >
+            {t("p.collab.okrs.newObjective")}
+          </Button>
+        }
+      />
 
       {objectives.length === 0 && (
-        <Alert severity="info" sx={{ mb: 2 }}>
-          {t("p.collab.okrs.emptyHint")}
-        </Alert>
+        <EmptyState
+          title={t("p.collab.okrs.emptyTitle")}
+          description={t("p.collab.okrs.emptyHint")}
+          action={
+            <Button
+              variant="contained"
+              startIcon={<Plus size={18} />}
+              onClick={openCreateObj}
+            >
+              {t("p.collab.okrs.newObjective")}
+            </Button>
+          }
+        />
       )}
 
       {objectives.map((obj) => (
@@ -361,7 +367,11 @@ export default function OkrsPage() {
                   size="small"
                   color="error"
                   onClick={async () => {
-                    if (await confirm(t("p.collab.okrs.confirmDeleteObj")))
+                    if (
+                      await confirm(t("p.collab.okrs.confirmDeleteObj"), {
+                        confirmLabel: t("common.delete"),
+                      })
+                    )
                       deleteObj.mutate(obj.id);
                   }}
                 >
@@ -399,10 +409,18 @@ export default function OkrsPage() {
           {obj.key_results && obj.key_results.length > 0 ? (
             <Stack spacing={1.5}>
               {obj.key_results.map((kr) => {
+                // menor-es-mejor (latencia, crash rate): el % es
+                // target/actual — 65/2 s es ~3 %, no 100 %
                 const pct =
-                  kr.target_value > 0
-                    ? Math.min(100, (kr.current_value / kr.target_value) * 100)
-                    : 0;
+                  kr.direction === "decrease"
+                    ? kr.current_value <= kr.target_value
+                      ? 100
+                      : kr.current_value > 0
+                        ? Math.min(100, (kr.target_value / kr.current_value) * 100)
+                        : 0
+                    : kr.target_value > 0
+                      ? Math.min(100, (kr.current_value / kr.target_value) * 100)
+                      : 0;
                 return (
                   <Box
                     key={kr.id}
@@ -445,7 +463,11 @@ export default function OkrsPage() {
                             size="small"
                             color="error"
                             onClick={async () => {
-                              if (await confirm(t("p.collab.okrs.confirmDeleteKr")))
+                              if (
+                      await confirm(t("p.collab.okrs.confirmDeleteKr"), {
+                        confirmLabel: t("common.delete"),
+                      })
+                    )
                                 deleteKr.mutate(kr.id);
                             }}
                           >
@@ -456,6 +478,7 @@ export default function OkrsPage() {
                     </Box>
                     <Box sx={{ display: "flex", alignItems: "center", gap: 1, mt: 0.5 }}>
                       <Typography variant="caption" color="text.secondary">
+                        {kr.direction === "decrease" ? "↓ " : ""}
                         {kr.current_value} / {kr.target_value} {kr.unit}
                       </Typography>
                       <Box sx={{ flex: 1 }}>
@@ -720,6 +743,24 @@ export default function OkrsPage() {
               value={krForm.unit}
               onChange={(e) => setKrForm({ ...krForm, unit: e.target.value })}
             />
+            <TextField
+              select
+              fullWidth
+              label={t("p.collab.okrs.direction")}
+              value={krForm.direction}
+              onChange={(e) =>
+                setKrForm({
+                  ...krForm,
+                  direction: e.target.value as "increase" | "decrease",
+                })
+              }
+            >
+              {(["increase", "decrease"] as const).map((dir) => (
+                <MenuItem key={dir} value={dir}>
+                  {t(`p.collab.okrs.direction.${dir}`)}
+                </MenuItem>
+              ))}
+            </TextField>
           </Stack>
         </DialogContent>
         <DialogActions>
@@ -826,6 +867,24 @@ export default function OkrsPage() {
               value={editKrForm.unit}
               onChange={(e) => setEditKrForm({ ...editKrForm, unit: e.target.value })}
             />
+            <TextField
+              select
+              fullWidth
+              label={t("p.collab.okrs.direction")}
+              value={editKrForm.direction}
+              onChange={(e) =>
+                setEditKrForm({
+                  ...editKrForm,
+                  direction: e.target.value as "increase" | "decrease",
+                })
+              }
+            >
+              {(["increase", "decrease"] as const).map((dir) => (
+                <MenuItem key={dir} value={dir}>
+                  {t(`p.collab.okrs.direction.${dir}`)}
+                </MenuItem>
+              ))}
+            </TextField>
           </Stack>
         </DialogContent>
         <DialogActions>

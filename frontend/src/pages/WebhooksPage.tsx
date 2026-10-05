@@ -1,5 +1,7 @@
-import { formatDateTime } from "../lib/dates";
+﻿import { formatDateTime } from "../lib/dates";
 import { useState } from "react";
+import { TableSkeleton } from "../components/ui/skeletons";
+import PageHeader from "../components/ui/PageHeader";
 import {
   Box,
   Typography,
@@ -19,6 +21,7 @@ import {
   Switch,
   FormControlLabel,
   Table,
+  TableContainer,
   TableHead,
   TableBody,
   TableRow,
@@ -35,6 +38,7 @@ import {
   Webhook,
   ArrowDownToLine,
   ArrowUpFromLine,
+  RefreshCw,
 } from "lucide-react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { outgoingWebhooksApi, type ApiPayload } from "../api/resources";
@@ -122,6 +126,15 @@ export default function WebhooksPage() {
     onError: () => notify.error(t("p.integr.whStateError")),
   });
 
+  const retryDlqMut = useMutation({
+    mutationFn: outgoingWebhooksApi.retryDeadLetter,
+    onSuccess: (data) => {
+      notify.success(data.message || t("p.integr.whDlqRetried"));
+      qc.invalidateQueries({ queryKey: ["webhook-deliveries"] });
+    },
+    onError: () => notify.error(t("p.integr.whDlqRetryError")),
+  });
+
   const openCreate = () => {
     setForm(EMPTY_FORM);
     setEditingId(null);
@@ -172,14 +185,14 @@ export default function WebhooksPage() {
 
   return (
     <Box maxWidth={900} mx="auto">
-      <Stack direction="row" alignItems="center" justifyContent="space-between" mb={3}>
-        <Stack direction="row" alignItems="center" spacing={1}>
-          <Webhook size={24} style={{ color: theme.palette.primary.main }} />
-          <Typography variant="h5" fontWeight={700}>
+      <PageHeader
+        title={
+          <>
+            <Webhook size={22} style={{ color: theme.palette.primary.main, verticalAlign: "text-bottom", marginRight: 8 }} />
             {t("p.integr.whTitle")}
-          </Typography>
-        </Stack>
-      </Stack>
+          </>
+        }
+      />
 
       <Tabs value={tab} onChange={(_, v) => setTab(v)} sx={{ mb: 3 }}>
         <Tab
@@ -215,9 +228,7 @@ export default function WebhooksPage() {
           </Stack>
 
           {isLoading ? (
-            <Box display="flex" justifyContent="center" py={5}>
-              <CircularProgress />
-            </Box>
+            <TableSkeleton />
           ) : webhookList.length === 0 ? (
             <Paper variant="outlined" sx={{ p: 6, textAlign: "center" }}>
               <Send size={48} color="text.disabled" />
@@ -361,6 +372,7 @@ export default function WebhooksPage() {
                 </Typography>
               </Paper>
             ) : (
+              <TableContainer component={Paper} variant="outlined">
               <Table size="small">
                 <TableHead>
                   <TableRow>
@@ -377,6 +389,7 @@ export default function WebhooksPage() {
                     const statusColors: Record<string, string> = {
                       success: "success.main",
                       failed: "error.main",
+                      dead_letter: "error.main",
                       retrying: "warning.main",
                       pending: "info.main",
                     };
@@ -387,7 +400,7 @@ export default function WebhooksPage() {
                         <TableCell>
                           <Chip
                             size="small"
-                            label={d.status || "—"}
+                            label={t(`p.integr.deliveryStatus.${d.status || "pending"}`)}
                             sx={{
                               height: 20,
                               fontSize: 10,
@@ -421,6 +434,7 @@ export default function WebhooksPage() {
                   })}
                 </TableBody>
               </Table>
+              </TableContainer>
             )}
           </Box>
         </>
@@ -428,9 +442,27 @@ export default function WebhooksPage() {
 
       {tab === 1 && (
         <Box>
-          <Typography variant="subtitle1" fontWeight={600} mb={2}>
-            {t("p.integr.whIncomingTitle")}
-          </Typography>
+          <Stack
+            direction="row"
+            alignItems="center"
+            justifyContent="space-between"
+            mb={2}
+          >
+            <Typography variant="subtitle1" fontWeight={600}>
+              {t("p.integr.whIncomingTitle")}
+            </Typography>
+            {incomingDeliveries.some((d) => d.status === "dead_letter") && (
+              <Button
+                variant="outlined"
+                size="small"
+                startIcon={<RefreshCw size={16} />}
+                onClick={() => retryDlqMut.mutate()}
+                disabled={retryDlqMut.isPending}
+              >
+                {t("p.integr.whDlqRetry")}
+              </Button>
+            )}
+          </Stack>
           <Alert severity="info" sx={{ mb: 2 }}>
             {t("p.integr.whIncomingInfo")}
           </Alert>
@@ -441,6 +473,7 @@ export default function WebhooksPage() {
               </Typography>
             </Paper>
           ) : (
+            <TableContainer component={Paper} variant="outlined">
             <Table size="small">
               <TableHead>
                 <TableRow>
@@ -458,6 +491,7 @@ export default function WebhooksPage() {
                   const statusColors: Record<string, string> = {
                     success: "success.main",
                     failed: "error.main",
+                    dead_letter: "error.main",
                     retrying: "warning.main",
                     pending: "info.main",
                   };
@@ -468,7 +502,7 @@ export default function WebhooksPage() {
                       <TableCell>
                         <Chip
                           size="small"
-                          label={d.status || "—"}
+                          label={t(`p.integr.deliveryStatus.${d.status || "pending"}`)}
                           sx={{
                             height: 20,
                             fontSize: 10,
@@ -503,6 +537,7 @@ export default function WebhooksPage() {
                 })}
               </TableBody>
             </Table>
+            </TableContainer>
           )}
         </Box>
       )}

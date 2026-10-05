@@ -51,6 +51,11 @@ class KeyResult(models.Model):
         ("days", "Days"),
     ]
 
+    DIRECTION_CHOICES = [
+        ("increase", "Higher is better"),
+        ("decrease", "Lower is better"),
+    ]
+
     objective = models.ForeignKey(
         Objective,
         on_delete=models.CASCADE,
@@ -60,6 +65,11 @@ class KeyResult(models.Model):
     target_value = models.FloatField(default=0)
     current_value = models.FloatField(default=0)
     unit = models.CharField(max_length=20, choices=UNIT_CHOICES, default="count")
+    # Menor-es-mejor (latencia, crash rate): sin esta dirección la
+    # barra pintaba 65/2 s como 100 % verde.
+    direction = models.CharField(
+        max_length=10, choices=DIRECTION_CHOICES, default="increase"
+    )
     owner = models.ForeignKey(
         settings.AUTH_USER_MODEL,
         on_delete=models.CASCADE,

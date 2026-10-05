@@ -37,6 +37,7 @@ import { notify } from "../notify";
 import { useProject } from "../auth/ProjectContext";
 import type { Task } from "../types";
 import { TASK_STATE_I18N_KEYS } from "../i18n/batchTaskUi";
+import { formatDate } from "../lib/dates";
 
 /**
  * Backlog: planificación de sprint arrastrando tareas entre contenedores.
@@ -143,6 +144,7 @@ export default function BacklogPage() {
       <TextField
         size="small"
         placeholder={t("p.work.backlog.searchPlaceholder")}
+        inputProps={{ "aria-label": t("p.work.backlog.searchPlaceholder") }}
         value={search}
         onChange={(e) => setSearch(e.target.value)}
         sx={{ mb: 2, minWidth: 260 }}
@@ -264,7 +266,7 @@ function SprintLane({
           {sprint ? sprint.name.toUpperCase() : t("p.shell.backlog").toUpperCase()}
           {sprint && (
             <Typography component="span" variant="caption" color="text.secondary" ml={1}>
-              {sprint.start_date} – {sprint.end_date}
+              {formatDate(sprint.start_date)} – {formatDate(sprint.end_date)}
             </Typography>
           )}
         </Typography>
@@ -305,6 +307,7 @@ function SprintLane({
           size="small"
           fullWidth
           placeholder={t("p.work.backlog.newTaskPlaceholder")}
+          inputProps={{ "aria-label": t("p.work.backlog.newTaskPlaceholder") }}
           value={newTitle}
           onChange={(e) => onNewTitle(e.target.value)}
           onKeyDown={(e) => {

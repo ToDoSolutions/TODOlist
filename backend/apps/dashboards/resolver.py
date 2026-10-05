@@ -70,10 +70,14 @@ def w_workload(user, config):
 
 
 def w_velocity(user, config):
-    """Velocity de los últimos sprints."""
+    """Velocity de los últimos sprints (+ estimado vs real por sprint)."""
     from apps.tasks.advanced_metrics import get_velocity_data
     data = get_velocity_data(user)
-    return {"sprints": data.get("velocity", [])[:int(config.get("limit", 6))]}
+    limit = int(config.get("limit", 6))
+    return {
+        "sprints": data.get("velocity", [])[:limit],
+        "estimated_vs_actual": data.get("estimated_vs_actual", [])[:limit],
+    }
 
 
 def w_prs_open(user, config):
@@ -109,7 +113,7 @@ def w_recent_activity(user, config):
     ).order_by("-created_at")[:int(config.get("limit", 10))]
     return {
         "activity": [{
-            "action": l.action, "resource": l.resource_type,
+            "action": l.get_action_display(), "resource": l.resource_type,
             "at": l.created_at.isoformat(),
         } for l in logs],
     }

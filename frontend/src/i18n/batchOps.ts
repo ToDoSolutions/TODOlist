@@ -1,4 +1,4 @@
-﻿export default {
+export default {
   es: {
     // TimeEntriesPage — registros de tiempo
     "p.ops.time.title": "Registros de tiempo",
@@ -36,6 +36,7 @@
 
     // CustomFieldsPage — campos personalizados
     "p.ops.cf.title": "Campos personalizados",
+    "p.ops.cf.customFields": "Campos personalizados",
     "p.ops.cf.new": "Nuevo campo",
     "p.ops.cf.infoAlert":
       "Los campos personalizados permiten añadir información extra a tus tareas más allá de los campos estándar. Por ejemplo: Cliente, Tipo de bug, Severidad, Sprint objetivo, etc.",
@@ -101,9 +102,12 @@
     "p.ops.automations.action.addTag": "Añadir etiqueta",
     "p.ops.automations.action.setDueDate": "Establecer fecha límite",
     "p.ops.automations.action.moveToSprint": "Mover a sprint",
-    "p.ops.automations.action.subtasksInProgress": "Subtareas a in_progress",
+    "p.ops.automations.action.subtasksInProgress": "Subtareas a En progreso",
     "p.ops.automations.action.createNotification": "Crear notificación",
     "p.ops.automations.action.createTask": "Crear tarea",
+    "p.ops.automations.action.callWebhook": "Llamar webhook (POST)",
+    "p.ops.automations.param.webhookUrl": "URL del webhook",
+    "p.ops.automations.param.webhookSecret": "Secreto de firma (opcional)",
     "p.ops.automations.field.newState": "Nuevo estado",
     "p.ops.automations.field.oldState": "Estado anterior",
     "p.ops.automations.field.dueDate": "Fecha límite",
@@ -137,7 +141,7 @@
     "p.ops.automations.updateError": "No se pudo actualizar la regla",
     "p.ops.automations.deleted": "Regla eliminada",
     "p.ops.automations.testResult": "Ejecutada: {{results}}",
-    "p.ops.automations.triggerChip": "Trigger: {{trigger}}",
+    "p.ops.automations.triggerChip": "Cuando: {{trigger}}",
     "p.ops.automations.actionChip": "Acción: {{action}}",
     "p.ops.automations.executions_one": "{{count}} ejecución",
     "p.ops.automations.executions_other": "{{count}} ejecuciones",
@@ -241,7 +245,7 @@
     "p.ops.workflow.mapTitle": "Mapa de transiciones",
     "p.ops.workflow.noTransitions":
       "Sin transiciones configuradas: todos los cambios de estado están permitidos (comportamiento por defecto). Añade transiciones para restringir el flujo.",
-    "p.ops.workflow.finalDest": "← destino final",
+    "p.ops.workflow.finalDest": "? destino final",
     "p.ops.workflow.deadEnds":
       "Estados sin salida: {{states}}. Las tareas que lleguen ahí no podrán moverse a ningún otro estado.",
     "p.ops.workflow.newTransition": "Nueva transición",
@@ -251,7 +255,7 @@
     "p.ops.workflow.tableCaption":
       "Transiciones permitidas del workflow (formato accesible)",
     "p.ops.workflow.deleteTransition": "Eliminar transición",
-    "p.ops.workflow.confirmDelete": "¿Eliminar {{from}} → {{to}}?",
+    "p.ops.workflow.confirmDelete": "¿Eliminar {{from}} ? {{to}}?",
     "p.ops.workflow.emptyTable": "Sin transiciones configuradas.",
     "p.ops.workflow.added": "Transición añadida",
     "p.ops.workflow.createError": "No se pudo crear la transición",
@@ -335,6 +339,7 @@
 
     // CustomFieldsPage — custom fields
     "p.ops.cf.title": "Custom fields",
+    "p.ops.cf.customFields": "Custom fields",
     "p.ops.cf.new": "New field",
     "p.ops.cf.infoAlert":
       "Custom fields let you add extra information to your tasks beyond the standard fields. For example: Client, Bug type, Severity, Target sprint, etc.",
@@ -399,9 +404,12 @@
     "p.ops.automations.action.addTag": "Add tag",
     "p.ops.automations.action.setDueDate": "Set due date",
     "p.ops.automations.action.moveToSprint": "Move to sprint",
-    "p.ops.automations.action.subtasksInProgress": "Subtasks to in_progress",
+    "p.ops.automations.action.subtasksInProgress": "Subtasks to In progress",
     "p.ops.automations.action.createNotification": "Create notification",
     "p.ops.automations.action.createTask": "Create task",
+    "p.ops.automations.action.callWebhook": "Call webhook (POST)",
+    "p.ops.automations.param.webhookUrl": "Webhook URL",
+    "p.ops.automations.param.webhookSecret": "Signing secret (optional)",
     "p.ops.automations.field.newState": "New state",
     "p.ops.automations.field.oldState": "Previous state",
     "p.ops.automations.field.dueDate": "Due date",
@@ -537,7 +545,7 @@
     "p.ops.workflow.mapTitle": "Transition map",
     "p.ops.workflow.noTransitions":
       "No transitions configured: all state changes are allowed (default behavior). Add transitions to restrict the flow.",
-    "p.ops.workflow.finalDest": "← final destination",
+    "p.ops.workflow.finalDest": "? final destination",
     "p.ops.workflow.deadEnds":
       "Dead-end states: {{states}}. Tasks that reach them won't be able to move to any other state.",
     "p.ops.workflow.newTransition": "New transition",
@@ -546,7 +554,7 @@
     "p.ops.workflow.add": "Add",
     "p.ops.workflow.tableCaption": "Allowed workflow transitions (accessible format)",
     "p.ops.workflow.deleteTransition": "Delete transition",
-    "p.ops.workflow.confirmDelete": "Delete {{from}} → {{to}}?",
+    "p.ops.workflow.confirmDelete": "Delete {{from}} ? {{to}}?",
     "p.ops.workflow.emptyTable": "No transitions configured.",
     "p.ops.workflow.added": "Transition added",
     "p.ops.workflow.createError": "Could not create the transition",

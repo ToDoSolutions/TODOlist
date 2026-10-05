@@ -227,7 +227,9 @@ class ProjectTemplate(models.Model):
     """Plantilla de proyecto: config JSON con tasks/tags/state_labels.
 
     ``is_builtin=True`` la hace visible para todos los usuarios (solo el
-    owner puede editarla/borrarla igualmente).
+    owner puede editarla/borrarla igualmente). ``is_public=True`` la
+    publica en el catálogo comunitario: cualquier usuario la ve y la
+    aplica, pero solo el owner la edita/borra.
     """
 
     name = models.CharField(max_length=120)
@@ -246,6 +248,9 @@ class ProjectTemplate(models.Model):
         ),
     )
     is_builtin = models.BooleanField(default=False)
+    # Catálogo comunitario: publicada por el owner, visible para todos
+    is_public = models.BooleanField(default=False)
+    use_count = models.PositiveIntegerField(default=0)
     created_at = models.DateTimeField(auto_now_add=True)
 
     class Meta:

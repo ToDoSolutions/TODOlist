@@ -6,6 +6,17 @@ from django.utils import timezone
 from apps.tasks.models import Sprint, Task, TaskActivity
 
 
+def _my_tasks(user):
+    """Scope "mis tareas" coherente con my-work/productivity: owner o
+    asignada (FK o M2M) dentro del conjunto visible para el usuario.
+    Las tareas solo observadas o legibles por membresía no cuentan."""
+    from django.db.models import Q
+
+    return Task.objects.for_user(user).filter(
+        Q(owner=user) | Q(assignee=user) | Q(assignees=user)
+    ).distinct()
+
+
 def _percentile(values, p):
     """Calcula el percentil p de una lista de valores."""
     if not values:
@@ -36,7 +47,7 @@ def get_flow_metrics(user, days=30):
     now = timezone.now()
     since = now - timedelta(days=days)
 
-    tasks = Task.objects.filter(owner=user)
+    tasks = _my_tasks(user)
 
     # Throughput: tareas completadas en el periodo
     completed_in_period = tasks.filter(
@@ -113,7 +124,7 @@ def get_flow_metrics(user, days=30):
 def get_backlog_health(user):
     """Salud del backlog: tareas sin estimación, sin responsable, antiguas, etc."""
     now = timezone.now()
-    tasks = Task.objects.filter(owner=user)
+    tasks = _my_tasks(user)
     open_tasks = tasks.exclude(state__in=["completed", "cancelled", "archived"])
 
     # Tareas antiguas (> 30 días sin actividad)
@@ -133,7 +144,7 @@ def get_backlog_health(user):
 
     # Reabiertas
     reopened = TaskActivity.objects.filter(
-        task__owner=user, action="reopened",
+        task__in=tasks, action="reopened",
         created_at__gte=now - timedelta(days=30),
     ).count()
 
@@ -218,7 +229,7 @@ def get_sprint_metrics(user, sprint_id):
 def get_dashboard_summary(user):
     """Dashboard general: resumen ejecutivo."""
     now = timezone.now()
-    tasks = Task.objects.filter(owner=user)
+    tasks = _my_tasks(user)
 
     open_count = tasks.exclude(state__in=["completed", "cancelled", "archived"]).count()
     completed_count = tasks.filter(state="completed").count()

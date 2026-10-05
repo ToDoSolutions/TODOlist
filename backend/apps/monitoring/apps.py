@@ -9,3 +9,5 @@ class MonitoringConfig(AppConfig):
     def ready(self):
         from .otel import init_otel
         init_otel()
+        from .sentry import init_sentry
+        init_sentry()

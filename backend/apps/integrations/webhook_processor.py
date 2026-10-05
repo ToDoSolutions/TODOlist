@@ -89,6 +89,43 @@ def _dispatch_event(event_type, action, payload):
     return {"message": f"Event {event_type}/{action} no handler"}
 
 
+def _resolve_repo(payload, repo_full_name=""):
+    """Resuelve el GitHubRepo scopeado por instalación del propio evento.
+
+    ``full_name`` no es único global (varios usuarios pueden registrar el
+    mismo repo de org), así que se resuelve por ``(installation_id,
+    repo_id)`` del payload. Fallback a ``full_name`` + instalación y, como
+    último recurso (payloads sin installation), full_name solo.
+    """
+    repo_info = payload.get("repository", {})
+    installation_id = payload.get("installation", {}).get("id")
+    repo_id = repo_info.get("id")
+    full_name = repo_full_name or repo_info.get("full_name", "")
+
+    if installation_id:
+        if repo_id:
+            repo = GitHubRepo.objects.filter(
+                installation__installation_id=installation_id, repo_id=repo_id
+            ).first()
+            if repo:
+                return repo
+        if full_name:
+            repo = GitHubRepo.objects.filter(
+                installation__installation_id=installation_id, full_name=full_name
+            ).first()
+            if repo:
+                return repo
+            return None
+        return None
+
+    if not full_name:
+        return None
+    logger.warning(
+        "Webhook sin installation.id: resolviendo repo por full_name=%s (ambiguo)", full_name
+    )
+    return GitHubRepo.objects.filter(full_name=full_name).first()
+
+
 def _handle_issue_event(action, issue_data, repo_full_name=None):
     """Maneja eventos de issues."""
     from .sync_service import import_issue_as_task, sync_issue_to_task
@@ -101,7 +138,7 @@ def _handle_issue_event(action, issue_data, repo_full_name=None):
     if not issue_number or not repo_full_name:
         return {"message": "Missing issue data"}
 
-    repo = GitHubRepo.objects.filter(full_name=repo_full_name).first()
+    repo = _resolve_repo(issue_data, repo_full_name)
     if not repo:
         return {"message": f"Repo {repo_full_name} not tracked"}
 
@@ -142,8 +179,17 @@ def _handle_installation_repos_event(action, payload):
                     },
                 )
     elif action == "removed":
+        # Scopear por instalación: repo_id es global, pero un `removed` solo
+        # debe borrar el tracking de la instalación que emite el evento.
+        inst = GitHubInstallation.objects.filter(installation_id=installation_id).first()
         for r in repos_removed:
-            GitHubRepo.objects.filter(repo_id=r["id"]).delete()
+            qs = GitHubRepo.objects.filter(repo_id=r["id"])
+            if inst:
+                qs = qs.filter(installation=inst)
+            elif installation_id:
+                # Instalación desconocida: no borrar nada de otros tenants.
+                continue
+            qs.delete()
 
     return {"message": f"Installation repos {action}"}
 
@@ -174,7 +220,7 @@ def _handle_pr_event(action, payload):
     if not pr_number or not repo_full_name:
         return {"message": "Missing PR data"}
 
-    repo = GitHubRepo.objects.filter(full_name=repo_full_name).first()
+    repo = _resolve_repo(payload, repo_full_name)
     if not repo:
         return {"message": f"Repo {repo_full_name} not tracked"}
 
@@ -230,7 +276,7 @@ def _handle_release_event(action, payload):
     if not tag or not repo_full_name:
         return {"message": "Missing release data"}
 
-    repo = GitHubRepo.objects.filter(full_name=repo_full_name).first()
+    repo = _resolve_repo(payload, repo_full_name)
     if not repo:
         return {"message": f"Repo {repo_full_name} not tracked"}
 
@@ -266,7 +312,7 @@ def _handle_check_run_event(action, payload):
     if not repo_full_name:
         return {"message": "Missing repo data"}
 
-    repo = GitHubRepo.objects.filter(full_name=repo_full_name).first()
+    repo = _resolve_repo(payload, repo_full_name)
     if not repo:
         return {"message": f"Repo {repo_full_name} not tracked"}
 

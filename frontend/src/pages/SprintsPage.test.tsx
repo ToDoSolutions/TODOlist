@@ -71,7 +71,7 @@ describe("SprintsPage", () => {
   it("empty state sin sprints", async () => {
     listMock.mockResolvedValue([]);
     renderPage();
-    await waitFor(() => expect(screen.getByText(/no hay sprints/i)).toBeTruthy());
+    await waitFor(() => expect(screen.getByText(/sin sprints/i)).toBeTruthy());
   });
 
   it("renderiza sprint con chips de estado, fechas y tareas", async () => {
@@ -79,7 +79,7 @@ describe("SprintsPage", () => {
     renderPage();
     await waitFor(() => expect(screen.getByText("Sprint 1")).toBeTruthy());
     expect(screen.getByText("Planificado")).toBeTruthy();
-    expect(screen.getByText("2024-01-01 → 2024-01-14")).toBeTruthy();
+    expect(screen.getByText("1 ene 2024 → 14 ene 2024")).toBeTruthy();
     expect(screen.getByText("3 tareas")).toBeTruthy();
     expect(screen.getByText("P1")).toBeTruthy();
   });

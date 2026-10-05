@@ -12,6 +12,7 @@ export default {
     "p.board.colSize": "Talla",
     "p.board.colSprint": "Sprint",
     "p.board.colEpic": "Épica",
+    "p.board.colProject": "Proyecto",
     "p.board.colDue": "Vence",
     // TaskTableView — toolbar y acciones en lote
     "p.board.searchPlaceholder": "Buscar...",
@@ -72,6 +73,7 @@ export default {
     // NotificationBell
     "p.board.markAllRead": "Marcar todas",
     "p.board.noNotifications": "No tienes notificaciones",
+    "p.board.notifLoadError": "No se pudieron cargar las notificaciones",
     "p.board.notifNow": "ahora",
     "p.board.notifType.task_assigned": "Asignada",
     "p.board.notifType.task_due_soon": "Por vencer",
@@ -101,6 +103,7 @@ export default {
     "p.board.colSize": "Size",
     "p.board.colSprint": "Sprint",
     "p.board.colEpic": "Epic",
+    "p.board.colProject": "Project",
     "p.board.colDue": "Due",
     // TaskTableView — toolbar and bulk actions
     "p.board.searchPlaceholder": "Search...",
@@ -161,6 +164,7 @@ export default {
     // NotificationBell
     "p.board.markAllRead": "Mark all read",
     "p.board.noNotifications": "You have no notifications",
+    "p.board.notifLoadError": "Could not load notifications",
     "p.board.notifNow": "now",
     "p.board.notifType.task_assigned": "Assigned",
     "p.board.notifType.task_due_soon": "Due soon",

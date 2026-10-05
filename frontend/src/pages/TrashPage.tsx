@@ -12,8 +12,7 @@ import {
   Divider,
 } from "@mui/material";
 import { Archive, RotateCcw, Trash2 } from "lucide-react";
-import { format, parseISO } from "date-fns";
-import { es } from "date-fns/locale";
+import { formatDate } from "../lib/dates";
 import PageHeader from "../components/ui/PageHeader";
 import { EmptyState } from "../components/ui/states";
 import { projectsApi, tasksApi } from "../api/resources";
@@ -105,9 +104,7 @@ export default function TrashPage() {
                   </Typography>
                   <Typography variant="caption" color="text.secondary">
                     {t("p.work.trash.archivedOn", {
-                      date: format(parseISO(p.updated_at), "d MMM yyyy", {
-                        locale: es,
-                      }),
+                      date: formatDate(p.updated_at),
                     })}
                   </Typography>
                 </Box>
@@ -146,9 +143,7 @@ export default function TrashPage() {
                   <Typography variant="caption" color="text.secondary">
                     {task.due_date
                       ? t("p.work.trash.dueOn", {
-                          date: format(parseISO(task.due_date), "d MMM yyyy", {
-                            locale: es,
-                          }),
+                          date: formatDate(task.due_date),
                         })
                       : t("p.work.home.noDate")}
                   </Typography>

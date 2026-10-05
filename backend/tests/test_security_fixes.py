@@ -20,7 +20,7 @@ from apps.encryption.models import EncryptedKeyShare, EncryptedTask, UserPublicK
 from apps.offline_sync.models import SyncDevice
 from apps.tasks.models import SavedSearch, Sprint, Task
 from apps.users.models import APIKey, TwoFactorSecret, User
-from apps.users.security import hash_backup_code
+from apps.users.security import verify_backup_code
 
 
 @pytest.fixture
@@ -233,7 +233,11 @@ class TestTwoFactorLogin:
         tf.refresh_from_db()
         for code in codes:
             assert code not in tf.backup_codes
-            assert hash_backup_code(code) in tf.backup_codes
+            # PBKDF2 con sal por código: hay que verificar contra el
+            # hash almacenado, no re-hashear (la sal es aleatoria).
+            assert any(
+                verify_backup_code(code, stored) for stored in tf.backup_codes
+            )
         # Y siguen siendo utilizables una vez
         assert tf.use_backup_code(codes[0]) is True
         assert tf.use_backup_code(codes[0]) is False  # consumido

@@ -33,12 +33,23 @@ const queryClient = new QueryClient({
       notify.error("No se pudieron cargar los datos. Comprueba tu conexión."),
   }),
   // Red de seguridad para mutaciones sin onError propio: sin esto un POST/PATCH/DELETE
-  // que falla en una página sin handler queda silencioso.
+  // que falla en una página sin handler queda silencioso. Si el backend
+  // explica el motivo (detail/error del serializer — p.ej. una
+  // transición de workflow rechazada) lo mostramos tal cual.
   mutationCache: new MutationCache({
-    onError: (_err, _vars, _ctx, mutation) => {
-      if (!mutation.options.onError) {
-        notify.error("No se pudo completar la operación.");
-      }
+    onError: (err, _vars, _ctx, mutation) => {
+      if (mutation.options.onError) return;
+      const data = (err as { response?: { data?: unknown } })?.response?.data;
+      const detail =
+        data && typeof data === "object"
+          ? (data as Record<string, unknown>).detail ??
+            (data as Record<string, unknown>).error
+          : null;
+      notify.error(
+        typeof detail === "string"
+          ? detail
+          : "No se pudo completar la operación.",
+      );
     },
   }),
   defaultOptions: {

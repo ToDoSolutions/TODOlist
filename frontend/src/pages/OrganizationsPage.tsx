@@ -15,8 +15,12 @@ import {
   DialogActions,
   MenuItem,
   Grid,
+  Switch,
+  FormControlLabel,
+  Tooltip,
+  IconButton,
 } from "@mui/material";
-import { Plus, FolderTree } from "lucide-react";
+import { Plus, FolderTree, Settings2, ShieldCheck } from "lucide-react";
 import PageHeader from "../components/ui/PageHeader";
 import { EmptyState } from "../components/ui/states";
 import { organizationsApi, type OrganizationItem } from "../api/resources";
@@ -34,6 +38,11 @@ export default function OrganizationsPage() {
   const [memberDialog, setMemberDialog] = useState<OrganizationItem | null>(null);
   const [memberEmail, setMemberEmail] = useState("");
   const [memberRole, setMemberRole] = useState("member");
+  const [editOrg, setEditOrg] = useState<OrganizationItem | null>(null);
+  const [editName, setEditName] = useState("");
+  const [editDescription, setEditDescription] = useState("");
+  const [editSsoDomain, setEditSsoDomain] = useState("");
+  const [editSsoRequired, setEditSsoRequired] = useState(false);
 
   const { data: orgsData } = useQuery({
     queryKey: ["organizations"],
@@ -63,6 +72,30 @@ export default function OrganizationsPage() {
       notify.success(t("p.admin.orgs.memberAdded"));
     },
     onError: () => notify.error(t("p.admin.orgs.errorAddMember")),
+  });
+
+  const openEdit = (o: OrganizationItem) => {
+    setEditOrg(o);
+    setEditName(o.name);
+    setEditDescription(o.description || "");
+    setEditSsoDomain(o.sso_domain || "");
+    setEditSsoRequired(o.sso_required ?? false);
+  };
+
+  const updateMut = useMutation({
+    mutationFn: () =>
+      organizationsApi.update(editOrg!.id, {
+        name: editName.trim(),
+        description: editDescription,
+        sso_domain: editSsoDomain.trim() || null,
+        sso_required: editSsoDomain.trim() ? editSsoRequired : false,
+      }),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ["organizations"] });
+      setEditOrg(null);
+      notify.success(t("p.admin.orgs.updated"));
+    },
+    onError: () => notify.error(t("p.admin.orgs.errorUpdate")),
   });
 
   return (
@@ -111,14 +144,42 @@ export default function OrganizationsPage() {
                     {o.description}
                   </Typography>
                 )}
-                <Stack direction="row" spacing={1} alignItems="center">
+                <Stack direction="row" spacing={1} alignItems="center" flexWrap="wrap" useFlexGap>
                   <Chip
                     size="small"
                     label={t("p.admin.orgs.memberCount", { n: o.member_count })}
                     variant="outlined"
                   />
                   <Chip size="small" label={o.slug} variant="outlined" />
+                  {o.sso_domain && (
+                    <Tooltip
+                      title={
+                        o.sso_required
+                          ? t("p.admin.orgs.ssoRequiredTip")
+                          : t("p.admin.orgs.ssoDomainTip")
+                      }
+                    >
+                      <Chip
+                        size="small"
+                        icon={<ShieldCheck size={12} />}
+                        label={
+                          o.sso_required
+                            ? t("p.admin.orgs.ssoRequired", {
+                                domain: o.sso_domain,
+                              })
+                            : t("p.admin.orgs.ssoDomain", { domain: o.sso_domain })
+                        }
+                        color={o.sso_required ? "warning" : "default"}
+                        variant="outlined"
+                      />
+                    </Tooltip>
+                  )}
                   <Box flex={1} />
+                  <Tooltip title={t("p.admin.orgs.edit")}>
+                    <IconButton size="small" onClick={() => openEdit(o)}>
+                      <Settings2 size={15} />
+                    </IconButton>
+                  </Tooltip>
                   <Button size="small" onClick={() => setMemberDialog(o)}>
                     {t("p.admin.orgs.addMember")}
                   </Button>
@@ -202,6 +263,64 @@ export default function OrganizationsPage() {
             onClick={() => addMemberMut.mutate()}
           >
             {t("p.admin.orgs.add")}
+          </Button>
+        </DialogActions>
+      </Dialog>
+
+      <Dialog
+        open={!!editOrg}
+        onClose={() => setEditOrg(null)}
+        fullWidth
+        maxWidth="xs"
+      >
+        <DialogTitle>
+          {t("p.admin.orgs.editTitle", { name: editOrg?.name })}
+        </DialogTitle>
+        <DialogContent>
+          <Stack spacing={2} mt={1}>
+            <TextField
+              label={t("common.name")}
+              fullWidth
+              autoFocus
+              value={editName}
+              onChange={(e) => setEditName(e.target.value)}
+            />
+            <TextField
+              label={t("p.misc.description")}
+              multiline
+              minRows={2}
+              fullWidth
+              value={editDescription}
+              onChange={(e) => setEditDescription(e.target.value)}
+            />
+            <TextField
+              label={t("p.admin.orgs.ssoDomainLabel")}
+              placeholder="acme.com"
+              fullWidth
+              value={editSsoDomain}
+              onChange={(e) => setEditSsoDomain(e.target.value)}
+              helperText={t("p.admin.orgs.ssoDomainHelp")}
+            />
+            <FormControlLabel
+              control={
+                <Switch
+                  checked={editSsoRequired}
+                  onChange={(e) => setEditSsoRequired(e.target.checked)}
+                  disabled={!editSsoDomain.trim()}
+                />
+              }
+              label={t("p.admin.orgs.ssoRequiredLabel")}
+            />
+          </Stack>
+        </DialogContent>
+        <DialogActions>
+          <Button onClick={() => setEditOrg(null)}>{t("common.cancel")}</Button>
+          <Button
+            variant="contained"
+            disabled={!editName.trim() || updateMut.isPending}
+            onClick={() => updateMut.mutate()}
+          >
+            {t("common.save")}
           </Button>
         </DialogActions>
       </Dialog>

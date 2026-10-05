@@ -15,6 +15,7 @@ import {
 } from "@mui/material";
 import { Bell, CheckCheck } from "lucide-react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
+import { useNavigate } from "react-router-dom";
 import { notificationsApi } from "../api/resources";
 import type { AppNotification } from "../types";
 
@@ -51,6 +52,7 @@ function timeAgo(dateStr: string, nowLabel: string): string {
 export default function NotificationBell() {
   const { t } = useTranslation();
   const qc = useQueryClient();
+  const navigate = useNavigate();
   const [anchorEl, setAnchorEl] = useState<HTMLElement | null>(null);
   const open = Boolean(anchorEl);
 
@@ -60,7 +62,7 @@ export default function NotificationBell() {
     refetchInterval: 30000,
   });
 
-  const { data: notifications, isLoading } = useQuery({
+  const { data: notifications, isLoading, isError } = useQuery({
     queryKey: ["notifications"],
     queryFn: notificationsApi.list,
     enabled: open,
@@ -83,13 +85,14 @@ export default function NotificationBell() {
   });
 
   const unreadCount = unreadData?.count || 0;
-  const notifList = notifications?.results || notifications || [];
+  const notifList = notifications ?? [];
 
   return (
     <>
       <IconButton
         onClick={(e) => setAnchorEl(e.currentTarget)}
         sx={{ color: "text.secondary" }}
+        aria-label={t("nav.notifications")}
       >
         <Badge badgeContent={unreadCount} color="error">
           <Bell size={22} />
@@ -124,6 +127,14 @@ export default function NotificationBell() {
             <Box display="flex" justifyContent="center" py={3}>
               <CircularProgress size={24} />
             </Box>
+          ) : isError ? (
+            <Typography
+              variant="body2"
+              color="error"
+              sx={{ p: 3, textAlign: "center" }}
+            >
+              {t("p.board.notifLoadError")}
+            </Typography>
           ) : notifList.length === 0 ? (
             <Typography
               variant="body2"
@@ -147,7 +158,10 @@ export default function NotificationBell() {
                 }}
                 onClick={() => {
                   if (!n.read) markRead.mutate(n.id);
-                  if (n.action_url) window.location.hash = n.action_url;
+                  if (n.action_url) {
+                    setAnchorEl(null);
+                    navigate(n.action_url);
+                  }
                 }}
               >
                 <Stack direction="row" alignItems="flex-start" spacing={1}>

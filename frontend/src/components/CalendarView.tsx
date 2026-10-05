@@ -274,13 +274,19 @@ export default function CalendarView({ tasks, onEdit }: Props) {
     >
       <Box>
         <Stack direction="row" alignItems="center" spacing={1} mb={2}>
-          <IconButton onClick={() => setCursor(addMonths(cursor, -1))}>
+          <IconButton
+            onClick={() => setCursor(addMonths(cursor, -1))}
+            aria-label={t("p.shell.ui.calendar.prevMonth")}
+          >
             <ChevronLeft size={20} />
           </IconButton>
           <Typography variant="h6" fontWeight={700} sx={{ textTransform: "capitalize" }}>
             {format(cursor, "MMMM yyyy", { locale: dateLocale })}
           </Typography>
-          <IconButton onClick={() => setCursor(addMonths(cursor, 1))}>
+          <IconButton
+            onClick={() => setCursor(addMonths(cursor, 1))}
+            aria-label={t("p.shell.ui.calendar.nextMonth")}
+          >
             <ChevronRight size={20} />
           </IconButton>
           <Box sx={{ flex: 1 }} />

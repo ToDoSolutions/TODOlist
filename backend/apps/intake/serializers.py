@@ -19,7 +19,9 @@ class IntakeFormSerializer(serializers.ModelSerializer):
         ]
 
     def get_submissions_count(self, obj):
-        return obj.submissions.count()
+        # Usa la anotación del queryset si existe (evita N+1 en list)
+        ann = getattr(obj, "submissions_count_ann", None)
+        return ann if ann is not None else obj.submissions.count()
 
     def validate_schema(self, value):
         form = IntakeForm(schema=value)

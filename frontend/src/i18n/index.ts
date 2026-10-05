@@ -81,6 +81,30 @@ const core = {
       "common.noResults": "Sin resultados",
       "common.confirm": "Confirmar",
       "common.close": "Cerrar",
+      "common.retry": "Reintentar",
+      "common.emptyFilter.title": "Sin resultados con estos filtros",
+      "common.emptyFilter.desc": "Prueba a ampliar la búsqueda o limpiar algunos filtros.",
+      "common.noAccess.title": "No tienes acceso a este recurso",
+      "common.noAccess.desc": "Pide acceso al propietario o a un administrador del proyecto.",
+      "common.offline.title": "Sin conexión",
+      "common.offline.desc": "Estás viendo datos locales. Los cambios se sincronizarán al reconectar.",
+      "common.appError.title": "Algo ha fallado",
+      "common.appError.desc": "La aplicación ha encontrado un error inesperado. Puedes recargar para continuar; tus datos están a salvo.",
+      "common.appError.reload": "Recargar la aplicación",
+      "common.appError.details": "Detalles técnicos",
+      // Errores de API traducidos (src/lib/apiError.ts)
+      "common.err.badCredentials": "Credenciales incorrectas. Revisa email y contraseña.",
+      "common.err.invalidToken": "La sesión ha caducado; vuelve a iniciar sesión.",
+      "common.err.fieldRequired": "Este campo es obligatorio.",
+      "common.err.invalidEmail": "Introduce una dirección de email válida.",
+      "common.err.passwordShort": "La contraseña debe tener al menos 8 caracteres.",
+      "common.err.passwordCommon": "Esa contraseña es demasiado común.",
+      "common.err.passwordMismatch": "Las contraseñas no coinciden.",
+      "common.err.forbidden": "No tienes permiso para hacer eso.",
+      "common.err.notFound": "No encontrado.",
+      "common.err.tooMany": "Demasiadas peticiones; espera un momento y reintenta.",
+      "common.err.unavailable": "El servidor no está disponible ahora mismo; inténtalo de nuevo.",
+      "common.err.network": "Sin conexión con el servidor; comprueba tu red.",
       // Task states
       "task.state.backlog": "Backlog",
       "task.state.pending": "Pendiente",
@@ -169,6 +193,30 @@ const core = {
       "common.noResults": "No results",
       "common.confirm": "Confirm",
       "common.close": "Close",
+      "common.retry": "Retry",
+      "common.emptyFilter.title": "No results with these filters",
+      "common.emptyFilter.desc": "Try broadening the search or clearing some filters.",
+      "common.noAccess.title": "You don't have access to this resource",
+      "common.noAccess.desc": "Ask the owner or a project admin for access.",
+      "common.offline.title": "Offline",
+      "common.offline.desc": "You're viewing local data. Changes will sync when you reconnect.",
+      "common.appError.title": "Something went wrong",
+      "common.appError.desc": "The application hit an unexpected error. Reload to continue; your data is safe.",
+      "common.appError.reload": "Reload the app",
+      "common.appError.details": "Technical details",
+      // Translated API errors (src/lib/apiError.ts)
+      "common.err.badCredentials": "Incorrect credentials. Check your email and password.",
+      "common.err.invalidToken": "Your session has expired; log in again.",
+      "common.err.fieldRequired": "This field is required.",
+      "common.err.invalidEmail": "Enter a valid email address.",
+      "common.err.passwordShort": "The password must be at least 8 characters.",
+      "common.err.passwordCommon": "That password is too common.",
+      "common.err.passwordMismatch": "The passwords don't match.",
+      "common.err.forbidden": "You don't have permission to do that.",
+      "common.err.notFound": "Not found.",
+      "common.err.tooMany": "Too many requests; wait a moment and retry.",
+      "common.err.unavailable": "The server is unavailable right now; try again.",
+      "common.err.network": "No connection to the server; check your network.",
       // Task states
       "task.state.backlog": "Backlog",
       "task.state.pending": "Pending",
@@ -234,6 +282,11 @@ i18n.use(initReactI18next).init({
   lng: localStorage.getItem("i18n-lang") || "es",
   fallbackLng: "es",
   interpolation: { escapeValue: false },
+});
+
+document.documentElement.lang = i18n.language;
+i18n.on("languageChanged", (lng) => {
+  document.documentElement.lang = lng;
 });
 
 export default i18n;

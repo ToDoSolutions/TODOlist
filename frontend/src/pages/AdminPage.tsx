@@ -173,7 +173,6 @@ export default function AdminPage() {
       <PageHeader
         title={t("p.admin.hub.title")}
         description={t("p.admin.hub.description")}
-        breadcrumbs={[{ label: t("p.admin.breadcrumb") }]}
       />
 
       <Stack direction="row" spacing={1.5} mb={3} flexWrap="wrap" useFlexGap>

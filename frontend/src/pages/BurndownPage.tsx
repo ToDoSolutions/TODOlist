@@ -1,17 +1,19 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { useTranslation } from "react-i18next";
 import { advancedMetricsApi, sprintsApi, type Sprint } from "../api/resources";
+import { formatDate } from "../lib/dates";
+import PageHeader from "../components/ui/PageHeader";
+import { ErrorState } from "../components/ui/states";
+import { TableSkeleton } from "../components/ui/skeletons";
 import {
   Box,
   Typography,
-  CircularProgress,
   Paper,
   Select,
   MenuItem,
   FormControl,
   InputLabel,
-  Alert,
   Stack,
   Chip,
   ToggleButton,
@@ -40,7 +42,17 @@ export default function BurndownPage() {
   });
   const sprints: Sprint[] = sprintsData || [];
 
-  const { data, isLoading, isError } = useQuery({
+  // Preselecciona el sprint activo (o el último) — la página vacía con
+  // "Selecciona un sprint" obligaba a un clic extra siempre.
+  useEffect(() => {
+    if (sprintId || sprints.length === 0) return;
+    const active = sprints.find((s) => s.state === "active");
+    const fallback = sprints[sprints.length - 1];
+    const chosen = active ?? fallback;
+    if (chosen) setSprintId(chosen.id);
+  }, [sprints, sprintId]);
+
+  const { data, isLoading, isError, refetch } = useQuery({
     queryKey: ["burndown", mode, sprintId],
     queryFn: () =>
       mode === "burnup"
@@ -51,11 +63,13 @@ export default function BurndownPage() {
 
   return (
     <Box maxWidth={1000} mx="auto">
-      <Typography variant="h5" fontWeight={700} mb={2}>
-        {mode === "burnup"
-          ? t("p.plan.burndown.titleBurnup")
-          : t("p.plan.burndown.title")}
-      </Typography>
+      <PageHeader
+        title={
+          mode === "burnup"
+            ? t("p.plan.burndown.titleBurnup")
+            : t("p.plan.burndown.title")
+        }
+      />
 
       <Stack
         direction="row"
@@ -97,11 +111,12 @@ export default function BurndownPage() {
           {t("p.plan.burndown.selectSprint")}
         </Typography>
       )}
-      {sprintId && isLoading && <CircularProgress />}
+      {sprintId && isLoading && <TableSkeleton rows={6} cols={3} />}
       {sprintId && isError && (
-        <Alert severity="error" sx={{ mt: 2 }}>
-          {t("p.plan.burndown.loadError")}
-        </Alert>
+        <ErrorState
+          title={t("p.plan.burndown.loadError")}
+          onRetry={() => void refetch()}
+        />
       )}
       {sprintId &&
         data &&
@@ -160,7 +175,7 @@ function BurndownChart({ data }: { data: BurndownData }) {
         </Stack>
       </Stack>
       <Typography variant="body2" color="text.secondary" mb={2}>
-        {data.sprint?.start_date} → {data.sprint?.end_date}
+        {formatDate(data.sprint?.start_date)} → {formatDate(data.sprint?.end_date)}
       </Typography>
 
       <Box sx={{ width: "100%", height: 320 }}>
@@ -240,7 +255,7 @@ function BurnupChart({ data }: { data: BurnupData }) {
         />
       </Stack>
       <Typography variant="body2" color="text.secondary" mb={2}>
-        {data.sprint?.start_date} → {data.sprint?.end_date}
+        {formatDate(data.sprint?.start_date)} → {formatDate(data.sprint?.end_date)}
       </Typography>
 
       <Box sx={{ width: "100%", height: 320 }}>

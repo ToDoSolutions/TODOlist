@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+﻿import { useEffect, useState } from "react";
 import { useNavigate, useSearchParams } from "react-router-dom";
 import { Box, CircularProgress, Typography, Alert } from "@mui/material";
 import { useAuth } from "../auth/AuthContext";
@@ -6,6 +6,7 @@ import { githubApi, type ApiError } from "../api/resources";
 import { notify } from "../notify";
 import { useTranslation } from "react-i18next";
 import "../i18n";
+import { apiErrorText } from "../lib/apiError";
 
 export default function GitHubCallbackPage() {
   const { t } = useTranslation();
@@ -34,7 +35,7 @@ export default function GitHubCallbackPage() {
         navigate("/app");
       })
       .catch((e: ApiError) => {
-        const msg = e.response?.data?.error || t("p.auth.errors.githubConnect");
+        const msg = apiErrorText(e, t, "p.auth.errors.githubConnect");
         setError(msg);
         notify.error(msg);
       });

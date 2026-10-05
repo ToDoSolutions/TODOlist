@@ -1,4 +1,5 @@
 """Tests del outbox transaccional: publish, dispatch, reintentos, webhooks."""
+import json
 from unittest.mock import patch
 
 import pytest
@@ -126,3 +127,86 @@ class TestTaskEvents:
             # SSRF check real (sin patch): IP de metadata debe bloquearse
             Task.objects.create(owner=user, title="T")
             assert not mock_req.post.called
+
+    def test_webhook_task_completed_se_dispara(self, user):
+        """task_completed estaba en Event.choices pero nunca se
+        publicaba � suscriptores recib�an silencio."""
+        OutgoingWebhook.objects.create(
+            owner=user, url="https://example.com/hook",
+            events=["task_completed"], secret="",
+        )
+        task = Task.objects.create(owner=user, title="T")
+        with patch("apps.events.handlers.requests") as mock_req, \
+             patch("apps.integrations_chat.services._is_safe_url", return_value=True):
+            task.state = Task.State.COMPLETED
+            task.save()
+            assert mock_req.post.called
+
+    def test_webhook_comment_added_se_dispara(self, user):
+        from apps.tasks.models import Comment
+        OutgoingWebhook.objects.create(
+            owner=user, url="https://example.com/hook",
+            events=["comment_added"], secret="",
+        )
+        task = Task.objects.create(owner=user, title="T")
+        with patch("apps.events.handlers.requests") as mock_req, \
+             patch("apps.integrations_chat.services._is_safe_url", return_value=True):
+            Comment.objects.create(task=task, author=user, body="hi")
+            assert mock_req.post.called
+            body = json.loads(mock_req.post.call_args.kwargs["data"])
+            assert body["event"] == "comment_added"
+
+    def test_webhook_sprint_se_dispara(self, user):
+        import datetime
+
+        from apps.tasks.models import Sprint
+        OutgoingWebhook.objects.create(
+            owner=user, url="https://example.com/hook",
+            events=["sprint_started"], secret="",
+        )
+        s = Sprint.objects.create(
+            owner=user, name="S1",
+            start_date=datetime.date(2026, 1, 1),
+            end_date=datetime.date(2026, 1, 14),
+        )
+        with patch("apps.events.handlers.requests") as mock_req, \
+             patch("apps.integrations_chat.services._is_safe_url", return_value=True):
+            s.state = Sprint.SprintState.ACTIVE
+            s.save()
+            assert mock_req.post.called
+
+    def test_chat_integration_recibe_evento(self, user):
+        """ChatIntegration.events era configuracion muerta: nada
+        entregaba eventos a Slack/Discord."""
+        from apps.integrations_chat.models import (
+            ChatIntegration,
+            ChatMessageLog,
+        )
+        ChatIntegration.objects.create(
+            owner=user, provider="slack",
+            webhook_url="https://hooks.slack.com/services/x",
+            events=["task_created"],
+        )
+        with patch(
+            "apps.integrations_chat.services.send_slack_message",
+            return_value=(True, 200, "ok"),
+        ) as mock_slack:
+            Task.objects.create(owner=user, title="T")
+            assert mock_slack.called
+            assert "Tarea creada" in mock_slack.call_args.args[1]
+        log = ChatMessageLog.objects.get()
+        assert log.success and log.event == "task_created"
+
+    def test_chat_integration_no_suscrita_no_dispara(self, user):
+        from apps.integrations_chat.models import ChatIntegration
+        ChatIntegration.objects.create(
+            owner=user, provider="slack",
+            webhook_url="https://hooks.slack.com/services/x",
+            events=["sprint_closed"],  # no suscrito a task_created
+        )
+        with patch(
+            "apps.integrations_chat.services.send_slack_message",
+            return_value=(True, 200, "ok"),
+        ) as mock_slack:
+            Task.objects.create(owner=user, title="T")
+            assert not mock_slack.called

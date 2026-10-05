@@ -1,8 +1,14 @@
 """Settings para tests: SQLite en memoria, sin Redis ni PG."""
 from config.settings import *
+from config.settings import BASE_DIR, REST_FRAMEWORK
 
 DEBUG = True
 SECRET_KEY = "test-secret-key-for-pytest-only-64bytes-aaaaaaaaaaaaaaaaaaaaaaaa"
+
+# Los tests no sirven HTTPS: sin esto SecurityMiddleware redirige 301→https
+SECURE_SSL_REDIRECT = False
+SESSION_COOKIE_SECURE = False
+CSRF_COOKIE_SECURE = False
 
 DATABASES = {
     "default": {
@@ -21,6 +27,10 @@ class DisableMigrations:
 
 
 MIGRATION_MODULES = DisableMigrations()
+
+# SERVE_PERMISSIONS se evaluó en settings.py con DEBUG=False (IsAdminUser);
+# en tests DEBUG=True → cualquier autenticado puede ver schema/docs.
+SPECTACULAR_SETTINGS["SERVE_PERMISSIONS"] = ["rest_framework.permissions.IsAuthenticated"]
 
 # Sin throttling ni paginación para tests más simples
 REST_FRAMEWORK["DEFAULT_PAGINATION_CLASS"] = None
@@ -52,4 +62,28 @@ GITHUB_APP_PRIVATE_KEY = ""
 GITHUB_APP_CLIENT_ID = "test-client-id"
 GITHUB_APP_CLIENT_SECRET = "test-client-secret"
 GITHUB_APP_WEBHOOK_SECRET = "test-webhook-secret"
+
+# SCIM 2.0 habilitado en tests (equivale a SCIM_ENABLED=1 + tokens en
+# config.settings, aplicado aquí porque la condición de settings.py ya
+# se evaluó en el import).
+SCIM_ENABLED = True
+SCIM_TOKENS = ["test-scim-token-0123456789abcdef"]
+INSTALLED_APPS += ["apps.scim", "django_scim"]
+MIDDLEWARE += ["apps.scim.middleware.SCIMBearerAuthMiddleware"]
+SCIM_SERVICE_PROVIDER = {
+    "NETLOC": "testserver",
+    "SCHEME": "http",
+    "USER_ADAPTER": "apps.scim.adapters.SCIMUserAdapter",
+    "GROUP_MODEL": "apps.collaboration.models.Organization",
+    "GROUP_ADAPTER": "apps.scim.adapters.SCIMOrganizationAdapter",
+    "WWW_AUTHENTICATE_HEADER": 'Bearer realm="scim"',
+    "AUTHENTICATION_SCHEMES": [
+        {
+            "type": "oauthbearertoken",
+            "name": "OAuth Bearer Token",
+            "description": "Token estático SCIM",
+            "specUri": "https://www.rfc-editor.org/rfc/rfc6750",
+        }
+    ],
+}
 

@@ -10,11 +10,11 @@ import {
   MenuItem,
   Chip,
   Alert,
-  CircularProgress,
 } from "@mui/material";
 import { ArrowRight, Link2, AlertTriangle } from "lucide-react";
 import PageHeader from "../components/ui/PageHeader";
-import { EmptyState } from "../components/ui/states";
+import { EmptyState, ErrorState } from "../components/ui/states";
+import { TaskListSkeleton } from "../components/ui/skeletons";
 import { tasksApi, type TaskDependencies } from "../api/resources";
 import { STATE_LABELS, type Task, type TaskState } from "../types";
 
@@ -45,7 +45,37 @@ export default function DependenciesPage() {
     [tasksData],
   );
 
-  const { data: rootDeps, isLoading } = useQuery({
+  // Preselecciona la primera tarea que tenga relaciones (la primera si
+  // ninguna tiene) — evita la pantalla "Selecciona una tarea" obligando
+  // a un clic extra para ver algo.
+  useEffect(() => {
+    if (taskId !== "" || tasks.length === 0) return;
+    let cancelled = false;
+    (async () => {
+      // Recorre en orden de id ascendente: el demo suele tener las
+      // relaciones en las tareas más antiguas.
+      const ordered = [...tasks].sort((a, b) => a.id - b.id);
+      for (const task of ordered.slice(0, 50)) {
+        try {
+          const d = await tasksApi.dependencies(task.id);
+          if (cancelled || taskId !== "") return;
+          if (d.blocked_by.length > 0 || d.blocks.length > 0) {
+            setTaskId(task.id);
+            return;
+          }
+        } catch {
+          continue;
+        }
+      }
+      const first = tasks[0];
+      if (!cancelled && first?.id != null) setTaskId(first.id);
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [tasks, taskId]);
+
+  const { data: rootDeps, isLoading, isError, refetch } = useQuery({
     queryKey: ["task-dependencies", taskId],
     queryFn: () => tasksApi.dependencies(Number(taskId)),
     enabled: taskId !== "",
@@ -101,7 +131,9 @@ export default function DependenciesPage() {
       <Stack direction="row" spacing={1} alignItems="center">
         <Chip
           size="small"
-          label={n.relation}
+          label={t(`p.plan.dependencies.rel.${n.relation}`, {
+            defaultValue: n.relation,
+          })}
           color={color === "default" ? "default" : color}
           variant="outlined"
           sx={{ minWidth: 90 }}
@@ -157,11 +189,12 @@ export default function DependenciesPage() {
           icon={<Link2 size={40} />}
         />
       ) : isLoading ? (
-        <Box display="flex" justifyContent="center" py={6}>
-          <CircularProgress />
-        </Box>
-      ) : !rootDeps ? (
-        <Alert severity="error">{t("p.plan.dependencies.loadError")}</Alert>
+        <TaskListSkeleton rows={4} />
+      ) : isError || !rootDeps ? (
+        <ErrorState
+          title={t("p.plan.dependencies.loadError")}
+          onRetry={() => void refetch()}
+        />
       ) : (
         <>
           {rootDeps.is_blocked && (

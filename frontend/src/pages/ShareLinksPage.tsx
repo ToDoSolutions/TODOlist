@@ -1,5 +1,6 @@
-import { useMemo, useState } from "react";
+﻿import { useMemo, useState } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
+import { TaskListSkeleton } from "../components/ui/skeletons";
 import {
   Box,
   Typography,
@@ -20,14 +21,12 @@ import {
   TableContainer,
   TableHead,
   TableRow,
-  CircularProgress,
-  Alert,
   InputAdornment,
 } from "@mui/material";
 import { Plus, Trash2, Copy, Link2 } from "lucide-react";
 import { useTranslation } from "react-i18next";
 import PageHeader from "../components/ui/PageHeader";
-import { EmptyState } from "../components/ui/states";
+import { EmptyState, ErrorState } from "../components/ui/states";
 import { projectsApi } from "../api/resources";
 import { shareLinksApi, type ShareLinkItem } from "../api/featPublic";
 import { notify } from "../notify";
@@ -52,6 +51,7 @@ export default function ShareLinksPage() {
     data: linksData,
     isLoading,
     isError,
+    refetch,
   } = useQuery({
     queryKey: ["share-links"],
     queryFn: shareLinksApi.list,
@@ -104,7 +104,10 @@ export default function ShareLinksPage() {
       <PageHeader
         title={t("p.public.links.title")}
         description={t("p.public.links.description")}
-        breadcrumbs={[{ label: t("p.public.links.title") }]}
+        breadcrumbs={[
+          { label: t("nav.projects") },
+          { label: t("p.public.links.title") },
+        ]}
         actions={
           <Button
             variant="contained"
@@ -116,8 +119,13 @@ export default function ShareLinksPage() {
         }
       />
 
-      {isLoading && <CircularProgress />}
-      {isError && <Alert severity="error">{t("p.public.links.loadError")}</Alert>}
+      {isLoading && <TaskListSkeleton />}
+      {isError && (
+        <ErrorState
+          title={t("p.public.links.loadError")}
+          onRetry={() => void refetch()}
+        />
+      )}
       {!isLoading && !isError && links.length === 0 && (
         <EmptyState
           title={t("p.public.links.emptyTitle")}
@@ -183,7 +191,11 @@ export default function ShareLinksPage() {
                         aria-label={t("p.public.links.revoke")}
                         disabled={!link.is_active}
                         onClick={async () => {
-                          if (await confirm(t("p.public.links.confirmRevoke", { name })))
+                          if (
+          await confirm(t("p.public.links.confirmRevoke", { name }), {
+            confirmLabel: t("p.public.links.revoke"),
+          })
+        )
                             revokeMut.mutate(link.id);
                         }}
                       >

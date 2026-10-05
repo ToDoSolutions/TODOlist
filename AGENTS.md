@@ -3,12 +3,13 @@
 ## Comandos
 
 ### Backend
+
 ```bash
 cd backend
 .venv\Scripts\activate
 python manage.py runserver          # Desarrollo
 python manage.py test               # Tests Django
-python -m pytest tests/ -q          # Tests pytest (2220 tests: 1936 + 284 contract)
+python -m pytest tests/ -q          # Tests pytest (2826 tests; -n 8 para paralelo)
 mutmut run                           # Mutation testing con mutmut 3.x
 python manage.py generate_recurring # Generar tareas recurrentes manualmente
 python manage.py makemigrations     # Crear migraciones
@@ -16,13 +17,14 @@ python manage.py migrate            # Aplicar migraciones
 ```
 
 ### Frontend
+
 ```bash
 cd frontend
 npm install
 npm run dev                         # Desarrollo (Vite)
 npm run build                       # Build producción
 npx tsc --noEmit                    # Type check
-npx vitest run                      # Tests (138 tests)
+npx vitest run                      # Tests (145 tests)
 npx playwright test                 # E2E (requiere backend en :8000 y vite)
 ```
 
@@ -160,7 +162,7 @@ Algunos modelos no exponen CRUD completo intencionalmente. Esta tabla documenta 
 - **SSO enterprise (OIDC)**: `allauth.socialaccount.providers.openid_connect` condicionado por `OIDC_ISSUER` (+`OIDC_PROVIDER_ID`/`OIDC_DISPLAY_NAME`/`OIDC_CLIENT_*`); `GET /api/sso/providers/` público lista providers habilitados con `login_url`; `SOCIALACCOUNT_LOGIN_ON_GET` + `LOGIN_REDIRECT_URL=/api/auth/social/jwt/?next=/app` hacen el post-login emitir cookies JWT y volver a la app (`social_jwt_callback` acepta `next` validado con `url_has_allowed_host_and_scheme`; sin `next` responde JSON como antes)
 - **Videollamadas integradas**: `Meeting.video_room` + `POST /meetings/{id}/video/` (idempotente, genera slug `todolist-m{pk}-{token}`) y `close_video/`; `JITSI_BASE_URL` (default meet.jit.si, self-hostable); UI en MeetingsPage: Unirse/Copiar/Embeber (iframe allow camera+mic)/Finalizar
 - **Marketplace de integraciones**: sección Catálogo en `/app/integrations` — grid de cards (GitHub, chat, webhooks, iCal, email-to-task, push, SSO, API keys, importadores) con estado Conectado/Disponible/No configurado y enlace de configuración
-- **Apps nativas**: scaffold Capacitor (`frontend/capacitor.config.ts`, deps @capacitor/*, scripts `cap:sync/android/ios`); guía completa de requisitos en `docs/native-apps.md` (VITE_API_URL absoluta, CORS/cookies cross-site para orígenes capacitor://localhost y https://localhost)
+- **Apps nativas**: scaffold Capacitor (`frontend/capacitor.config.ts`, deps @capacitor/*, scripts `cap:sync/android/ios`); guía completa de requisitos en `docs/NATIVE_APPS.md` (VITE_API_URL absoluta, CORS/cookies cross-site para orígenes capacitor://localhost y <https://localhost>)
 - **Importadores**: Trello JSON y Todoist CSV en Importar/Exportar (parseo cliente + importación secuencial con progreso)
 - **Aprobaciones de tarea**: `TaskApproval` (requester/approver/status/note/decision_note); `POST /tasks/{id}/request_approval|approve|reject/` — decide solo el approver del último pendiente (403), notify `approval_request`/`approval_decision` (tipos no listados en `Notification.Type`, patrón ya usado por `reminder`); TaskSerializer expone `approvals`, `pending_approval_for_me`, `logged_seconds` (annotate `logged_seconds_ann` con **Subquery correlacionada**, no `Sum` sobre el join — `for_user` hace fan-out); UI en TaskDialog + acciones inline en NotificationsPage
 - **Formulario intake público (página)**: `GET /api/intake-forms/public/{token}/` devuelve `{name, description, schema, enabled}` (AllowAny, throttle 20/h); frontend standalone `/intake/:token` (`PublicIntakePage`, sin auth, fetch plano igual que `/share/:token`); `IntakeFormsPage.publicUrl` copia el enlace frontend, no el endpoint de submit
@@ -212,3 +214,19 @@ Algunos modelos no exponen CRUD completo intencionalmente. Esta tabla documenta 
 ## Notas de seguridad de dependencias
 
 - `pip-audit` reporta vulns residuales solo en tooling de tests: `pytest 8.4.2` (schemathesis exige `<9`), `starlette 0.52.1` (schemathesis exige `<1`), `setuptools` (versiones >=78 rompen distutils_hack en py3.11). Ninguna afecta al runtime (Django).
+
+## Auditoría integral 2026-10 — decisiones aplicadas
+
+- **Webhooks entrantes GitHub**: scoping por `installation`+`repo` extraídos del payload (no solo firma) — un evento de otro tenant/repo no puede aplicar cambios. Dedup por delivery id + DLQ con retry (`/api/webhooks/retry-dead-letter/`).
+- **GitHub OAuth fail-closed**: vinculación por email SOLO si aparece en `get_verified_emails` (`/user/emails`); sin verificar, la cuenta nueva usa alias `<login>@github.local` y la instalación no apunta al usuario existente (anti-takeover). `github_oauth_state` single-use atómico vía `cache.delete` (TOCTOU evitado; fallback a session).
+- **Write auth en canales auxiliares**: AI suggestion `apply`, `plan_day` e intake `submit` autenticado usan `for_user(..., write=True)` — lectura nunca muta.
+- **E2EE rotación de clave pública**: transacción atómica que conserva la clave anterior — los shares cifrados con la vieja siguen descifrables.
+- **Throttle de cuenta**: desactivación/borrado tienen scope propio (`account_lifecycle`) además del de auth.
+- **GraphQL UserType restringido**: sin él graphene-django autogenera un tipo con TODOS los campos del modelo — exponía `password`, `ical_token`, `inbound_email_token`, `scim_*` por `task { owner { ... } }`. Solo expone `id/username/email/first_name/last_name`; `EpicType` idem. Listas (`allTasks`/`allProjects`/`allSprints`/`allTags`) con arg `limit` y cap server-side (default 200, máx 500) — antes volcaban la tabla.
+- **Frontend API helpers**: `unwrapList` en `resources.ts` normaliza `T[] | {results}` — los consumers no desenvuelven a mano (`data ?? []`).
+- **Deep links de notificación**: `action_url` canónico `/app/tasks/{id}` (los productores emitían `?task=N`, que no era ruta); `TasksPage` acepta el formato legacy de notificaciones ya persistidas. NotificationBell navega con router + `aria-label` + error handling; CommandPalette limpia su `setTimeout`.
+- **docker-compose**: frontend usa `Dockerfile.dev` (node+Vite; el Dockerfile raíz es nginx prod sin npm), db/redis solo `127.0.0.1`, `seed_dev` opt-in `SEED_DEV=1`, `FRONTEND_URL` cae a `DJANGO_FRONTEND_URL`, celery/beat comparten env del backend, fallo de migración = startup failure.
+- **Gobernanza**: `SECURITY.md` (divulgación responsable + scope), `CONTRIBUTING.md` (comandos reales de verificación), `CHANGELOG.md` (Keep a Changelog sobre main), `.github/dependabot.yml` (pip+npm+actions semanal), plantillas issue/PR en `.github/`.
+- **CI**: job `dependency-audit` — pip-audit reporta (vulns residuales conocidas solo en tooling de test), `npm audit --audit-level=high` bloquea, gitleaks detecta secretos.
+- **Docs operación**: `docs/operations/slo.md` (SLI/SLO medibles vía `/api/monitoring/metrics/` + health endpoints), `incident-response.md` (severidades + cheat-sheet), `backup-restore.md` (RPO 24h/RTO 4h, restauración probada en instancia limpia).
+- **Tests**: 2826 backend (~47 min con `-n 8 --max-worker-restart 6`; en Windows los workers xdist se caen a veces — `node down` es crash de infraestructura, no fallo de test). Frontend: 145 vitest + `tsc -b --noEmit`.

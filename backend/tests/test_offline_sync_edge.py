@@ -142,12 +142,89 @@ class TestFieldFiltering:
         results = apply_sync_operations(user, [
             _op(payload={
                 "title": "t", "completed_at": "2020-01-01",
-                "assignee": 1, "project": 1, "id": 99999,
+                "assignee": 1, "id": 99999,
             })
         ])
         assert results[0]["status"] == "applied"
         t = Task.objects.get(title="t")
         assert t.id != 99999
+
+    def test_project_sin_acceso_rechazado(self, user, device):
+        """`project` ya no es un campo ignorado: exige write-access."""
+        other, _ = User.objects.get_or_create(
+            username="os_o9b", defaults={"email": "os_o9b@x.com"}
+        )
+        p = Project.objects.create(owner=other, name="Ajeno")
+        results = apply_sync_operations(user, [
+            _op(payload={"title": "t", "project": p.id})
+        ])
+        assert results[0]["status"] == "rejected"
+        assert not Task.objects.filter(title="t").exists()
+
+    def test_project_propio_aplicado(self, user, device):
+        p = Project.objects.create(owner=user, name="P")
+        results = apply_sync_operations(user, [
+            _op(payload={"title": "t", "project": p.id})
+        ])
+        assert results[0]["status"] == "applied"
+        assert Task.objects.get(title="t").project_id == p.id
+
+    def test_extra_projects_validados(self, user, device):
+        """Los hogares extra deben ser editables y no canónicos."""
+        p1 = Project.objects.create(owner=user, name="P1")
+        p2 = Project.objects.create(owner=user, name="P2")
+        results = apply_sync_operations(user, [
+            _op(payload={
+                "title": "t", "project": p1.id,
+                "extra_projects": [p2.id],
+            })
+        ])
+        assert results[0]["status"] == "applied"
+        t = Task.objects.get(title="t")
+        assert list(t.extra_projects.values_list("id", flat=True)) == [p2.id]
+        # el canónico como extra → rechazo
+        results = apply_sync_operations(user, [
+            _op(entity_id="e2", payload={
+                "title": "t2", "project": p1.id,
+                "extra_projects": [p1.id],
+            })
+        ])
+        assert results[0]["status"] == "rejected"
+
+    def test_update_con_write_access_via_extra_home(self, user, device):
+        """Un editor de un hogar extra puede sincronizar cambios."""
+        other, _ = User.objects.get_or_create(
+            username="os_o9c", defaults={"email": "os_o9c@x.com"}
+        )
+        SyncDevice.objects.create(
+            user=other, device_id="dev-o9c", is_active=True
+        )
+        p = Project.objects.create(owner=user, name="P")
+        from apps.collaboration.models import ProjectMember
+        ProjectMember.objects.create(project=p, user=other, role="editor")
+        t = Task.objects.create(owner=user, title="t")
+        t.extra_projects.add(p)
+        t.refresh_from_db()
+        results = apply_sync_operations(other, [
+            _op("update", payload={"id": t.id, "title": "editada"},
+                device_id="dev-o9c", base_version=t.version)
+        ])
+        assert results[0]["status"] == "applied"
+        t.refresh_from_db()
+        assert t.title == "editada"
+
+    def test_update_extra_projects_sync(self, user, device):
+        p = Project.objects.create(owner=user, name="P")
+        t = Task.objects.create(owner=user, title="t")
+        t.refresh_from_db()
+        results = apply_sync_operations(user, [
+            _op("update", payload={
+                "id": t.id, "extra_projects": [p.id],
+            }, base_version=t.version)
+        ])
+        assert results[0]["status"] == "applied"
+        t.refresh_from_db()
+        assert list(t.extra_projects.values_list("id", flat=True)) == [p.id]
 
     def test_campos_permitidos_aplicados(self, user, device):
         results = apply_sync_operations(user, [
@@ -358,3 +435,17 @@ class TestGetChangesSince:
         assert d["priority"] == 2
         assert "version" in d
         assert "updated_at" in d
+
+    def test_incluye_project_y_extra(self, user):
+        """Los clientes offline ven la clasificación multi-home."""
+        from django.utils import timezone
+        p1 = Project.objects.create(owner=user, name="P1")
+        p2 = Project.objects.create(owner=user, name="P2")
+        t = Task.objects.create(owner=user, title="t", project=p1)
+        t.extra_projects.add(p2)
+        r = get_changes_since(
+            user, timezone.now() - __import__("datetime").timedelta(hours=1)
+        )
+        d = next(x for x in r["tasks"] if x["id"] == t.id)
+        assert d["project"] == p1.id
+        assert d["extra_projects"] == [p2.id]

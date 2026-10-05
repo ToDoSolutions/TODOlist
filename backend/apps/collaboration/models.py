@@ -303,6 +303,17 @@ class Organization(models.Model):
     )
     created_at = models.DateTimeField(auto_now_add=True)
 
+    # SCIM 2.0: la organización es el recurso Group (provisión de
+    # membresías desde el IdP). scim_id estable = pk en string.
+    scim_id = models.CharField(max_length=254, null=True, blank=True, unique=True)
+    scim_external_id = models.CharField(max_length=254, null=True, blank=True, db_index=True)
+    scim_display_name = models.CharField(max_length=254, null=True, blank=True, db_index=True)
+    # SSO por dominio (enterprise): si sso_required está activo, un login
+    # por contraseña para un email @sso_domain se rechaza con 403 — solo
+    # vale SSO (OIDC/SAML). El claim del dominio lo hace el admin de la org.
+    sso_domain = models.CharField(max_length=253, null=True, blank=True, db_index=True)
+    sso_required = models.BooleanField(default=False)
+
     def save(self, *args, **kwargs):
         if not self.slug:
             import secrets
@@ -310,7 +321,19 @@ class Organization(models.Model):
             from django.utils.text import slugify
             base = slugify(self.name)[:100] or "org"
             self.slug = f"{base}-{secrets.token_hex(4)}"
+        if self.sso_domain:
+            self.sso_domain = self.sso_domain.strip().lower().lstrip("@")
         super().save(*args, **kwargs)
+        # SCIM: ids/display estables para lookup del IdP.
+        updates = {}
+        if not self.scim_id:
+            updates["scim_id"] = str(self.pk)
+        if not self.scim_display_name:
+            updates["scim_display_name"] = self.name
+        if updates:
+            type(self).objects.filter(pk=self.pk).update(**updates)
+            for k, v in updates.items():
+                setattr(self, k, v)
 
     class Meta:
         ordering = ["-created_at"]

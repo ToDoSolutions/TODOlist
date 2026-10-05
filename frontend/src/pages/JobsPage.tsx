@@ -3,6 +3,7 @@ import { useQuery } from "@tanstack/react-query";
 import { useTranslation } from "react-i18next";
 import {
   Box,
+  Button,
   Typography,
   Paper,
   Chip,
@@ -14,11 +15,12 @@ import {
   ToggleButtonGroup,
   ToggleButton,
   Alert,
-  CircularProgress,
   Tooltip,
 } from "@mui/material";
 import { Zap, RefreshCw, Webhook, ListChecks } from "lucide-react";
 import PageHeader from "../components/ui/PageHeader";
+import { EmptyState } from "../components/ui/states";
+import { TableSkeleton } from "../components/ui/skeletons";
 import { formatDateTime } from "../lib/dates";
 import { automationsApi, syncOperationsApi, outgoingWebhooksApi } from "../api/resources";
 
@@ -36,6 +38,33 @@ const KIND_META = {
   sync: { icon: <RefreshCw size={14} />, label: "p.admin.jobs.kind.sync" },
   webhook: { icon: <Webhook size={14} />, label: "p.admin.jobs.kind.webhook" },
 };
+
+import { PRIORITY_LABELS, STATE_LABELS, type TaskPriority, type TaskState } from "../types";
+import type { TFunction } from "i18next";
+
+/** Humaniza el action_result de una automatización: {"priority":0} →
+ * "prioridad: P0 Crítica" en vez del JSON crudo. También traduce
+ * valores de estado ("moved_to_in_progress" → "moved_to_in_progress"
+ * pasa por STATE_LABELS si es un estado conocido). */
+function humanizeActionResult(
+  result: Record<string, unknown>,
+  t: TFunction,
+): string {
+  return Object.entries(result)
+    .map(([k, v]) => {
+      let val = String(v);
+      if (k === "priority" && v != null) {
+        val = PRIORITY_LABELS[Number(v) as TaskPriority] ?? val;
+      } else if (typeof v === "string" && v in STATE_LABELS) {
+        val = STATE_LABELS[v as TaskState];
+      } else if (typeof v === "string" && /^[a-z_]+$/.test(v)) {
+        val = t(`p.admin.jobs.value.${v}`, v.replace(/_/g, " "));
+      }
+      const key = t(`p.admin.jobs.field.${k}`, k);
+      return `${key}: ${val}`;
+    })
+    .join(", ");
+}
 
 const STATUS_COLOR: Record<string, "success" | "error" | "warning" | "default" | "info"> =
   {
@@ -55,13 +84,14 @@ const STATUS_COLOR: Record<string, "success" | "error" | "warning" | "default" |
 /** Centro de trabajos: vista unificada de los procesos en segundo plano
  *  (automatizaciones, sync offline, entregas de webhooks). */
 export default function JobsPage() {
-  const { t } = useTranslation();
+  const { t, i18n } = useTranslation();
   const [kindFilter, setKindFilter] = useState<string>("all");
 
   const {
     data: autoLogs,
     isLoading: l1,
     isError: e1,
+    refetch: refetchLogs,
   } = useQuery({
     queryKey: ["automation-logs-all"],
     queryFn: automationsApi.allLogs,
@@ -70,6 +100,7 @@ export default function JobsPage() {
     data: syncOps,
     isLoading: l2,
     isError: e2,
+    refetch: refetchSync,
   } = useQuery({
     queryKey: ["sync-operations"],
     queryFn: syncOperationsApi.list,
@@ -78,10 +109,17 @@ export default function JobsPage() {
     data: deliveries,
     isLoading: l3,
     isError: e3,
+    refetch: refetchDeliveries,
   } = useQuery({
     queryKey: ["webhook-deliveries"],
     queryFn: outgoingWebhooksApi.deliveries,
   });
+
+  const refetchAll = () => {
+    void refetchLogs();
+    void refetchSync();
+    void refetchDeliveries();
+  };
 
   const rows = useMemo<JobRow[]>(() => {
     const out: JobRow[] = [];
@@ -94,7 +132,16 @@ export default function JobsPage() {
         kind: "automation",
         label: t("p.admin.jobs.ruleLabel", { id: l.rule ?? "?" }),
         status: String(l.status ?? ""),
-        detail: String(l.error_message || l.action_result || ""),
+        detail:
+          String(l.error_message ?? "") ||
+          (l.action_result != null
+            ? typeof l.action_result === "string"
+              ? l.action_result
+              : humanizeActionResult(
+                  l.action_result as Record<string, unknown>,
+                  t,
+                )
+            : ""),
         date: String(l.created_at ?? ""),
       });
     }
@@ -102,7 +149,18 @@ export default function JobsPage() {
       out.push({
         key: `s-${op.id}`,
         kind: "sync",
-        label: `${op.op_type ?? ""} ${op.entity_type ?? ""}`.trim(),
+        label: [
+          op.op_type
+            ? t(`p.admin.jobs.op.${op.op_type}`, { defaultValue: op.op_type })
+            : "",
+          op.entity_type
+            ? t(`p.admin.jobs.entity.${op.entity_type}`, {
+                defaultValue: op.entity_type,
+              })
+            : "",
+        ]
+          .filter(Boolean)
+          .join(" "),
         status: op.status ?? "",
         detail: op.conflict_status === "conflict" ? t("p.admin.jobs.conflict") : "",
         date: op.created_at ?? "",
@@ -159,21 +217,27 @@ export default function JobsPage() {
       </ToggleButtonGroup>
 
       {(e1 || e2 || e3) && (
-        <Alert severity="warning" sx={{ mb: 2 }}>
+        <Alert
+          severity="warning"
+          sx={{ mb: 2 }}
+          action={
+            <Button size="small" onClick={refetchAll} startIcon={<RefreshCw size={14} />}>
+              {t("common.retry")}
+            </Button>
+          }
+        >
           {t("p.admin.jobs.loadError")}
         </Alert>
       )}
 
       {loading ? (
-        <Box display="flex" justifyContent="center" py={6}>
-          <CircularProgress />
-        </Box>
+        <TableSkeleton rows={8} cols={5} />
       ) : filtered.length === 0 ? (
-        <Paper variant="outlined" sx={{ p: 4, textAlign: "center" }}>
-          <Typography color="text.secondary">{t("p.admin.jobs.empty")}</Typography>
+        <Paper variant="outlined">
+          <EmptyState title={t("p.admin.jobs.empty")} />
         </Paper>
       ) : (
-        <Paper variant="outlined">
+        <Paper variant="outlined" sx={{ overflowX: "auto" }}>
           <Table size="small">
             <TableHead>
               <TableRow>
@@ -201,7 +265,13 @@ export default function JobsPage() {
                   <TableCell>
                     <Chip
                       size="small"
-                      label={r.status || "—"}
+                      label={
+                        r.status
+                          ? i18n.exists(`p.admin.jobs.status.${r.status}`)
+                            ? t(`p.admin.jobs.status.${r.status}`)
+                            : t("p.admin.jobs.status.unknown")
+                          : "—"
+                      }
                       color={STATUS_COLOR[r.status] ?? "default"}
                       variant={STATUS_COLOR[r.status] ? "filled" : "outlined"}
                     />

@@ -99,6 +99,7 @@ import { useCommandPalette } from "../hooks/useCommandPalette";
 import { useHotkeys } from "react-hotkeys-hook";
 import { useUiStore } from "../store/uiStore";
 import { useRealtime } from "../hooks/useRealtime";
+import { offlineQueue } from "../lib/offlineQueue";
 import { useTheme } from "@mui/material/styles";
 import { keyframes } from "@emotion/react";
 import { useThemeMode } from "../theme-context";
@@ -360,18 +361,32 @@ export default function AppLayout() {
     { label: t("p.shell.invitePeople"), action: () => navigate("/app/teams") },
   ];
 
-  // Estado de conexión para la barra de estado
+  // Estado de conexión para la barra de estado + cola de escrituras
+  // offline: al recuperar la red se reenvían las ops encoladas.
   const [online, setOnline] = useState(navigator.onLine);
+  const [pendingOps, setPendingOps] = useState(offlineQueue.size());
   useEffect(() => {
-    const on = () => setOnline(true);
+    const unsub = offlineQueue.subscribe(() =>
+      setPendingOps(offlineQueue.size()),
+    );
+    const on = () => {
+      setOnline(true);
+      void offlineQueue.flush().then(({ sent }) => {
+        if (sent > 0) {
+          notify.success(t("p.integr.opsReplayed", { count: sent }));
+          qc.invalidateQueries();
+        }
+      });
+    };
     const off = () => setOnline(false);
     window.addEventListener("online", on);
     window.addEventListener("offline", off);
     return () => {
+      unsub();
       window.removeEventListener("online", on);
       window.removeEventListener("offline", off);
     };
-  }, []);
+  }, [qc, t]);
 
   // --- Navegación reorganizada por espacios (IA):
   // Área personal · Proyectos · Equipo · Administración. Las funciones de
@@ -1289,6 +1304,7 @@ export default function AppLayout() {
           open={mobileNav}
           onClose={() => setMobileNav(false)}
           ModalProps={{ keepMounted: true }}
+          aria-label={t("p.shell.mainNav")}
           sx={{ "& .MuiDrawer-paper": { width: drawerWidth, boxSizing: "border-box" } }}
         >
           <Toolbar />
@@ -1297,6 +1313,8 @@ export default function AppLayout() {
       ) : (
         <Drawer
           variant="permanent"
+          component="nav"
+          aria-label={t("p.shell.mainNav")}
           sx={{
             width: drawerWidth,
             flexShrink: 0,
@@ -1409,6 +1427,19 @@ export default function AppLayout() {
             >
               {online ? t("p.shell.online") : t("p.shell.offlineNotice")}
             </Typography>
+            {pendingOps > 0 && (
+              <Tooltip
+                title={t("p.integr.opsPending", { count: pendingOps })}
+              >
+                <Chip
+                  size="small"
+                  variant="outlined"
+                  color={online ? "primary" : "warning"}
+                  label={pendingOps}
+                  sx={{ height: 18, fontSize: 10 }}
+                />
+              </Tooltip>
+            )}
           </Stack>
           <Box flex={1} />
           <Typography variant="caption" color="text.disabled">
@@ -1531,6 +1562,7 @@ function NavItem({
   return (
     <ListItemButton
       selected={current === path}
+      aria-current={current === path ? "page" : undefined}
       onClick={() => {
         navigate(path);
         onNavigate?.();

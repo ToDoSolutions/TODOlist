@@ -72,18 +72,27 @@ class InvitationSerializer(serializers.ModelSerializer):
     invited_by_email = serializers.CharField(
         source="invited_by.email", read_only=True
     )
+    target_name = serializers.SerializerMethodField()
 
     class Meta:
         model = Invitation
         fields = [
-            "id", "target_type", "target_id", "email", "role",
+            "id", "target_type", "target_id", "target_name", "email", "role",
             "invited_by", "invited_by_email", "status", "created_at",
             "expires_at", "responded_at",
         ]
         read_only_fields = [
-            "id", "invited_by", "invited_by_email", "status",
+            "id", "invited_by", "invited_by_email", "target_name", "status",
             "created_at", "expires_at", "responded_at",
         ]
+
+    def get_target_name(self, obj):
+        if obj.target_type == Invitation.TargetType.TEAM:
+            return Team.objects.filter(pk=obj.target_id).values_list(
+                "name", flat=True).first() or ""
+        from apps.tasks.models import Project
+        return Project.objects.filter(pk=obj.target_id).values_list(
+            "name", flat=True).first() or ""
 
 
 class MentionSerializer(serializers.ModelSerializer):
@@ -150,9 +159,26 @@ class OrganizationSerializer(serializers.ModelSerializer):
         model = Organization
         fields = [
             "id", "name", "slug", "description", "owner",
-            "member_count", "created_at",
+            "member_count", "sso_domain", "sso_required", "created_at",
         ]
         read_only_fields = ["id", "slug", "owner", "created_at"]
+
+    def validate_sso_domain(self, value):
+        """Normaliza el dominio reclamado ('@acme.com' → 'acme.com') y
+        garantiza unicidad entre orgs — dos orgs no pueden reclamar el
+        mismo dominio SSO."""
+        value = (value or "").strip().lower().lstrip("@")
+        if not value:
+            return None
+        from .models import Organization
+        qs = Organization.objects.filter(sso_domain__iexact=value)
+        if self.instance:
+            qs = qs.exclude(pk=self.instance.pk)
+        if qs.exists():
+            raise serializers.ValidationError(
+                "Ese dominio ya está reclamado por otra organización."
+            )
+        return value
 
 
 class OrganizationMembershipSerializer(serializers.ModelSerializer):

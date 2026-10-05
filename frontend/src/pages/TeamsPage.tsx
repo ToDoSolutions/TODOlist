@@ -1,5 +1,5 @@
 import { formatDate } from "../lib/dates";
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import {
   Box,
   Typography,
@@ -18,7 +18,6 @@ import {
   InputLabel,
   Select,
   MenuItem,
-  CircularProgress,
   Alert,
   IconButton,
   Tooltip,
@@ -49,6 +48,9 @@ import type {
 } from "../types";
 import { notify } from "../notify";
 import { useConfirm } from "../components/ConfirmDialog";
+import PageHeader from "../components/ui/PageHeader";
+import { ErrorState } from "../components/ui/states";
+import { TaskListSkeleton } from "../components/ui/skeletons";
 import { useTranslation, Trans } from "react-i18next";
 
 export default function TeamsPage() {
@@ -152,6 +154,14 @@ export default function TeamsPage() {
     queryKey: ["projects"],
     queryFn: projectsApi.list,
   });
+
+  // Preselecciona el primer proyecto — evita la pestaña de miembros vacía.
+  useEffect(() => {
+    if (selectedProjectId === "" && Array.isArray(projects) && projects.length > 0) {
+      const first = projects[0] as { id?: number };
+      if (first?.id != null) setSelectedProjectId(first.id);
+    }
+  }, [projects, selectedProjectId]);
 
   const projectMembersQuery = useQuery({
     queryKey: ["project-members", selectedProjectId],
@@ -262,15 +272,15 @@ export default function TeamsPage() {
 
   return (
     <Box maxWidth={900} mx="auto">
-      <Stack direction="row" alignItems="center" spacing={1} mb={1}>
-        <Users size={24} style={{ color: theme.palette.primary.main }} />
-        <Typography variant="h5" fontWeight={700}>
-          {t("p.shell.teams.title")}
-        </Typography>
-      </Stack>
-      <Typography variant="body2" color="text.secondary" mb={2}>
-        <Trans i18nKey="p.shell.teams.description" />
-      </Typography>
+      <PageHeader
+        title={
+          <>
+            <Users size={22} style={{ color: theme.palette.primary.main, verticalAlign: "text-bottom", marginRight: 8 }} />
+            {t("p.shell.teams.title")}
+          </>
+        }
+        description={<Trans i18nKey="p.shell.teams.description" />}
+      />
 
       <Tabs value={tab} onChange={(_, v) => setTab(v)} sx={{ mb: 2 }}>
         <Tab icon={<Users size={16} />} iconPosition="start" label={t("nav.teams")} />
@@ -308,9 +318,7 @@ export default function TeamsPage() {
           </Stack>
 
           {teamsLoading ? (
-            <Box display="flex" justifyContent="center" py={5}>
-              <CircularProgress />
-            </Box>
+            <TaskListSkeleton rows={4} />
           ) : teamList.length === 0 ? (
             <Paper variant="outlined" sx={{ p: 6, textAlign: "center" }}>
               <Users size={48} color="text.disabled" />
@@ -394,9 +402,7 @@ export default function TeamsPage() {
                   <Collapse in={expandedTeam === team.id}>
                     <Box sx={{ p: 2, pt: 0 }}>
                       {membersQuery.isLoading ? (
-                        <Box display="flex" justifyContent="center" py={2}>
-                          <CircularProgress size={24} />
-                        </Box>
+                        <TaskListSkeleton rows={2} />
                       ) : memberList.length === 0 ? (
                         <Typography color="text.secondary" variant="body2" sx={{ py: 1 }}>
                           {t("p.shell.teams.noMembers")}
@@ -444,6 +450,7 @@ export default function TeamsPage() {
                                                   m.user_email ||
                                                   t("p.shell.teams.thisMember"),
                                               }),
+                                              { confirmLabel: t("p.shell.teams.removeMember") },
                                             )
                                           )
                                             removeMemberMut.mutate({
@@ -475,9 +482,7 @@ export default function TeamsPage() {
       {tab === 1 && (
         <Box>
           {mentionsLoading ? (
-            <Box display="flex" justifyContent="center" py={5}>
-              <CircularProgress />
-            </Box>
+            <TaskListSkeleton rows={3} />
           ) : mentionList.length === 0 ? (
             <Paper variant="outlined" sx={{ p: 6, textAlign: "center" }}>
               <AtSign size={48} color="text.disabled" />
@@ -593,11 +598,12 @@ export default function TeamsPage() {
               </Typography>
             </Paper>
           ) : projectMembersQuery.isLoading ? (
-            <Box display="flex" justifyContent="center" py={5}>
-              <CircularProgress />
-            </Box>
+            <TaskListSkeleton rows={4} />
           ) : projectMembersQuery.isError ? (
-            <Alert severity="error">{t("p.shell.teams.loadMembersError")}</Alert>
+            <ErrorState
+              title={t("p.shell.teams.loadMembersError")}
+              onRetry={() => void projectMembersQuery.refetch()}
+            />
           ) : projectMemberList.length === 0 ? (
             <Paper variant="outlined" sx={{ p: 6, textAlign: "center" }}>
               <Users size={48} color="text.disabled" />
@@ -659,6 +665,7 @@ export default function TeamsPage() {
                         <IconButton
                           size="small"
                           color="error"
+                          aria-label={t("p.shell.teams.removeMember")}
                           onClick={async () => {
                             if (
                               await confirm(
@@ -668,6 +675,7 @@ export default function TeamsPage() {
                                     m.user_email ||
                                     t("p.shell.teams.thisMember"),
                                 }),
+                                { confirmLabel: t("p.shell.teams.removeMember") },
                               )
                             ) {
                               removeProjectMemberMut.mutate(m.id);
@@ -690,9 +698,7 @@ export default function TeamsPage() {
       {tab === 3 && (
         <Box>
           {invitationsLoading ? (
-            <Box display="flex" justifyContent="center" py={5}>
-              <CircularProgress />
-            </Box>
+            <TaskListSkeleton rows={3} />
           ) : invitationList.length === 0 ? (
             <Paper variant="outlined" sx={{ p: 6, textAlign: "center" }}>
               <Mail size={48} color="text.disabled" />

@@ -8,6 +8,7 @@ from __future__ import annotations
 from datetime import timedelta
 from typing import Any
 
+from django.db.models import Q
 from django.utils import timezone
 
 from apps.tasks.models import Task, TaskRelation
@@ -181,7 +182,9 @@ def detect_blockers(user) -> list[dict[str, Any]]:
 
     # Excluir tareas con EncryptedTask vinculada (E2E): la IA opera sobre
     # texto claro y no debe procesar contenido cifrado.
-    tasks = Task.objects.filter(owner=user).exclude(
+    tasks = Task.objects.for_user(user).filter(
+        Q(owner=user) | Q(assignee=user) | Q(assignees=user)
+    ).distinct().exclude(
         state__in=[Task.State.COMPLETED, Task.State.CANCELLED, Task.State.ARCHIVED]
     ).exclude(encrypted_data__isnull=False)
 
@@ -197,24 +200,31 @@ def detect_blockers(user) -> list[dict[str, Any]]:
             "severity": "medium",
         })
 
-    # 2. Dependencias no resueltas (depends_on / blocked)
+    # 2. Dependencias no resueltas:
+    #    - DEPENDS_ON: source depende de target (bloqueada = source)
+    #    - BLOCKS: source bloquea a target (bloqueada = target)
     relations = TaskRelation.objects.filter(
-        source__in=tasks,
-        relation_type__in=[
-            TaskRelation.RelationType.DEPENDS_ON,
-            TaskRelation.RelationType.BLOCKS,
-        ],
-    ).select_related("target")
+        Q(source__in=tasks, relation_type=TaskRelation.RelationType.DEPENDS_ON)
+        | Q(target__in=tasks, relation_type=TaskRelation.RelationType.BLOCKS),
+    ).select_related("source", "target")
     for rel in relations:
-        target = rel.target
-        if target.state not in (Task.State.COMPLETED, Task.State.CANCELLED):
+        if rel.relation_type == TaskRelation.RelationType.BLOCKS:
+            blocked, blocker = rel.target, rel.source
+            verb = "Bloqueada por"
+        else:
+            blocked, blocker = rel.source, rel.target
+            verb = "Depende de"
+        if blocker.state not in (Task.State.COMPLETED, Task.State.CANCELLED):
             blockers.append({
-                "task_id": rel.source_id,
-                "task_title": rel.source.title,
+                "task_id": blocked.id,
+                "task_title": blocked.title,
                 "blocker_type": "dependency_unresolved",
-                "detail": f"Depende de '{target.title}' (estado: {target.state})",
-                "blocking_task_id": target.id,
-                "blocking_task_title": target.title,
+                "detail": (
+                    f"{verb} '{blocker.title}' "
+                    f"(estado: {blocker.get_state_display()})"
+                ),
+                "blocking_task_id": blocker.id,
+                "blocking_task_title": blocker.title,
                 "severity": "high",
             })
 
@@ -238,11 +248,53 @@ def detect_blockers(user) -> list[dict[str, Any]]:
     return blockers
 
 
+def _improve_description_llm(task: Task) -> dict[str, Any] | None:
+    """Versión LLM (BYOK): devuelve sugerencias + descripción reescrita.
+    None si el LLM no está configurado o falla."""
+    from .llm import chat, llm_configured
+
+    if not llm_configured():
+        return None
+    prompt = (
+        f"Título: {task.title}\n"
+        f"Estado: {task.state} | Prioridad: P{task.priority}\n"
+        f"Descripción actual:\n{task.description or '(vacía)'}\n\n"
+        "Devuelve SOLO JSON válido: "
+        '{"improved_description": str, "suggestions": [str]}'
+    )
+    text = chat(
+        "Eres un asistente que mejora descripciones de tareas. "
+        "Reescribe la descripción con contexto, objetivo y criterios de "
+        "aceptación claros. Responde en el idioma de la tarea.",
+        prompt,
+    )
+    if not text:
+        return None
+    import json
+    try:
+        # tolerante: extraer el bloque JSON aunque el modelo lo envuelva
+        start, end = text.index("{"), text.rindex("}") + 1
+        data = json.loads(text[start:end])
+        return {
+            "improved_description": str(data.get("improved_description", "")),
+            "suggestions": [str(s) for s in data.get("suggestions", [])],
+            "confidence": 0.85,
+            "source": "llm",
+        }
+    except (ValueError, TypeError):
+        return None
+
+
 def improve_description(task: Task) -> dict[str, Any]:
     """Sugiere mejoras a la descripción de una tarea.
 
     Devuelve ``{"suggestions": [str, ...], "confidence": float}``.
+    Con LLM configurado (BYOK) incluye además ``improved_description``.
     """
+    llm = _improve_description_llm(task)
+    if llm is not None:
+        return llm
+
     suggestions: list[str] = []
     desc = (task.description or "").strip()
 
@@ -279,4 +331,8 @@ def improve_description(task: Task) -> dict[str, Any]:
         suggestions.append("La descripción parece completa. Revisa formato y claridad.")
 
     confidence = 0.6 if suggestions else 0.9
-    return {"suggestions": suggestions, "confidence": round(confidence, 2)}
+    return {
+        "suggestions": suggestions,
+        "confidence": round(confidence, 2),
+        "source": "heuristic",
+    }

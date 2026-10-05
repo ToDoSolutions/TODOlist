@@ -1,0 +1,15 @@
+# Dev image para docker-compose: Vite dev server con hot-reload.
+# El compose monta ./frontend:/app y mantiene node_modules en un
+# volumen anónimo para no pisar las dependencias instaladas aquí.
+FROM node:20-alpine
+
+WORKDIR /app
+
+COPY package.json package-lock.json* /app/
+RUN npm ci
+
+COPY . /app/
+
+EXPOSE 5173
+
+CMD ["npm", "run", "dev", "--", "--host", "0.0.0.0"]

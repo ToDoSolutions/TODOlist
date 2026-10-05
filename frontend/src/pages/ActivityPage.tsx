@@ -13,8 +13,8 @@ import {
 } from "@mui/material";
 import { Search, Activity as ActivityIcon } from "lucide-react";
 import { useTranslation } from "react-i18next";
-import { format, parseISO, isToday, isYesterday } from "date-fns";
-import { es } from "date-fns/locale";
+import { parseISO, isToday, isYesterday } from "date-fns";
+import { formatDayName, formatTime } from "../lib/dates";
 import PageHeader from "../components/ui/PageHeader";
 import { EmptyState } from "../components/ui/states";
 import { activityFeedApi, type ActivityItem } from "../api/resources";
@@ -59,7 +59,7 @@ export default function ActivityPage() {
         ? t("p.collab.activity.today")
         : isYesterday(d)
           ? t("p.collab.activity.yesterday")
-          : format(d, "EEEE d MMMM", { locale: es });
+          : formatDayName(d);
       (g[label] ||= []).push(a);
     }
     return g;
@@ -70,13 +70,17 @@ export default function ActivityPage() {
       <PageHeader
         title={t("p.collab.activity.title")}
         description={t("p.collab.activity.desc")}
-        breadcrumbs={[{ label: t("p.collab.activity.title") }]}
+        breadcrumbs={[
+          { label: t("nav.teams") },
+          { label: t("p.collab.activity.title") },
+        ]}
       />
 
       <Stack direction="row" spacing={1.5} mb={3} flexWrap="wrap" useFlexGap>
         <TextField
           size="small"
           placeholder={t("p.collab.activity.searchPlaceholder")}
+          inputProps={{ "aria-label": t("p.collab.activity.searchPlaceholder") }}
           value={search}
           onChange={(e) => setSearch(e.target.value)}
           sx={{ minWidth: 240 }}
@@ -151,7 +155,7 @@ export default function ActivityPage() {
                     <Chip
                       size="small"
                       variant="outlined"
-                      label={format(parseISO(a.created_at), "HH:mm")}
+                      label={formatTime(a.created_at)}
                       sx={{ height: 20, fontSize: 10 }}
                     />
                   </Paper>

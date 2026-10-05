@@ -2,29 +2,32 @@ import { useQuery } from "@tanstack/react-query";
 import { useTranslation } from "react-i18next";
 import { advancedMetricsApi } from "../api/resources";
 import type { CapacityEntry } from "../types";
+import PageHeader from "../components/ui/PageHeader";
+import { PageSkeleton } from "../components/ui/skeletons";
+import { ErrorState } from "../components/ui/states";
 import {
   Box,
   Typography,
-  CircularProgress,
   Paper,
   Chip,
   LinearProgress,
   Alert,
+  Tooltip,
 } from "@mui/material";
 
 export default function CapacityPage() {
   const { t } = useTranslation();
-  const { data, isLoading, isError } = useQuery({
+  const { data, isLoading, isError, refetch } = useQuery({
     queryKey: ["capacity"],
     queryFn: advancedMetricsApi.capacity,
   });
 
-  if (isLoading) return <CircularProgress />;
+  if (isLoading) return <PageSkeleton kind="list" />;
 
   if (isError) {
     return (
       <Box maxWidth={1000} mx="auto" mt={4}>
-        <Alert severity="error">{t("p.plan.capacity.loadError")}</Alert>
+        <ErrorState title={t("p.plan.capacity.loadError")} onRetry={() => void refetch()} />
       </Box>
     );
   }
@@ -34,9 +37,7 @@ export default function CapacityPage() {
 
   return (
     <Box>
-      <Typography variant="h5" gutterBottom>
-        {t("p.plan.capacity.title")}
-      </Typography>
+      <PageHeader title={t("p.plan.capacity.title")} />
       <Paper sx={{ p: 2 }}>
         {capacity.length === 0 && (
           <Typography color="textSecondary">{t("p.plan.capacity.noData")}</Typography>
@@ -78,11 +79,19 @@ export default function CapacityPage() {
                 />
               )}
             </Box>
-            <LinearProgress
-              variant="determinate"
-              value={(c.total_points / maxPoints) * 100}
-              sx={{ height: 8, borderRadius: 4 }}
-            />
+            <Tooltip
+              title={t("p.plan.capacity.barTip", {
+                pct: Math.round((c.total_points / maxPoints) * 100),
+              })}
+            >
+              <Box>
+                <LinearProgress
+                  variant="determinate"
+                  value={(c.total_points / maxPoints) * 100}
+                  sx={{ height: 8, borderRadius: 4 }}
+                />
+              </Box>
+            </Tooltip>
           </Box>
         ))}
       </Paper>

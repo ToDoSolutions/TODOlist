@@ -207,3 +207,36 @@ class TestImproveDescription:
         TaskRelation.objects.create(source=task, target=dep, relation_type="depends_on")
         result = improve_description(task)
         assert any("dependencias" in s for s in result["suggestions"])
+
+
+@pytest.mark.django_db
+class TestImproveDescriptionLLM:
+    """BYOK: con LLM configurado usa el modelo; si falla, cae a heurísticas."""
+
+    def test_llm_path(self, monkeypatch, settings, user):
+        settings.AI_LLM_BASE_URL = "http://llm.test/v1"
+        settings.AI_LLM_MODEL = "test-model"
+        task = Task.objects.create(owner=user, title="T", description="Short")
+        monkeypatch.setattr(
+            "apps.ai_assistant.llm.chat",
+            lambda *a, **k: '{"improved_description": "Mejor", "suggestions": ["S1"]}',
+        )
+        result = improve_description(task)
+        assert result["source"] == "llm"
+        assert result["improved_description"] == "Mejor"
+        assert result["suggestions"] == ["S1"]
+
+    def test_llm_failure_falls_back(self, monkeypatch, settings, user):
+        settings.AI_LLM_BASE_URL = "http://llm.test/v1"
+        settings.AI_LLM_MODEL = "test-model"
+        task = Task.objects.create(owner=user, title="T", description="Short")
+        monkeypatch.setattr("apps.ai_assistant.llm.chat", lambda *a, **k: None)
+        result = improve_description(task)
+        assert result["source"] == "heuristic"
+        assert any("muy corta" in s for s in result["suggestions"])
+
+    def test_llm_not_configured(self, settings, user):
+        settings.AI_LLM_BASE_URL = ""
+        task = Task.objects.create(owner=user, title="T", description="Short")
+        result = improve_description(task)
+        assert result["source"] == "heuristic"

@@ -326,7 +326,7 @@ class GitHubPullRequestViewSet(
     def get_queryset(self):
         return GitHubPullRequest.objects.filter(
             repo__installation__user=self.request.user
-        ).select_related("repo")
+        ).select_related("repo").prefetch_related("tasks")
 
     @action(detail=True, methods=["post"])
     def link_task(self, request, pk=None):
@@ -362,7 +362,7 @@ class GitHubCommitViewSet(
     def get_queryset(self):
         return GitHubCommit.objects.filter(
             repo__installation__user=self.request.user
-        ).select_related("repo")
+        ).select_related("repo").prefetch_related("tasks")
 
 
 class GitHubReleaseViewSet(
@@ -377,7 +377,7 @@ class GitHubReleaseViewSet(
     def get_queryset(self):
         return GitHubRelease.objects.filter(
             repo__installation__user=self.request.user
-        ).select_related("repo")
+        ).select_related("repo").prefetch_related("tasks", "pull_requests")
 
     @action(detail=True, methods=["get"])
     def progress(self, request, pk=None):
@@ -427,6 +427,7 @@ def oauth_providers(request):
 
 @api_view(["GET"])
 @permission_classes([AllowAny])
+@throttle_classes([AnonRateThrottle])
 def github_oauth_start(request):
     """Inicia el flujo OAuth de GitHub: redirige a la URL de autorización."""
     frontend_url = settings.DJANGO_FRONTEND_URL
@@ -443,13 +444,13 @@ def github_oauth_start(request):
 
 
 def _consume_oauth_state(state):
-    """Valida y consume un state OAuth del cache (single-use)."""
+    """Valida y consume un state OAuth del cache (single-use).
+
+    ``cache.delete`` es atómico en Redis/locmem: devuelve True solo si la
+    clave existía y se borró — sin el TOCTOU de get+delete separados.
+    """
     from django.core.cache import cache
-    key = f"gh_oauth_state:{state}"
-    if cache.get(key):
-        cache.delete(key)
-        return True
-    return False
+    return bool(cache.delete(f"gh_oauth_state:{state}"))
 
 
 @api_view(["POST"])
@@ -520,14 +521,17 @@ def github_oauth_callback(request):
 
     # Vincular por email SOLO si el email está verificado en GitHub
     # (el email público del perfil puede ser no verificado → account takeover)
+    email_verified = False
     if not user and gh_email:
         verified_emails = oauth.get_verified_emails(access_token)
-        if gh_email.lower() in verified_emails:
+        email_verified = gh_email.lower() in verified_emails
+        if email_verified:
             user = User.objects.filter(email__iexact=gh_email).first()
 
-    # Crear usuario si no existe
+    # Crear usuario si no existe — nunca con un email no verificado
+    # (ocuparía el email real de un tercero en una cuenta fantasma)
     if not user:
-        if not gh_email:
+        if not gh_email or not email_verified:
             gh_email = f"{gh_username}@github.local"
         user = User.objects.create_user(
             email=gh_email,
@@ -773,12 +777,20 @@ def inbound_webhook(request, token):
             {"error": "tags debe ser una lista"},
             status=status.HTTP_400_BAD_REQUEST,
         )
+    if len(tags) > 20:
+        return Response(
+            {"error": "tags admite como máximo 20 elementos"},
+            status=status.HTTP_400_BAD_REQUEST,
+        )
 
     from apps.projects.models import Project
     project = webhook.project or Project.objects.filter(
         owner=webhook.user
     ).first()
 
+    from apps.tasks.services import next_position_seq
+
+    pos, seq = next_position_seq(webhook.user, project)
     task = Task.objects.create(
         owner=webhook.user,
         project=project,
@@ -786,6 +798,8 @@ def inbound_webhook(request, token):
         description=request.data.get("description") or "",
         priority=priority,
         due_date=due_date,
+        position=pos,
+        seq=seq,
     )
     for tag_name in tags:
         from apps.tags.models import Tag

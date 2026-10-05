@@ -20,7 +20,7 @@ class ChatIntegrationViewSet(viewsets.ModelViewSet):
 
     @action(detail=True, methods=["post"])
     def test(self, request, pk=None):
-        """Envía un mensaje de test a la integración."""
+        """Envía un mensaje de test a la integración (queda en el log)."""
         integration = self.get_object()
         if integration.provider == "slack":
             success, code, err = send_slack_message(
@@ -30,6 +30,14 @@ class ChatIntegrationViewSet(viewsets.ModelViewSet):
             success, code, err = send_discord_message(
                 integration.webhook_url, "Test from TODOlist! ✅"
             )
+        ChatMessageLog.objects.create(
+            integration=integration,
+            event="test",
+            payload={},
+            status_code=code,
+            success=success,
+            error=err or "",
+        )
         return Response({"success": success, "status_code": code, "error": err})
 
     @action(detail=True, methods=["get"])

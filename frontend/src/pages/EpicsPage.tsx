@@ -16,7 +16,6 @@ import {
   LinearProgress,
   IconButton,
   Tooltip,
-  Alert,
   Select,
   MenuItem,
   InputLabel,
@@ -31,6 +30,8 @@ import { Layers, Plus, Trash2, Pencil, Eye, Folder } from "lucide-react";
 import { useTranslation } from "react-i18next";
 import { epicsApi, projectsApi, type Epic } from "../api/resources";
 import { DateField } from "../components/DateField";
+import { EmptyState } from "../components/ui/states";
+import PageHeader from "../components/ui/PageHeader";
 import type { Task, Project } from "../types";
 import { notify } from "../notify";
 import { useConfirm } from "../components/ConfirmDialog";
@@ -168,29 +169,47 @@ export default function EpicsPage() {
 
   return (
     <Box maxWidth={900} mx="auto">
-      <Stack direction="row" justifyContent="space-between" alignItems="center" mb={3}>
-        <Typography variant="h5" fontWeight={700}>
-          {t("p.plan.epics.title")}
-        </Typography>
-        <Button
-          variant="contained"
-          startIcon={<Plus size={18} />}
-          onClick={() => {
-            setForm({
-              ...emptyForm,
-              project_id: ctxProject ? String(ctxProject.id) : "",
-            });
-            setDialogOpen(true);
-          }}
-        >
-          {t("p.plan.epics.new")}
-        </Button>
-      </Stack>
+      <PageHeader
+        title={t("p.plan.epics.title")}
+        actions={
+          <Button
+            variant="contained"
+            startIcon={<Plus size={18} />}
+            onClick={() => {
+              setForm({
+                ...emptyForm,
+                project_id: ctxProject ? String(ctxProject.id) : "",
+              });
+              setDialogOpen(true);
+            }}
+          >
+            {t("p.plan.epics.new")}
+          </Button>
+        }
+      />
 
       {isLoading && <LinearProgress />}
 
       {epics.length === 0 && !isLoading && (
-        <Alert severity="info">{t("p.plan.epics.empty")}</Alert>
+        <EmptyState
+          title={t("p.plan.epics.emptyTitle")}
+          description={t("p.plan.epics.empty")}
+          action={
+            <Button
+              variant="contained"
+              startIcon={<Plus size={18} />}
+              onClick={() => {
+                setForm({
+                  ...emptyForm,
+                  project_id: ctxProject ? String(ctxProject.id) : "",
+                });
+                setDialogOpen(true);
+              }}
+            >
+              {t("p.plan.epics.new")}
+            </Button>
+          }
+        />
       )}
 
       <Stack spacing={2}>

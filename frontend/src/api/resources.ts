@@ -22,6 +22,12 @@ import type {
 export type ApiPayload = Record<string, unknown>;
 export type ApiParams = Record<string, string | number | boolean | undefined>;
 
+/** Desenvuelve respuestas de listado: array plano o sobre paginado
+ * DRF ({count,next,results} / cursor {next,results}). */
+function unwrapList<T>(data: T[] | { results?: T[] }): T[] {
+  return Array.isArray(data) ? data : data.results ?? [];
+}
+
 import { z } from "zod";
 import { api } from "./client";
 import type {
@@ -34,6 +40,20 @@ import type {
   Paginated,
   Activity,
   TaskRelation,
+  AppNotification,
+  NotificationPreference,
+  AutomationRule,
+  AutomationLog,
+  Team,
+  TeamMember,
+  ProjectMember,
+  MentionItem,
+  AuditLogEntry,
+  ApiKeyItem,
+  TimeEntry,
+  CustomFieldValue,
+  ChatIntegration,
+  AiSuggestion,
 } from "../types";
 
 export const projectsApi = {
@@ -119,6 +139,8 @@ export const tasksApi = {
   updateSubtask: (id: number, data: Partial<Subtask>) =>
     api.patch<Subtask>(`/subtasks/${id}/`, data).then((r) => r.data),
   removeSubtask: (id: number) => api.delete(`/subtasks/${id}/`),
+  reorderSubtasks: (taskId: number, order: number[]) =>
+    api.post(`/tasks/${taskId}/subtasks_reorder/`, { order }).then((r) => r.data),
   // Actividad, relaciones, sprint
   getActivities: (id: number) =>
     api.get<Activity[]>(`/tasks/${id}/activities/`).then((r) => r.data),
@@ -149,6 +171,16 @@ export const tasksApi = {
   metricsPRs: () => api.get("/tasks/metrics_prs/").then((r) => r.data),
   // Mi trabajo + dependencias + búsqueda global
   myWork: () => api.get<MyWork>("/tasks/my-work/").then((r) => r.data),
+  planDay: (data?: {
+    date?: string;
+    start_hour?: number;
+    default_minutes?: number;
+    gap_minutes?: number;
+    limit?: number;
+  }) =>
+    api
+      .post<DayPlan>("/tasks/plan-day/", data ?? {})
+      .then((r) => r.data),
   dependencies: (id: number) =>
     api.get<TaskDependencies>(`/tasks/${id}/dependencies/`).then((r) => r.data),
   globalSearch: (q: string) =>
@@ -175,6 +207,19 @@ export interface MyWork {
   in_progress: MyWorkTask[];
   blocked: MyWorkTask[];
   upcoming: MyWorkTask[];
+}
+
+export interface DayPlanSlot {
+  id: number;
+  title: string;
+  start: string;
+  end: string;
+  minutes: number;
+}
+
+export interface DayPlan {
+  date: string;
+  slots: DayPlanSlot[];
 }
 
 export interface TaskDependencies {
@@ -222,26 +267,43 @@ export type GlobalSearchResults = z.infer<typeof globalSearchSchema> & {
 };
 
 export const notificationsApi = {
-  list: () => api.get("/notifications/").then((r) => r.data),
-  unreadCount: () => api.get("/notifications/unread_count/").then((r) => r.data),
+  list: () =>
+    api
+      .get<AppNotification[] | Paginated<AppNotification>>("/notifications/")
+      .then((r) => unwrapList(r.data)),
+  unreadCount: () =>
+    api.get<{ count: number }>("/notifications/unread_count/").then((r) => r.data),
   markAllRead: () => api.post("/notifications/mark_all_read/").then((r) => r.data),
   markRead: (id: number) =>
     api.post(`/notifications/${id}/mark_read/`).then((r) => r.data),
   markUnread: (id: number) =>
     api.post(`/notifications/${id}/mark_unread/`).then((r) => r.data),
-  preferences: () => api.get("/notification-preferences/").then((r) => r.data),
+  preferences: () =>
+    api
+      .get<NotificationPreference[] | Paginated<NotificationPreference>>(
+        "/notification-preferences/",
+      )
+      .then((r) => unwrapList(r.data)),
   updatePreference: (id: number, data: ApiPayload) =>
     api.patch(`/notification-preferences/${id}/`, data).then((r) => r.data),
 };
 
 export const automationsApi = {
-  list: () => api.get("/automation-rules/").then((r) => r.data),
+  list: () =>
+    api
+      .get<AutomationRule[] | Paginated<AutomationRule>>("/automation-rules/")
+      .then((r) => unwrapList(r.data)),
   create: (data: ApiPayload) => api.post("/automation-rules/", data).then((r) => r.data),
   update: (id: number, data: ApiPayload) =>
     api.patch(`/automation-rules/${id}/`, data).then((r) => r.data),
   delete: (id: number) => api.delete(`/automation-rules/${id}/`).then((r) => r.data),
   test: (id: number) => api.post(`/automation-rules/${id}/test/`).then((r) => r.data),
-  logs: (id: number) => api.get(`/automation-rules/${id}/logs/`).then((r) => r.data),
+  logs: (id: number) =>
+    api
+      .get<AutomationLog[] | Paginated<AutomationLog>>(
+        `/automation-rules/${id}/logs/`,
+      )
+      .then((r) => unwrapList(r.data)),
   allLogs: () =>
     api.get("/automation-logs/").then((r) => {
       const d = r.data;
@@ -327,12 +389,16 @@ export const dashboardsApi = {
 export const collaborationApi = {
   // Teams
   teams: {
-    list: () => api.get("/teams/").then((r) => r.data),
+    list: () =>
+      api.get<Team[] | Paginated<Team>>("/teams/").then((r) => unwrapList(r.data)),
     create: (data: ApiPayload) => api.post("/teams/", data).then((r) => r.data),
     update: (id: number, data: ApiPayload) =>
       api.patch(`/teams/${id}/`, data).then((r) => r.data),
     remove: (id: number) => api.delete(`/teams/${id}/`),
-    members: (teamId: number) => api.get(`/teams/${teamId}/members/`).then((r) => r.data),
+    members: (teamId: number) =>
+      api
+        .get<TeamMember[] | Paginated<TeamMember>>(`/teams/${teamId}/members/`)
+        .then((r) => unwrapList(r.data)),
     addMember: (teamId: number, userId: number, role: string) =>
       api
         .post(`/teams/${teamId}/members/`, { user_id: userId, role })
@@ -343,7 +409,11 @@ export const collaborationApi = {
   // Project members
   projectMembers: {
     list: (projectId: number) =>
-      api.get(`/project-members/?project=${projectId}`).then((r) => r.data),
+      api
+        .get<ProjectMember[] | Paginated<ProjectMember>>(
+          `/project-members/?project=${projectId}`,
+        )
+        .then((r) => unwrapList(r.data)),
     invite: (projectId: number, data: { email: string; role: string }) =>
       api
         .post("/project-members/invite/", {
@@ -358,16 +428,36 @@ export const collaborationApi = {
   },
   // Mentions
   mentions: {
-    list: () => api.get("/mentions/").then((r) => r.data),
+    list: () =>
+      api
+        .get<MentionItem[] | Paginated<MentionItem>>("/mentions/")
+        .then((r) => unwrapList(r.data)),
   },
   // Audit logs
   auditLogs: {
-    list: (params?: ApiParams) => api.get("/audit-logs/", { params }).then((r) => r.data),
+    list: (params?: ApiParams) =>
+      api
+        .get<AuditLogEntry[] | Paginated<AuditLogEntry>>("/audit-logs/", {
+          params,
+        })
+        .then((r) => unwrapList(r.data)),
+    // Export SIEM: blob descargable (csv|jsonl) — fmt, no format
+    // (DRF reserva "format" para content negotiation).
+    export: (fmt: "csv" | "jsonl") =>
+      api
+        .get("/audit-logs/export/", {
+          params: { fmt },
+          responseType: "blob",
+        })
+        .then((r) => r.data as Blob),
   },
 };
 
 export const apiKeysApi = {
-  list: () => api.get("/api-keys/").then((r) => r.data),
+  list: () =>
+    api
+      .get<ApiKeyItem[] | Paginated<ApiKeyItem>>("/api-keys/")
+      .then((r) => unwrapList(r.data)),
   create: (data: { name: string; scopes?: string[] }) =>
     api.post("/api-keys/", data).then((r) => r.data),
   revoke: (id: number) => api.post(`/api-keys/${id}/revoke/`).then((r) => r.data),
@@ -384,7 +474,10 @@ export const twofactorApi = {
 };
 
 export const timeEntriesApi = {
-  list: () => api.get("/time-entries/").then((r) => r.data),
+  list: () =>
+    api
+      .get<TimeEntry[] | Paginated<TimeEntry>>("/time-entries/")
+      .then((r) => unwrapList(r.data)),
   create: (data: ApiPayload) => api.post("/time-entries/", data).then((r) => r.data),
   update: (id: number, data: ApiPayload) =>
     api.patch(`/time-entries/${id}/`, data).then((r) => r.data),
@@ -415,11 +508,17 @@ export const customFieldsApi = {
   update: (id: number, data: ApiPayload) =>
     api.patch(`/custom-fields/${id}/`, data).then((r) => r.data),
   remove: (id: number) => api.delete(`/custom-fields/${id}/`),
-  values: () => api.get("/custom-field-values/").then((r) => r.data),
+  values: (params?: { task?: number; field?: number }) =>
+    api
+      .get<CustomFieldValue[] | Paginated<CustomFieldValue>>(
+        "/custom-field-values/",
+        { params },
+      )
+      .then((r) => unwrapList(r.data)),
   setValue: (data: ApiPayload) =>
     api.post("/custom-field-values/", data).then((r) => r.data),
-  updateValue: (id: number, value: string) =>
-    api.patch(`/custom-field-values/${id}/`, { value_text: value }).then((r) => r.data),
+  updateValue: (id: number, value: unknown) =>
+    api.patch(`/custom-field-values/${id}/`, { value }).then((r) => r.data),
   removeValue: (id: number) => api.delete(`/custom-field-values/${id}/`),
 };
 
@@ -439,6 +538,8 @@ export const outgoingWebhooksApi = {
       const d = r.data;
       return Array.isArray(d) ? d : (d as { results?: unknown[] }).results || [];
     }),
+  retryDeadLetter: () =>
+    api.post<{ message: string }>("/webhooks/retry-dead-letter/").then((r) => r.data),
 };
 
 export const bulkOpsApi = {
@@ -459,7 +560,8 @@ export const searchApi = {
 
 // OKRs
 export const okrsApi = {
-  listObjectives: () => api.get("/objectives/").then((r) => r.data),
+  listObjectives: () =>
+    api.get("/objectives/").then((r) => unwrapList<Record<string, unknown>>(r.data)),
   createObjective: (data: ApiPayload) =>
     api.post("/objectives/", data).then((r) => r.data),
   updateObjective: (id: number, data: ApiPayload) =>
@@ -499,14 +601,20 @@ export const aiApi = {
   detectBlockers: () => api.get("/ai/detect-blockers/").then((r) => r.data),
   improveDescription: (taskId: number) =>
     api.post("/ai/improve-description/", { task_id: taskId }).then((r) => r.data),
-  suggestions: () => api.get("/ai/suggestions/").then((r) => r.data),
+  suggestions: () =>
+    api
+      .get<AiSuggestion[] | Paginated<AiSuggestion>>("/ai/suggestions/")
+      .then((r) => unwrapList(r.data)),
   suggestionAction: (id: number, action: "accept" | "reject" | "apply") =>
     api.post(`/ai/suggestions/${id}/action/`, { action }).then((r) => r.data),
 };
 
 // Chat integrations
 export const chatIntegrationsApi = {
-  list: () => api.get("/chat-integrations/").then((r) => r.data),
+  list: () =>
+    api
+      .get<ChatIntegration[] | Paginated<ChatIntegration>>("/chat-integrations/")
+      .then((r) => unwrapList(r.data)),
   create: (data: ApiPayload) => api.post("/chat-integrations/", data).then((r) => r.data),
   update: (id: number, data: ApiPayload) =>
     api.patch(`/chat-integrations/${id}/`, data).then((r) => r.data),
@@ -576,7 +684,8 @@ export const encryptionApi = {
       .then((r) => r.data),
   createEncryptedTask: (data: ApiPayload) =>
     api.post("/encrypted-tasks/", data).then((r) => r.data),
-  listEncryptedTasks: () => api.get("/encrypted-tasks/").then((r) => r.data),
+  listEncryptedTasks: () =>
+    api.get("/encrypted-tasks/").then((r) => unwrapList(r.data)),
   shareTask: (
     taskId: number,
     userEmail: string,
@@ -624,7 +733,25 @@ export const sprintsApi = {
       const d = r.data;
       return Array.isArray(d) ? d : d.results;
     }),
+  /** Métricas del sprint: conteos por estado, puntos, scope creep. */
+  getMetrics: (id: number) =>
+    api.get<SprintMetrics>(`/sprints/${id}/metrics/`).then((r) => r.data),
 };
+
+export interface SprintMetrics {
+  sprint_name: string;
+  sprint_state: string;
+  total_tasks: number;
+  done: number;
+  in_progress: number;
+  blocked: number;
+  pending: number;
+  story_points_total: number;
+  story_points_done: number;
+  progress_pct: number;
+  added_after_start: number;
+  scope_creep_pct: number;
+}
 
 // --- Epics ---
 
@@ -667,6 +794,8 @@ export interface SavedSearch {
   name: string;
   filters: string; // JSON serializado: la API lo devuelve como string, se hace JSON.parse al cargar
   is_shared: boolean;
+  /** Sólo del serializer: distinguir mis búsquedas de las compartidas ajenas. */
+  is_owner?: boolean;
   created_at: string;
   updated_at: string;
 }
@@ -751,7 +880,11 @@ export const githubApi = {
 
   // Instalaciones
   listInstallations: () =>
-    api.get<GitHubInstallation[]>("/github/installations/").then((r) => r.data),
+    api
+      .get<GitHubInstallation[] | Paginated<GitHubInstallation>>(
+        "/github/installations/",
+      )
+      .then((r) => unwrapList(r.data)),
   discoverRepos: () =>
     api
       .post<{ total: number; new: number; message: string }>(
@@ -761,7 +894,10 @@ export const githubApi = {
   removeInstallation: (id: number) => api.delete(`/github/installations/${id}/`),
 
   // Repos
-  listRepos: () => api.get<GitHubRepo[]>("/github/repos/").then((r) => r.data),
+  listRepos: () =>
+    api
+      .get<GitHubRepo[] | Paginated<GitHubRepo>>("/github/repos/")
+      .then((r) => unwrapList(r.data)),
   updateRepo: (id: number, data: Partial<GitHubRepo>) =>
     api.patch<GitHubRepo>(`/github/repos/${id}/`, data).then((r) => r.data),
   syncRepo: (id: number) =>
@@ -802,6 +938,12 @@ export const githubApi = {
       const d = r.data;
       return Array.isArray(d) ? d : (d as { results?: GitHubPR[] }).results || [];
     }),
+  linkPrToTask: (prId: number, taskId: number) =>
+    api
+      .post<{ message: string }>(`/github/prs/${prId}/link_task/`, {
+        task_id: taskId,
+      })
+      .then((r) => r.data),
   // Commits
   listCommits: () =>
     api.get<GitHubCommit[]>("/github/commits/").then((r) => {
@@ -939,6 +1081,17 @@ export interface WikiPageItem {
   updated_at: string;
 }
 
+export interface WikiRevision {
+  version: number;
+  title: string;
+  edited_by: number | null;
+  created_at: string;
+}
+
+export interface WikiRevisionDetail extends WikiRevision {
+  content: string;
+}
+
 export const wikiApi = {
   list: () =>
     api
@@ -949,6 +1102,16 @@ export const wikiApi = {
   update: (id: number, data: Partial<WikiPageItem>) =>
     api.patch<WikiPageItem>(`/wiki/${id}/`, data).then((r) => r.data),
   remove: (id: number) => api.delete(`/wiki/${id}/`),
+  revisions: (id: number) =>
+    api.get<WikiRevision[]>(`/wiki/${id}/revisions/`).then((r) => r.data),
+  revisionDetail: (id: number, version: number) =>
+    api
+      .get<WikiRevisionDetail>(`/wiki/${id}/revisions/${version}/`)
+      .then((r) => r.data),
+  restore: (id: number, version: number) =>
+    api
+      .post<WikiPageItem>(`/wiki/${id}/restore/`, { version })
+      .then((r) => r.data),
 };
 
 // --- Organizations (tenant raíz) ---
@@ -959,6 +1122,8 @@ export interface OrganizationItem {
   slug: string;
   description: string;
   member_count: number;
+  sso_domain?: string | null;
+  sso_required?: boolean;
   created_at: string;
 }
 
@@ -969,6 +1134,8 @@ export const organizationsApi = {
       .then((r) => (Array.isArray(r.data) ? r.data : r.data.results)),
   create: (data: { name: string; description?: string }) =>
     api.post<OrganizationItem>("/organizations/", data).then((r) => r.data),
+  update: (id: number, data: Partial<OrganizationItem>) =>
+    api.patch<OrganizationItem>(`/organizations/${id}/`, data).then((r) => r.data),
   addMember: (id: number, email: string, role = "member") =>
     api.post(`/organizations/${id}/add_member/`, { email, role }).then((r) => r.data),
 };
@@ -1052,10 +1219,19 @@ export interface IntakeFormItem {
   description: string;
   project: number;
   enabled: boolean;
-  schema: { fields: IntakeFormField[] };
+  // La API guarda la lista plana de campos; el objeto {fields} es el
+  // shape legacy. Normalizar con intakeFields() antes de usarlo.
+  schema: IntakeFormField[] | { fields: IntakeFormField[] };
   task_defaults?: Record<string, unknown>;
   submissions_count?: number;
   created_at: string;
+}
+
+export function intakeFields(
+  schema: IntakeFormItem["schema"] | undefined,
+): IntakeFormField[] {
+  if (!schema) return [];
+  return Array.isArray(schema) ? schema : (schema.fields ?? []);
 }
 
 export const intakeFormsApi = {

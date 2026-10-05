@@ -105,10 +105,15 @@ export default {
     "p.collab.dashboards.unshared": "Acceso retirado",
     "p.collab.dashboards.unshareError": "No se pudo retirar el acceso",
     "p.collab.dashboards.nothingHere": "Nada por aquí.",
+    "p.collab.dashboards.empty.my_tasks": "No tienes tareas abiertas asignadas.",
+    "p.collab.dashboards.empty.overdue": "Ninguna tarea vencida. ¡Vas al día!",
+    "p.collab.dashboards.empty.upcoming_deadlines":
+      "Sin fechas de entrega próximas.",
     "p.collab.dashboards.blockedBy": "← bloqueada por «{{title}}»",
     "p.collab.dashboards.noBlocks": "Sin bloqueos.",
     "p.collab.dashboards.noWorkload": "Sin datos de carga.",
-    "p.collab.dashboards.velocityTip": "{{sprint}}: {{points}} pts, {{tasks}} tareas",
+    "p.collab.dashboards.velocityTip": "{{sprint}}: {{points}} pts, {{tasks}} tareas · est. {{est}}h / real {{act}}h",
+    "p.collab.dashboards.estVsActual": "Estimado: {{est}}h · Registrado: {{act}}h",
     "p.collab.dashboards.noSprints": "Sin sprints todavía.",
     "p.collab.dashboards.noPrs": "Sin PRs abiertas.",
     "p.collab.dashboards.noActivity": "Sin actividad reciente.",
@@ -136,8 +141,9 @@ export default {
     "p.collab.okrs.subtitle": "Objetivos y resultados clave",
     "p.collab.okrs.newObjective": "Nuevo Objetivo",
     "p.collab.okrs.editObjective": "Editar Objetivo",
+    "p.collab.okrs.emptyTitle": "Sin objetivos",
     "p.collab.okrs.emptyHint":
-      'No hay objetivos creados. Crea tu primer OKR con el botón "Nuevo Objetivo".',
+      "Aún no hay OKRs creados. Define el primer objetivo para empezar a medir resultados.",
     "p.collab.okrs.objCreated": "Objetivo creado",
     "p.collab.okrs.objCreateError": "No se pudo crear el objetivo",
     "p.collab.okrs.objUpdated": "Objetivo actualizado",
@@ -168,6 +174,9 @@ export default {
     "p.collab.okrs.currentValue": "Valor actual",
     "p.collab.okrs.unit": "Unidad",
     "p.collab.okrs.unitPlaceholder": "%, €, usuarios, tickets...",
+    "p.collab.okrs.direction": "Dirección",
+    "p.collab.okrs.direction.increase": "Más es mejor",
+    "p.collab.okrs.direction.decrease": "Menos es mejor",
     "p.collab.okrs.updateProgress": "Actualizar progreso",
     "p.collab.okrs.currentKr": "{{title}} — actual: {{value}} {{unit}}",
     "p.collab.okrs.newValue": "Nuevo valor",
@@ -176,10 +185,10 @@ export default {
     "p.collab.okrs.valueUpdated": "Valor actualizado",
     "p.collab.okrs.valueUpdateError": "No se pudo actualizar el valor",
     // Objective statuses (API values mapped to labels)
-    "p.collab.okrs.status.on_track": "En curso",
-    "p.collab.okrs.status.at_risk": "En riesgo",
-    "p.collab.okrs.status.behind": "Retrasado",
+    "p.collab.okrs.status.planned": "Planificado",
+    "p.collab.okrs.status.in_progress": "En curso",
     "p.collab.okrs.status.achieved": "Conseguido",
+    "p.collab.okrs.status.missed": "No conseguido",
 
     // ActivityPage
     "p.collab.activity.title": "Actividad",
@@ -247,6 +256,14 @@ export default {
     "p.collab.wiki.confirmDelete": '¿Eliminar "{{title}}"?',
     "p.collab.wiki.confirmDeleteChildren":
       '¿Eliminar "{{title}}" y sus {{count}} subpáginas?',
+    "p.collab.wiki.history": "Historial",
+    "p.collab.wiki.historyTitle": 'Historial de "{{title}}"',
+    "p.collab.wiki.historyEmpty": "Sin revisiones todavía.",
+    "p.collab.wiki.revisionPreview": "Contenido de la versión {{version}}",
+    "p.collab.wiki.restore": "Restaurar",
+    "p.collab.wiki.confirmRestore": "¿Restaurar la versión {{version}}?",
+    "p.collab.wiki.restored": "Versión restaurada",
+    "p.collab.wiki.restoreError": "No se pudo restaurar la versión",
 
     // RisksPage
     "p.collab.risks.title": "Riesgos",
@@ -290,6 +307,7 @@ export default {
     "p.collab.risks.sev.high": "Alta",
     "p.collab.risks.sev.medium": "Media",
     "p.collab.risks.sev.low": "Baja",
+    "p.collab.risks.sevTip": "Severidad: {{p}} × {{i}} = {{s}}",
   } as Record<string, string>,
   en: {
     // Task type labels (used by DashboardPage.typeLabel)
@@ -391,10 +409,14 @@ export default {
     "p.collab.dashboards.unshared": "Access revoked",
     "p.collab.dashboards.unshareError": "Could not revoke access",
     "p.collab.dashboards.nothingHere": "Nothing here.",
+    "p.collab.dashboards.empty.my_tasks": "You have no open tasks assigned.",
+    "p.collab.dashboards.empty.overdue": "No overdue tasks. You're on track!",
+    "p.collab.dashboards.empty.upcoming_deadlines": "No upcoming deadlines.",
     "p.collab.dashboards.blockedBy": '← blocked by "{{title}}"',
     "p.collab.dashboards.noBlocks": "No blockers.",
     "p.collab.dashboards.noWorkload": "No workload data.",
-    "p.collab.dashboards.velocityTip": "{{sprint}}: {{points}} pts, {{tasks}} tasks",
+    "p.collab.dashboards.velocityTip": "{{sprint}}: {{points}} pts, {{tasks}} tasks · est. {{est}}h / actual {{act}}h",
+    "p.collab.dashboards.estVsActual": "Estimated: {{est}}h · Logged: {{act}}h",
     "p.collab.dashboards.noSprints": "No sprints yet.",
     "p.collab.dashboards.noPrs": "No open PRs.",
     "p.collab.dashboards.noActivity": "No recent activity.",
@@ -422,8 +444,9 @@ export default {
     "p.collab.okrs.subtitle": "Objectives and key results",
     "p.collab.okrs.newObjective": "New Objective",
     "p.collab.okrs.editObjective": "Edit Objective",
+    "p.collab.okrs.emptyTitle": "No objectives",
     "p.collab.okrs.emptyHint":
-      'No objectives created. Create your first OKR with the "New Objective" button.',
+      "No OKRs yet. Define the first objective to start tracking results.",
     "p.collab.okrs.objCreated": "Objective created",
     "p.collab.okrs.objCreateError": "Could not create the objective",
     "p.collab.okrs.objUpdated": "Objective updated",
@@ -454,6 +477,9 @@ export default {
     "p.collab.okrs.currentValue": "Current value",
     "p.collab.okrs.unit": "Unit",
     "p.collab.okrs.unitPlaceholder": "%, €, users, tickets...",
+    "p.collab.okrs.direction": "Direction",
+    "p.collab.okrs.direction.increase": "Higher is better",
+    "p.collab.okrs.direction.decrease": "Lower is better",
     "p.collab.okrs.updateProgress": "Update progress",
     "p.collab.okrs.currentKr": "{{title}} — current: {{value}} {{unit}}",
     "p.collab.okrs.newValue": "New value",
@@ -462,10 +488,10 @@ export default {
     "p.collab.okrs.valueUpdated": "Value updated",
     "p.collab.okrs.valueUpdateError": "Could not update the value",
     // Objective statuses (API values mapped to labels)
-    "p.collab.okrs.status.on_track": "On track",
-    "p.collab.okrs.status.at_risk": "At risk",
-    "p.collab.okrs.status.behind": "Behind",
+    "p.collab.okrs.status.planned": "Planned",
+    "p.collab.okrs.status.in_progress": "In progress",
     "p.collab.okrs.status.achieved": "Achieved",
+    "p.collab.okrs.status.missed": "Missed",
 
     // ActivityPage
     "p.collab.activity.title": "Activity",
@@ -533,6 +559,14 @@ export default {
     "p.collab.wiki.confirmDelete": 'Delete "{{title}}"?',
     "p.collab.wiki.confirmDeleteChildren":
       'Delete "{{title}}" and its {{count}} subpages?',
+    "p.collab.wiki.history": "History",
+    "p.collab.wiki.historyTitle": '"{{title}}" history',
+    "p.collab.wiki.historyEmpty": "No revisions yet.",
+    "p.collab.wiki.revisionPreview": "Version {{version}} content",
+    "p.collab.wiki.restore": "Restore",
+    "p.collab.wiki.confirmRestore": "Restore version {{version}}?",
+    "p.collab.wiki.restored": "Version restored",
+    "p.collab.wiki.restoreError": "Could not restore the version",
 
     // RisksPage
     "p.collab.risks.title": "Risks",
@@ -574,5 +608,6 @@ export default {
     "p.collab.risks.sev.high": "High",
     "p.collab.risks.sev.medium": "Medium",
     "p.collab.risks.sev.low": "Low",
+    "p.collab.risks.sevTip": "Severity: {{p}} × {{i}} = {{s}}",
   } as Record<string, string>,
 };

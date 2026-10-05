@@ -19,8 +19,7 @@ import {
 } from "@mui/material";
 import { Plus, Trash2, RefreshCw, CalendarPlus, AlertTriangle } from "lucide-react";
 import { useTranslation } from "react-i18next";
-import { format, parseISO } from "date-fns";
-import { es, enUS } from "date-fns/locale";
+import { formatDateTime } from "../lib/dates";
 import PageHeader from "../components/ui/PageHeader";
 import { EmptyState } from "../components/ui/states";
 import { externalCalendarsApi, type ExternalCalendar } from "../api/featExtras";
@@ -33,8 +32,7 @@ import "../i18n";
  * en la vista de calendario de tareas (CalendarView).
  */
 export default function ExternalCalendarsPage() {
-  const { t, i18n } = useTranslation();
-  const dateLocale = i18n.language === "en" ? enUS : es;
+  const { t } = useTranslation();
   const qc = useQueryClient();
   const confirm = useConfirm();
   const [dialog, setDialog] = useState(false);
@@ -95,7 +93,10 @@ export default function ExternalCalendarsPage() {
       <PageHeader
         title={t("p.extras.cal.title")}
         description={t("p.extras.cal.desc")}
-        breadcrumbs={[{ label: t("p.extras.cal.title") }]}
+        breadcrumbs={[
+          { label: t("nav.projects") },
+          { label: t("p.extras.cal.title") },
+        ]}
         actions={
           <Button
             variant="contained"
@@ -152,9 +153,7 @@ export default function ExternalCalendarsPage() {
                   <Typography variant="caption" color="text.secondary">
                     {t("p.extras.cal.lastSynced")}:{" "}
                     {cal.last_synced_at
-                      ? format(parseISO(cal.last_synced_at), "d MMM yyyy HH:mm", {
-                          locale: dateLocale,
-                        })
+                      ? formatDateTime(cal.last_synced_at)
                       : t("p.extras.cal.neverSynced")}
                   </Typography>
                   {cal.last_error && (
@@ -198,7 +197,11 @@ export default function ExternalCalendarsPage() {
                   color="error"
                   aria-label={t("p.extras.cal.deleteAria")}
                   onClick={async () => {
-                    if (await confirm(t("p.extras.cal.confirmDelete")))
+                    if (
+                                await confirm(t("p.extras.cal.confirmDelete"), {
+                                  confirmLabel: t("common.delete"),
+                                })
+                              )
                       deleteMut.mutate(cal.id);
                   }}
                 >

@@ -41,11 +41,18 @@ class ProjectViewSet(viewsets.ModelViewSet):
         # Prefetch de status updates para latest_status_update sin N+1.
         from django.db.models import Count, Prefetch, Q
         return qs.annotate(
-            tasks_count_ann=Count("tasks", distinct=True),
+            # tasks (canónicas) + homed_tasks (multi-homing) — el serializer
+            # rechaza que una tarea esté en ambos, así que la suma es exacta
+            tasks_count_ann=Count("tasks", distinct=True)
+            + Count("homed_tasks", distinct=True),
             sprints_count_ann=Count("sprints", distinct=True),
             epics_count_ann=Count("epics", distinct=True),
             completed_tasks_count_ann=Count(
                 "tasks", filter=Q(tasks__state="completed"), distinct=True
+            ) + Count(
+                "homed_tasks",
+                filter=Q(homed_tasks__state="completed"),
+                distinct=True,
             ),
         ).prefetch_related(
             "favorited_by",
@@ -63,6 +70,40 @@ class ProjectViewSet(viewsets.ModelViewSet):
             derive_issue_prefix(serializer.validated_data.get("name", ""))
         )
         serializer.save(owner=self.request.user, issue_prefix=prefix)
+
+    def perform_destroy(self, instance):
+        """Multi-homing: las tareas canónicas que además están homeadas en
+        otros proyectos no mueren con el proyecto — el primer hogar extra
+        pasa a canónico, soltando las relaciones del proyecto borrado
+        (sprint/epic/section) y el seq/ref. Las tareas solo-homeadas aquí
+        se borran por CASCADE como siempre."""
+        from apps.tasks.models import Task, TaskActivity
+
+        multihomed = (
+            Task.objects.filter(project=instance)
+            .filter(extra_projects__isnull=False)
+            .distinct()
+        )
+        for task in multihomed.iterator():
+            new_home = task.extra_projects.order_by("id").first()
+            task.project = new_home
+            task.sprint = None
+            task.epic = None
+            task.section = None
+            task.seq = 0  # el ref pertenecía al proyecto borrado
+            task.save(
+                update_fields=["project", "sprint", "epic", "section", "seq"]
+            )
+            task.extra_projects.remove(new_home)
+            TaskActivity.objects.create(
+                task=task,
+                actor=self.request.user,
+                action=TaskActivity.ActionType.UPDATED,
+                field="project",
+                old_value=instance.name,
+                new_value=new_home.name if new_home else "",
+            )
+        instance.delete()
 
     def _get_accessible(self, pk):
         """Proyecto por pk dentro del scope de lectura (para acciones
@@ -268,12 +309,17 @@ class ProjectTemplateViewSet(viewsets.ModelViewSet):
 
         from .models import ProjectTemplate
         qs = ProjectTemplate.objects.filter(
-            Q(owner=self.request.user) | Q(is_builtin=True)
+            Q(owner=self.request.user)
+            | Q(is_builtin=True)
+            | Q(is_public=True)
         )
         if self.action in ("update", "partial_update", "destroy"):
-            # Solo el owner edita/borra (una builtin visible no es editable
-            # por cualquiera).
+            # Solo el owner edita/borra (una builtin/pública visible no
+            # es editable por cualquiera).
             qs = qs.filter(owner=self.request.user)
+        # ?community=true → solo el catálogo público, ordenado por uso
+        if self.request.query_params.get("community") == "true":
+            qs = qs.filter(is_public=True).order_by("-use_count")
         return qs
 
     def perform_create(self, serializer):
@@ -288,6 +334,8 @@ class ProjectTemplateViewSet(viewsets.ModelViewSet):
         tags (get_or_create por nombre) adjuntados a las tareas creadas +
         state labels de config.state_labels.
         """
+        from django.db.models import F
+
         from apps.tasks.models import Task
         template = self.get_object()
         name = request.data.get("name")
@@ -302,6 +350,8 @@ class ProjectTemplateViewSet(viewsets.ModelViewSet):
         valid_states = {c[0] for c in Task.State.choices}
         valid_priorities = {c[0] for c in Task.Priority.choices}
         valid_types = {c[0] for c in Task.Type.choices}
+        from apps.tasks.services import next_position_seq
+
         created_tasks = []
         for t in config.get("tasks", []):
             if not isinstance(t, dict):
@@ -309,9 +359,12 @@ class ProjectTemplateViewSet(viewsets.ModelViewSet):
             state = t.get("state", Task.State.PENDING)
             priority = t.get("priority", Task.Priority.P3_MEDIUM)
             task_type = t.get("task_type", Task.Type.TASK)
+            pos, seq = next_position_seq(request.user, project)
             created_tasks.append(Task.objects.create(
                 owner=request.user,
                 project=project,
+                seq=seq,
+                position=pos,
                 title=t.get("title") or "Sin título",
                 description=t.get("description", ""),
                 state=state if state in valid_states else Task.State.PENDING,
@@ -342,6 +395,11 @@ class ProjectTemplateViewSet(viewsets.ModelViewSet):
                         project=project, state=state,
                         defaults={"label": str(label)[:50]},
                     )
+        # Popularidad del catálogo (incremento atómico)
+        from .models import ProjectTemplate
+        ProjectTemplate.objects.filter(id=template.id).update(
+            use_count=F("use_count") + 1
+        )
         return Response({
             "project_id": project.id,
             "tasks_created": len(created_tasks),
@@ -368,7 +426,16 @@ class ProjectTemplateViewSet(viewsets.ModelViewSet):
             raise PermissionDenied(
                 "El proyecto no existe o no tienes acceso."
             )
-        project_tasks = list(project.tasks.prefetch_related("tags"))
+        # Multi-homing: el snapshot incluye las tareas homeadas además
+        # de las canónicas
+        from django.db.models import Q as _Q
+
+        from apps.tasks.models import Task as _Task
+        project_tasks = list(
+            _Task.objects.filter(
+                _Q(project=project) | _Q(extra_projects=project)
+            ).distinct().prefetch_related("tags")
+        )
         tasks = [{
             "title": t.title,
             "description": t.description,
@@ -394,6 +461,8 @@ class ProjectTemplateViewSet(viewsets.ModelViewSet):
             name=name,
             description=request.data.get("description", ""),
             config=config,
+            # public=true publica directamente en el catálogo comunitario
+            is_public=bool(request.data.get("public", False)),
         )
         serializer = self.get_serializer(template)
         return Response(serializer.data, status=201)

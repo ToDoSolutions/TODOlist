@@ -104,6 +104,9 @@ export default {
     "p.public.email.rotate": "Rotar dirección (invalida la anterior)",
     "p.public.email.generated": "Dirección generada",
     "p.public.email.revoked": "Dirección revocada",
+    "p.public.email.revoke": "Revocar dirección",
+    "p.public.email.masked":
+      "Dirección activa (oculta por seguridad). Rota para generar una nueva.",
     "p.public.email.error": "No se pudo actualizar la dirección",
     // PublicIntakePage — formulario público (/intake/:token, sin sesión)
     "p.public.intakePage.loading": "Cargando formulario…",
@@ -238,6 +241,9 @@ export default {
     "p.public.email.rotate": "Rotate address (invalidates previous)",
     "p.public.email.generated": "Address generated",
     "p.public.email.revoked": "Address revoked",
+    "p.public.email.revoke": "Revoke address",
+    "p.public.email.masked":
+      "Active address (hidden for security). Rotate to generate a new one.",
     "p.public.email.error": "Could not update the address",
     // PublicIntakePage — public form (/intake/:token, no session)
     "p.public.intakePage.loading": "Loading form…",

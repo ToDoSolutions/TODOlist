@@ -9,6 +9,7 @@ import type { AppNotification, NotificationPreference } from "../types";
 import { notify } from "../notify";
 import { TaskListSkeleton } from "../components/ui/skeletons";
 import { EmptyState } from "../components/ui/states";
+import PageHeader from "../components/ui/PageHeader";
 import {
   Box,
   Typography,
@@ -67,13 +68,13 @@ export default function NotificationsPage() {
     queryKey: ["notifications"],
     queryFn: notificationsApi.list,
   });
-  const notifications = notifData?.results || notifData || [];
+  const notifications = notifData ?? [];
 
   const { data: prefData, isLoading: prefLoading } = useQuery({
     queryKey: ["notification-preferences"],
     queryFn: notificationsApi.preferences,
   });
-  const preferences = prefData?.results || prefData || [];
+  const preferences = prefData ?? [];
 
   const markAllRead = useMutation({
     mutationFn: notificationsApi.markAllRead,
@@ -157,9 +158,7 @@ export default function NotificationsPage() {
 
   return (
     <Box sx={{ maxWidth: 900, mx: "auto" }}>
-      <Typography variant="h5" fontWeight={700} mb={3}>
-        {t("nav.notifications")}
-      </Typography>
+      <PageHeader title={t("nav.notifications")} />
 
       <Tabs value={tab} onChange={(_, v) => setTab(v)} sx={{ mb: 3 }}>
         <Tab

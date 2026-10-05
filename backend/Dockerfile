@@ -7,8 +7,11 @@ ENV PYTHONDONTWRITEBYTECODE=1 \
 
 WORKDIR /app
 
+# libxmlsec1-dev + pkg-config: python3-saml (SAML SSO) compila xmlsec
+# cuando no hay wheel prebuilt para la plataforma.
 RUN apt-get update \
-    && apt-get install -y --no-install-recommends build-essential libpq-dev \
+    && apt-get install -y --no-install-recommends \
+       build-essential libpq-dev libxmlsec1-dev pkg-config \
     && rm -rf /var/lib/apt/lists/*
 
 COPY requirements.txt /app/
@@ -23,9 +26,9 @@ ENV PYTHONDONTWRITEBYTECODE=1 \
 
 WORKDIR /app
 
-# Solo libpq runtime (no build-essential)
+# Runtime: libpq + libxmlsec1 (firma/validación SAML), sin toolchain
 RUN apt-get update \
-    && apt-get install -y --no-install-recommends libpq5 curl \
+    && apt-get install -y --no-install-recommends libpq5 libxmlsec1 curl \
     && rm -rf /var/lib/apt/lists/*
 
 # Copiar paquetes instalados del builder
@@ -41,9 +44,9 @@ USER django
 
 EXPOSE 8000
 
-# Healthcheck
+# Healthcheck (endpoint público; /api/auth/me/ exige auth y siempre da 401)
 HEALTHCHECK --interval=30s --timeout=10s --start-period=15s --retries=3 \
-    CMD curl -f http://localhost:8000/api/auth/me/ || exit 1
+    CMD curl -f http://localhost:8000/api/health/ || exit 1
 
-# Gunicorn para producción
-CMD ["gunicorn", "--bind", "0.0.0.0:8000", "--workers", "3", "--timeout", "120", "config.wsgi:application"]
+# Daphne (ASGI): sirve HTTP y WebSockets (Channels). WSGI no soportaría WS.
+CMD ["daphne", "--bind", "0.0.0.0", "--port", "8000", "config.asgi:application"]

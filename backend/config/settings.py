@@ -80,6 +80,8 @@ INSTALLED_APPS = [
     "apps.intake",
     "apps.dashboards",
     "apps.events",
+    "apps.mcp",
+    "apps.caldav",
     "drf_spectacular",
     "graphene_django",
     "channels",
@@ -102,6 +104,7 @@ MIDDLEWARE = [
     "allauth.account.middleware.AccountMiddleware",
     "apps.monitoring.middleware.MetricsMiddleware",
     "apps.monitoring.security_headers.SecurityHeadersMiddleware",
+    "apps.feature_flags.middleware.FeatureFlagMiddleware",
 ]
 
 ROOT_URLCONF = "config.urls"
@@ -194,17 +197,20 @@ REST_FRAMEWORK = {
         "apps.users.api_auth.APIKeyRateThrottle",
     ),
     "DEFAULT_THROTTLE_RATES": {
-        "burst": "60/min",
-        "authenticated": "300/hour",
-        "api_key": "1000/hour",
-        "login": "10/min",
-        "anon": "30/min",
-        "register": "5/hour",
-        "password_reset": "5/hour",
+        "burst": env("DJANGO_THROTTLE_BURST", default="60/min"),
+        "authenticated": env("DJANGO_THROTTLE_AUTHENTICATED", default="300/hour"),
+        "api_key": env("DJANGO_THROTTLE_API_KEY", default="1000/hour"),
+        "login": env("DJANGO_THROTTLE_LOGIN", default="10/min"),
+        "anon": env("DJANGO_THROTTLE_ANON", default="30/min"),
+        "register": env("DJANGO_THROTTLE_REGISTER", default="5/hour"),
+        "password_reset": env("DJANGO_THROTTLE_PASSWORD_RESET", default="5/hour"),
         # Canales públicos de entrada (sin auth): límites por IP
-        "intake_public": "20/hour",
-        "public_share": "60/hour",
-        "inbound": "60/hour",
+        "intake_public": env("DJANGO_THROTTLE_INTAKE_PUBLIC", default="20/hour"),
+        "public_share": env("DJANGO_THROTTLE_PUBLIC_SHARE", default="60/hour"),
+        # Acciones sensibles autenticadas (confirmación por contraseña):
+        # desactivar/eliminar cuenta — frena fuerza bruta sobre sesiones
+        "sensitive_action": env("DJANGO_THROTTLE_SENSITIVE", default="5/hour"),
+        "inbound": env("DJANGO_THROTTLE_INBOUND", default="60/hour"),
     },
     "DEFAULT_SCHEMA_CLASS": "drf_spectacular.openapi.AutoSchema",
 }
@@ -338,11 +344,46 @@ EMAIL_HOST_USER = os.getenv("EMAIL_HOST_USER", "")
 EMAIL_HOST_PASSWORD = os.getenv("EMAIL_HOST_PASSWORD", "")
 EMAIL_USE_TLS = os.getenv("EMAIL_USE_TLS", "false").lower() == "true"
 DEFAULT_FROM_EMAIL = os.getenv("DEFAULT_FROM_EMAIL", "no-reply@todolist.local")
-FRONTEND_URL = os.getenv("FRONTEND_URL", "http://localhost:5173")
+# Una sola URL pública del frontend: FRONTEND_URL explícita tiene prioridad;
+# si no, cae a DJANGO_FRONTEND_URL (misma var que CORS y redirects OAuth).
+FRONTEND_URL = os.getenv("FRONTEND_URL") or DJANGO_FRONTEND_URL
 # Opt-in del servidor para notificaciones por email (asignación, mención,
 # recordatorio). Requiere además email_enabled en la preferencia del
 # usuario. Desactivado por defecto: en dev el backend es console.
 EMAIL_NOTIFICATIONS_ENABLED = env.bool("EMAIL_NOTIFICATIONS_ENABLED", default=False)
+
+# Logging a consola (stdout) — docker/k8s lo recogen del stream.
+# Sin este bloque Django solo loguea errores de request en producción
+# y los warnings de negocio (blacklist JWT, automatizaciones, SSRF
+# denegado) nunca llegaban a ningún lado.
+LOGGING = {
+    "version": 1,
+    "disable_existing_loggers": False,
+    "formatters": {
+        "simple": {
+            "format": "{levelname} {asctime} {name} {message}",
+            "style": "{",
+        },
+    },
+    "handlers": {
+        "console": {
+            "class": "logging.StreamHandler",
+            "formatter": "simple",
+        },
+    },
+    "root": {
+        "handlers": ["console"],
+        "level": env("DJANGO_LOG_LEVEL", default="INFO" if not DEBUG else "DEBUG"),
+    },
+    "loggers": {
+        # El torrente INFO de django.server (cada request) solo molesta.
+        "django.server": {
+            "handlers": ["console"],
+            "level": "WARNING",
+            "propagate": False,
+        },
+    },
+}
 
 # Caducidad del token de reset de contraseña (segundos)
 PASSWORD_RESET_TIMEOUT = 3600
@@ -399,12 +440,71 @@ if OIDC_ISSUER:
         ]
     }
 
-# Feature flags
+# Enterprise SSO vía SAML 2.0 (Entra ID, Okta, ADFS…). Requiere
+# python3-saml (xmlsec) — dependencia opcional: solo se registra si el
+# IdP está configurado (SAML_IDP_SSO_URL + SAML_IDP_X509CERT).
+SAML_IDP_SSO_URL = env("SAML_IDP_SSO_URL", default="")
+if SAML_IDP_SSO_URL:
+    INSTALLED_APPS += ["allauth.socialaccount.providers.saml"]
+    SAML_PROVIDER_ID = env("SAML_PROVIDER_ID", default="saml")
+    SOCIALACCOUNT_PROVIDERS["saml"] = {
+        "APPS": [
+            {
+                "provider_id": SAML_PROVIDER_ID,
+                "name": env("SAML_DISPLAY_NAME", default="SAML SSO"),
+                "settings": {
+                    "idp": {
+                        "entity_id": env("SAML_IDP_ENTITY_ID", default=""),
+                        "sso_url": SAML_IDP_SSO_URL,
+                        "slo_url": env("SAML_IDP_SLO_URL", default=""),
+                        "x509cert": env("SAML_IDP_X509CERT", default=""),
+                    },
+                    "advanced": {
+                        "allow_repeat_attribute_name": True,
+                    },
+                },
+            }
+        ]
+    }
+
+# Provisión SCIM 2.0 (Users↔User, Groups↔Organization). Solo se monta
+# si SCIM_ENABLED=1 y hay al menos un bearer token (SCIM_BEARER_TOKENS,
+# separados por coma para rotación sin corte).
+SCIM_ENABLED = env.bool("SCIM_ENABLED", default=False)
+SCIM_TOKENS = [
+    t.strip() for t in env("SCIM_BEARER_TOKENS", default="").split(",")
+    if t.strip()
+]
+if SCIM_ENABLED and SCIM_TOKENS:
+    INSTALLED_APPS += ["apps.scim", "django_scim"]
+    MIDDLEWARE += ["apps.scim.middleware.SCIMBearerAuthMiddleware"]
+    SCIM_SERVICE_PROVIDER = {
+        "NETLOC": env("SCIM_NETLOC", default=env("DJANGO_BACKEND_HOST", default="localhost:8000")),
+        "SCHEME": env("SCIM_SCHEME", default="https"),
+        "USER_ADAPTER": "apps.scim.adapters.SCIMUserAdapter",
+        "GROUP_MODEL": "apps.collaboration.models.Organization",
+        "GROUP_ADAPTER": "apps.scim.adapters.SCIMOrganizationAdapter",
+        "WWW_AUTHENTICATE_HEADER": 'Bearer realm="scim"',
+        "AUTHENTICATION_SCHEMES": [
+            {
+                "type": "oauthbearertoken",
+                "name": "OAuth Bearer Token",
+                "description": "Token estático SCIM (SCIM_BEARER_TOKENS)",
+                "specUri": "https://www.rfc-editor.org/rfc/rfc6750",
+            }
+        ],
+    }
+else:
+    SCIM_ENABLED = False
+
+# Feature flags: defaults cuando no hay fila FeatureFlag en BD (el flag
+# de BD gobierna cuando existe — is_enabled cae aquí solo si falta).
+# Default True para features ya implementadas: el flag actúa como
+# kill-switch / rollout gradual, no como activación de algo inexistente.
 FEATURE_FLAGS = {
-    "ai_assistant": env.bool("FEATURE_AI_ASSISTANT", default=False),
-    "elasticsearch": env.bool("FEATURE_ELASTICSEARCH", default=False),
-    "offline_sync": env.bool("FEATURE_OFFLINE_SYNC", default=False),
-    "e2e_encryption": env.bool("FEATURE_E2E_ENCRYPTION", default=False),
+    "ai_assistant": env.bool("FEATURE_AI_ASSISTANT", default=True),
+    "offline_sync": env.bool("FEATURE_OFFLINE_SYNC", default=True),
+    "e2e_encryption": env.bool("FEATURE_E2E_ENCRYPTION", default=True),
 }
 
 # Sentry (opcional)
@@ -477,6 +577,13 @@ GITHUB_APP_NAME = env("GITHUB_APP_NAME")
 VAPID_PUBLIC_KEY = env("VAPID_PUBLIC_KEY")
 VAPID_PRIVATE_KEY = env("VAPID_PRIVATE_KEY")
 VAPID_CLAIMS_SUBJECT = env("VAPID_CLAIMS_SUBJECT")
+
+# LLM opcional del asistente de IA (BYOK, OpenAI-compatible).
+# Sin AI_LLM_BASE_URL + AI_LLM_MODEL el asistente usa solo heurísticas.
+# Ejemplos: OpenAI https://api.openai.com/v1 · Ollama http://localhost:11434/v1
+AI_LLM_BASE_URL = env("AI_LLM_BASE_URL", default="")
+AI_LLM_API_KEY = env("AI_LLM_API_KEY", default="")
+AI_LLM_MODEL = env("AI_LLM_MODEL", default="")
 
 # Jitsi Meet (videoconferencia integrada en reuniones).
 # Servidor público gratuito por defecto; self-hosting: apuntar a tu instancia.

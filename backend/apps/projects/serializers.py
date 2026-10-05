@@ -165,13 +165,27 @@ class PortfolioSerializer(serializers.ModelSerializer):
 
 
 class ProjectTemplateSerializer(serializers.ModelSerializer):
+    author = serializers.SerializerMethodField()
+    is_mine = serializers.SerializerMethodField()
+
     class Meta:
         from .models import ProjectTemplate
         model = ProjectTemplate
         fields = [
-            "id", "name", "description", "config", "is_builtin", "created_at",
+            "id", "name", "description", "config", "is_builtin",
+            "is_public", "use_count", "author", "is_mine", "created_at",
         ]
-        read_only_fields = ["id", "is_builtin", "created_at"]
+        read_only_fields = [
+            "id", "is_builtin", "use_count", "author", "is_mine",
+            "created_at",
+        ]
+
+    def get_author(self, obj):
+        return obj.owner.username or obj.owner.email
+
+    def get_is_mine(self, obj):
+        request = self.context.get("request")
+        return bool(request and obj.owner_id == request.user.id)
 
     def validate_config(self, value):
         if not isinstance(value, dict):

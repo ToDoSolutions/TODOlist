@@ -1,5 +1,8 @@
-import { formatDateTime } from "../lib/dates";
+﻿import { formatDateTime } from "../lib/dates";
 import { useState } from "react";
+import { TaskListSkeleton } from "../components/ui/skeletons";
+import PageHeader from "../components/ui/PageHeader";
+import { ErrorState } from "../components/ui/states";
 import {
   Box,
   Typography,
@@ -18,8 +21,6 @@ import {
   FormControl,
   Switch,
   FormControlLabel,
-  CircularProgress,
-  Alert,
   IconButton,
   Tooltip,
   Collapse,
@@ -104,6 +105,7 @@ export default function AutomationsPage() {
     subtasks_in_progress: t("p.ops.automations.action.subtasksInProgress"),
     create_notification: t("p.ops.automations.action.createNotification"),
     create_task: t("p.ops.automations.action.createTask"),
+    call_webhook: t("p.ops.automations.action.callWebhook"),
   };
 
   // Campos de contexto disponibles en las condiciones (ver apps/automations/signals.py)
@@ -170,6 +172,10 @@ export default function AutomationsPage() {
       },
       { key: "state", label: t("p.ops.automations.param.initialState"), type: "state" },
     ],
+    call_webhook: [
+      { key: "url", label: t("p.ops.automations.param.webhookUrl"), type: "text" },
+      { key: "secret", label: t("p.ops.automations.param.webhookSecret"), type: "text" },
+    ],
   };
 
   const PARAM_FIELD_LABEL: Record<string, string> = {
@@ -181,6 +187,7 @@ export default function AutomationsPage() {
     data: rules,
     isLoading,
     isError,
+    refetch,
   } = useQuery({
     queryKey: ["automation-rules"],
     queryFn: automationsApi.list,
@@ -309,38 +316,39 @@ export default function AutomationsPage() {
     }
   };
 
-  const ruleList = rules?.results || rules || [];
+  const ruleList = rules ?? [];
 
   return (
     <Box maxWidth={900} mx="auto">
-      <Stack direction="row" alignItems="center" justifyContent="space-between" mb={3}>
-        <Stack direction="row" alignItems="center" spacing={1}>
-          <Zap size={24} style={{ color: theme.palette.secondary.main }} />
-          <Typography variant="h5" fontWeight={700}>
+      <PageHeader
+        title={
+          <>
+            <Zap size={22} style={{ color: theme.palette.secondary.main, verticalAlign: "text-bottom", marginRight: 8 }} />
             {t("p.ops.automations.title")}
-          </Typography>
-        </Stack>
-        <Button
-          variant="contained"
-          startIcon={<Plus size={18} />}
-          onClick={() => {
-            resetForm();
-            setDialogOpen(true);
-          }}
-        >
-          {t("p.ops.automations.new")}
-        </Button>
-      </Stack>
+          </>
+        }
+        actions={
+          <Button
+            variant="contained"
+            startIcon={<Plus size={18} />}
+            onClick={() => {
+              resetForm();
+              setDialogOpen(true);
+            }}
+          >
+            {t("p.ops.automations.new")}
+          </Button>
+        }
+      />
 
       {isError && (
-        <Alert severity="error" sx={{ mb: 2 }}>
-          {t("p.ops.automations.loadError")}
-        </Alert>
+        <ErrorState
+          title={t("p.ops.automations.loadError")}
+          onRetry={() => void refetch()}
+        />
       )}
       {isLoading ? (
-        <Box display="flex" justifyContent="center" py={5}>
-          <CircularProgress />
-        </Box>
+        <TaskListSkeleton />
       ) : ruleList.length === 0 ? (
         <Paper variant="outlined" sx={{ p: 6, textAlign: "center" }}>
           <Zap size={48} color="text.disabled" />
@@ -449,6 +457,7 @@ export default function AutomationsPage() {
                           t("p.ops.automations.confirmDelete", {
                             name: rule.name,
                           }),
+                          { confirmLabel: t("common.delete") },
                         )
                       )
                         deleteMut.mutate(rule.id);
@@ -491,7 +500,7 @@ export default function AutomationsPage() {
                         {t("p.ops.automations.history")}
                       </Typography>
                     </Stack>
-                    {(logs?.results || logs || [])
+                    {(logs ?? [])
                       .slice(0, 5)
                       .map((log: AutomationLog) => (
                         <Box key={log.id} sx={{ py: 0.5 }}>
@@ -522,7 +531,7 @@ export default function AutomationsPage() {
                           </Stack>
                         </Box>
                       ))}
-                    {(!logs || (logs?.results || logs || []).length === 0) && (
+                    {(!logs || logs.length === 0) && (
                       <Typography variant="caption" color="text.secondary">
                         {t("p.ops.automations.noRuns")}
                       </Typography>

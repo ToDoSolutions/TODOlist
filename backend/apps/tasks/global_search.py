@@ -56,17 +56,22 @@ def parse_query(q):
 def _apply_task_filters(qs, filters, user):
     """Aplica los filtros de sintaxis al queryset de tareas."""
     for assigned in filters.get("assigned", []):
-        if assigned == "me":
-            qs = qs.filter(assignee=user)
-        else:
-            qs = qs.filter(assignee__email__icontains=assigned)
+        qs = (
+            qs.filter(assignee=user)
+            if assigned == "me"
+            else qs.filter(assignee__email__icontains=assigned)
+        )
     for st in filters.get("status", []):
         states = _STATE_ALIASES.get(st.lower(), [st])
         qs = qs.filter(state__in=states)
     for tag in filters.get("tag", []):
         qs = qs.filter(tags__name__iexact=tag)
     for proj in filters.get("project", []):
-        qs = qs.filter(project__name__icontains=proj)
+        # Multi-homing: project: también casa hogares extra
+        qs = qs.filter(
+            Q(project__name__icontains=proj)
+            | Q(extra_projects__name__icontains=proj)
+        )
     for pri in filters.get("priority", []):
         m = re.match(r"p?(\d+)", pri.lower())
         if m:
@@ -116,6 +121,8 @@ def global_search(user, query, limit=20):
     if terms:
         tasks_qs = tasks_qs.filter(
             _text_q(terms, ["title", "description"]))
+    # los filtros M2M (tags, extra_projects) pueden fan-out el join
+    tasks_qs = tasks_qs.distinct()
     tasks = [{
         "type": "task", "id": t.id, "title": t.title,
         "state": t.state, "priority": t.priority,

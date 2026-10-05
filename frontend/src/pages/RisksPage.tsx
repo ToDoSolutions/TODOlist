@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import {
   Box,
@@ -73,6 +73,15 @@ export default function RisksPage() {
     queryFn: projectsApi.list,
   });
   const projects = Array.isArray(projectsData) ? projectsData : [];
+
+  // Preselecciona el primer proyecto — evita la vista sin proyecto
+  // elegido (botón "Registrar riesgo" deshabilitado, tabla vacía).
+  useEffect(() => {
+    if (projectId === "" && projects.length > 0) {
+      const first = projects[0] as { id?: number };
+      if (first?.id != null) setProjectId(first.id);
+    }
+  }, [projects, projectId]);
 
   const { data: risksData } = useQuery({
     queryKey: ["project-risks", projectId],
@@ -217,7 +226,7 @@ export default function RisksPage() {
         </Grid>
 
         <Grid item xs={12} md={8}>
-          <Paper variant="outlined">
+          <Paper variant="outlined" sx={{ overflowX: "auto" }}>
             <Table size="small">
               <caption
                 style={{
@@ -256,18 +265,26 @@ export default function RisksPage() {
                     <TableCell>{levelLabel(r.probability)}</TableCell>
                     <TableCell>{levelLabel(r.impact)}</TableCell>
                     <TableCell>
-                      <Chip
-                        size="small"
-                        label={r.severity}
-                        variant="outlined"
-                        color={
-                          r.severity >= 4
-                            ? "error"
-                            : r.severity >= 3
-                              ? "warning"
-                              : "default"
-                        }
-                      />
+                      <Tooltip
+                        title={t("p.collab.risks.sevTip", {
+                          p: levelLabel(r.probability),
+                          i: levelLabel(r.impact),
+                          s: r.severity,
+                        })}
+                      >
+                        <Chip
+                          size="small"
+                          label={r.severity}
+                          variant="outlined"
+                          color={
+                            r.severity >= 4
+                              ? "error"
+                              : r.severity >= 3
+                                ? "warning"
+                                : "default"
+                          }
+                        />
+                      </Tooltip>
                     </TableCell>
                     <TableCell>
                       <TextField
@@ -299,6 +316,7 @@ export default function RisksPage() {
                                 t("p.collab.risks.confirmDelete", {
                                   title: r.title,
                                 }),
+                                { confirmLabel: t("common.delete") },
                               )
                             )
                               deleteMut.mutate(r.id);

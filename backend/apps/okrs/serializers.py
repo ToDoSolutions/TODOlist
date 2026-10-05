@@ -43,6 +43,7 @@ class KeyResultSerializer(serializers.ModelSerializer):
             "target_value",
             "current_value",
             "unit",
+            "direction",
             "owner",
             "due_date",
             "linked_tasks",

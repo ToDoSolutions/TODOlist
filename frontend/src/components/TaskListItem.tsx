@@ -43,15 +43,17 @@ import {
   PinOff,
   Star,
   StarOff,
+  Folders,
 } from "lucide-react";
 import { useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { format, isPast, isToday } from "date-fns";
 import { es, enUS } from "date-fns/locale";
+import { formatDateTimeShort } from "../lib/dates";
 import { useTranslation } from "react-i18next";
 import "../i18n";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
-import { tasksApi, sprintsApi } from "../api/resources";
+import { tasksApi, sprintsApi, projectsApi } from "../api/resources";
 import { useUiStore } from "../store/uiStore";
 import {
   useUndoDelete,
@@ -445,6 +447,23 @@ export default function TaskListItem({ task, onEdit, timerRunning }: Props) {
     enabled: showSprintSelect,
   });
 
+  const extraHomes = task.extra_projects ?? [];
+  // Reutiliza la caché compartida ["projects"] (misma query que TaskDialog);
+  // solo se habilita cuando la fila realmente tiene hogares extra.
+  const { data: projectsData } = useQuery({
+    queryKey: ["projects"],
+    queryFn: projectsApi.list,
+    enabled: extraHomes.length > 0,
+  });
+  const extraHomeNames = extraHomes
+    .map(
+      (id) =>
+        (Array.isArray(projectsData) ? projectsData : []).find(
+          (p: { id: number; name: string }) => p.id === id,
+        )?.name ?? `#${id}`,
+    )
+    .join(", ");
+
   const moveToSprint = useMutation({
     mutationFn: (sprintId: number) => tasksApi.moveToSprint(task.id, sprintId),
     onSuccess: () => {
@@ -643,6 +662,17 @@ export default function TaskListItem({ task, onEdit, timerRunning }: Props) {
                 color={overdue ? "error" : "default"}
                 sx={{ height: 20, fontSize: 11 }}
               />
+            )}
+            {extraHomes.length > 0 && (
+              <Tooltip title={extraHomeNames}>
+                <Chip
+                  size="small"
+                  variant="outlined"
+                  icon={<Folders size={12} />}
+                  label={t("p.task.extraHomes", { count: extraHomes.length })}
+                  sx={{ height: 20, fontSize: 11 }}
+                />
+              </Tooltip>
             )}
             {(task.subtasks || []).length > 0 && (
               <Stack direction="row" alignItems="center" spacing={0.75}>
@@ -931,7 +961,7 @@ export default function TaskListItem({ task, onEdit, timerRunning }: Props) {
               {activities.map((a: Activity) => (
                 <Typography key={a.id} variant="caption" color="text.secondary">
                   {a.action} · {a.actor_email || t("p.task.system")} ·{" "}
-                  {format(new Date(a.created_at), "dd MMM HH:mm", { locale: dateLocale })}
+                  {formatDateTimeShort(a.created_at)}
                 </Typography>
               ))}
             </Stack>

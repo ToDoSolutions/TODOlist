@@ -58,6 +58,7 @@ import {
 import type { GitHubPR, GitHubCommit, GitHubRelease, GitHubCheckRun } from "../types";
 import { notify } from "../notify";
 import { useConfirm } from "../components/ConfirmDialog";
+import PageHeader from "../components/ui/PageHeader";
 import { useTranslation, Trans } from "react-i18next";
 
 /* ---------- helpers ---------- */
@@ -240,6 +241,22 @@ export default function GitHubPage() {
     onError: () => notify.error(t("p.integr.ghLinkSyncError")),
   });
 
+  /* ----- PR → task manual linking ----- */
+  const [prLinkTarget, setPrLinkTarget] = useState<GitHubPR | null>(null);
+  const [prLinkTaskId, setPrLinkTaskId] = useState("");
+
+  const linkPrMut = useMutation({
+    mutationFn: () =>
+      githubApi.linkPrToTask(prLinkTarget!.id, Number(prLinkTaskId)),
+    onSuccess: (data) => {
+      notify.success(data.message || t("p.integr.ghPrLinked"));
+      setPrLinkTarget(null);
+      setPrLinkTaskId("");
+      qc.invalidateQueries({ queryKey: ["github-pull-requests"] });
+    },
+    onError: () => notify.error(t("p.integr.ghPrLinkError")),
+  });
+
   const instList: GitHubInstallation[] = Array.isArray(installations)
     ? installations
     : (installations as { results?: GitHubInstallation[] } | undefined)?.results || [];
@@ -282,12 +299,14 @@ export default function GitHubPage() {
 
   return (
     <Box maxWidth={1000} mx="auto">
-      <Stack direction="row" alignItems="center" spacing={1} mb={3}>
-        <Github size={28} style={{ color: theme.palette.primary.main }} />
-        <Typography variant="h5" fontWeight={700}>
-          {t("p.integr.ghTitle")}
-        </Typography>
-      </Stack>
+      <PageHeader
+        title={
+          <>
+            <Github size={22} style={{ color: theme.palette.primary.main, verticalAlign: "text-bottom", marginRight: 8 }} />
+            {t("p.integr.ghTitle")}
+          </>
+        }
+      />
 
       <Alert severity="info" sx={{ mb: 2 }}>
         {t("p.integr.ghIntro")}
@@ -386,6 +405,9 @@ export default function GitHubPage() {
                               src={inst.avatar_url}
                               alt={inst.account_login}
                               style={{ width: 24, height: 24, borderRadius: 4 }}
+                              onError={(e) => {
+                                e.currentTarget.style.display = "none";
+                              }}
                             />
                           )}
                           <Typography variant="body2" fontWeight={600}>
@@ -396,7 +418,10 @@ export default function GitHubPage() {
                       <TableCell>
                         <Chip
                           size="small"
-                          label={inst.account_type}
+                          label={t(
+                            `p.integr.ghType.${String(inst.account_type).toLowerCase()}`,
+                            { defaultValue: inst.account_type },
+                          )}
                           sx={{ height: 20, fontSize: 11 }}
                           variant="outlined"
                         />
@@ -425,6 +450,7 @@ export default function GitHubPage() {
                                   t("p.integr.ghInstConfirmDisconnect", {
                                     account: inst.account_login || "GitHub",
                                   }),
+                                  { confirmLabel: t("p.integr.ghInstDisconnect") },
                                 )
                               )
                                 removeInstMut.mutate(inst.id);
@@ -850,6 +876,7 @@ export default function GitHubPage() {
                     <TableCell>{t("p.integr.ghColBranch")}</TableCell>
                     <TableCell>{t("p.integr.ghColApprovals")}</TableCell>
                     <TableCell>{t("p.integr.ci")}</TableCell>
+                    <TableCell>{t("p.integr.actions")}</TableCell>
                   </TableRow>
                 </TableHead>
                 <TableBody>
@@ -931,6 +958,20 @@ export default function GitHubPage() {
                               —
                             </Typography>
                           )}
+                        </TableCell>
+                        <TableCell>
+                          <Tooltip title={t("p.integr.ghPrLinkTooltip")}>
+                            <IconButton
+                              size="small"
+                              onClick={() => {
+                                setPrLinkTarget(pr);
+                                setPrLinkTaskId("");
+                              }}
+                              disabled={linkPrMut.isPending}
+                            >
+                              <Link2 size={14} />
+                            </IconButton>
+                          </Tooltip>
                         </TableCell>
                       </TableRow>
                     );
@@ -1333,6 +1374,46 @@ export default function GitHubPage() {
             {createLinkMut.isPending
               ? t("p.integr.ghCreating")
               : t("p.integr.ghCreateLink")}
+          </Button>
+        </DialogActions>
+      </Dialog>
+
+      {/* ===== Dialog: Vincular PR a tarea ===== */}
+      <Dialog
+        open={prLinkTarget !== null}
+        onClose={() => setPrLinkTarget(null)}
+        maxWidth="sm"
+        fullWidth
+      >
+        <DialogTitle>
+          {t("p.integr.ghPrLinkTitle", { pr: prLinkTarget?.pr_number })}
+        </DialogTitle>
+        <DialogContent>
+          <Stack spacing={2} sx={{ mt: 1 }}>
+            <Alert severity="info">{t("p.integr.ghPrLinkInfo")}</Alert>
+            <TextField
+              label={t("p.integr.ghTaskIdLabel")}
+              value={prLinkTaskId}
+              onChange={(e) => setPrLinkTaskId(e.target.value)}
+              fullWidth
+              size="small"
+              type="number"
+              helperText={t("p.integr.ghTaskIdHelp")}
+            />
+          </Stack>
+        </DialogContent>
+        <DialogActions>
+          <Button onClick={() => setPrLinkTarget(null)}>
+            {t("p.integr.cancel")}
+          </Button>
+          <Button
+            variant="contained"
+            onClick={() => linkPrMut.mutate()}
+            disabled={linkPrMut.isPending || !prLinkTaskId}
+          >
+            {linkPrMut.isPending
+              ? t("p.integr.ghCreating")
+              : t("p.integr.ghLinkTask")}
           </Button>
         </DialogActions>
       </Dialog>

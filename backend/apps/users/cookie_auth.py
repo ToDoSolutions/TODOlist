@@ -8,6 +8,7 @@ coincidiendo con la cookie legible ``todolist_csrf`` (patrón double-submit).
 El header ``Authorization: Bearer`` sigue funcionando (clientes no-browser,
 API keys, tests); la cookie solo es un mecanismo adicional.
 """
+import secrets
 from datetime import timedelta
 from typing import cast
 
@@ -38,7 +39,9 @@ class CookieJWTAuthentication(JWTAuthentication):
             return
         cookie_token = request.COOKIES.get(CSRF_COOKIE, "")
         header_token = request.META.get(CSRF_HEADER, "")
-        if not cookie_token or not header_token or cookie_token != header_token:
+        if not cookie_token or not header_token or not secrets.compare_digest(
+            cookie_token, header_token
+        ):
             raise exceptions.PermissionDenied("CSRF token inválido o ausente")
 
 

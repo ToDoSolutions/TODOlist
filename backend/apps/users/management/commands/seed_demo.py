@@ -15,15 +15,21 @@ from django.core.management.base import BaseCommand
 from django.utils import timezone
 
 from apps.ai_assistant.models import AiSuggestion
-from apps.automations.models import AutomationLog, AutomationRule
+from apps.automations.models import AutomationLog, AutomationRule, SlaPolicy
 from apps.collaboration.models import (
     AuditLog,
     Invitation,
+    Meeting,
     Mention,
+    Organization,
+    OrganizationMembership,
     ProjectMember,
     Team,
     TeamMembership,
+    Whiteboard,
 )
+from apps.dashboards.models import ShareLink
+from apps.intake.models import IntakeForm
 from apps.encryption.models import (
     EncryptedKeyShare,
     EncryptedTask,
@@ -44,7 +50,8 @@ from apps.integrations_chat.models import ChatIntegration, ChatMessageLog
 from apps.notifications.models import Notification
 from apps.offline_sync.models import SyncDevice, SyncOperation
 from apps.okrs.models import KeyResult, KeyResultUpdate, Objective
-from apps.projects.models import Project
+from apps.dashboards.models import Dashboard
+from apps.projects.models import Portfolio, Project, ProjectRisk
 from apps.tags.models import Tag
 from apps.tasks.models import (
     Comment,
@@ -117,11 +124,24 @@ class Command(BaseCommand):
         self._create_chat_integrations(user)
         self._create_sync_devices(user)
         self._create_encryption_data(user, tasks)
-        self._create_recurrence_rules()
+        self._create_recurrence_rules(user)
         self._create_saved_searches(user)
         self._create_task_activities(user, tasks)
         self._create_api_keys(user)
         self._create_ai_suggestions(user, tasks)
+        self._create_risks(user, projects)
+        self._create_dashboards(user)
+        self._create_organization(user, projects, extra_users)
+        self._create_sla_policies(user)
+        self._create_meetings(user, projects, tasks, extra_users)
+        self._create_share_links(user, projects)
+        self._create_intake_forms(user, projects)
+        self._create_whiteboards(user, projects)
+        self._create_workflow_transitions(projects)
+        self._create_portfolios(user, projects)
+        self._create_external_calendars(user)
+        self._create_wiki_pages(user, projects)
+        self._create_github_data(user, tasks)
 
         self.stdout.write(self.style.SUCCESS("\n=== Datos demo creados ==="))
         self.stdout.write(f"  Usuario: {DEMO_EMAIL} / {DEMO_PASSWORD}")
@@ -179,6 +199,22 @@ class Command(BaseCommand):
         TeamMembership.objects.all().delete()
         Team.objects.all().delete()
         Tag.objects.all().delete()
+        Dashboard.objects.all().delete()
+        ProjectRisk.objects.all().delete()
+        OrganizationMembership.objects.all().delete()
+        Organization.objects.all().delete()
+        Whiteboard.objects.all().delete()
+        IntakeForm.objects.all().delete()
+        ShareLink.objects.all().delete()
+        Meeting.objects.all().delete()
+        SlaPolicy.objects.all().delete()
+        from apps.projects.models import WorkflowTransition
+        WorkflowTransition.objects.all().delete()
+        Portfolio.objects.all().delete()
+        from apps.collaboration.models import ExternalCalendar
+        ExternalCalendar.objects.all().delete()
+        from apps.wiki.models import WikiPage
+        WikiPage.objects.all().delete()
         Project.objects.all().delete()
         User.objects.filter(email__in=[DEMO_EMAIL, "ana@todolist.com", "carlos@todolist.com",
                                        "elena@todolist.com", "javier@todolist.com"]).delete()
@@ -255,7 +291,7 @@ class Command(BaseCommand):
         today = timezone.now().date()
         sprints_data = [
             ("Sprint 14 - Auth & Landing", "Completar auth OAuth y landing page", projects[0], "closed", today - timedelta(days=28), today - timedelta(days=15)),
-            ("Sprint 15 - Offline Sync", "Implementar sync offline básico", projects[0], "closed", today - timedelta(days=14), today - timedelta(days=1)),
+            ("Sprint 15 - Offline Sync", "Implementar sync offline básico", projects[0], "active", today - timedelta(days=14), today + timedelta(days=1)),
             ("Sprint 16 - API Gateway", "Gateway con rate limiting y JWT", projects[1], "active", today, today + timedelta(days=13)),
             ("Sprint 17 - Service Mesh", "Configurar Istio y observabilidad", projects[1], "planned", today + timedelta(days=14), today + timedelta(days=27)),
             ("Sprint 12 - Checkout", "Optimizar checkout y pasarela", projects[2], "closed", today - timedelta(days=42), today - timedelta(days=29)),
@@ -313,6 +349,9 @@ class Command(BaseCommand):
             ("Revisar PRs pendientes", "Revisar pull requests acumulados", None, None, None, "pending", 2, "task", 1, 1, [tags[13]], now + timedelta(days=1)),
             ("Actualizar dependencias npm", "Actualizar paquetes npm obsoletos", None, None, None, "backlog", 4, "tech_debt", 2, None, [tags[11]], None),
             ("Configurar Sentry", "Integrar Sentry para error tracking", None, None, None, "completed", 3, "task", 1, 2, [tags[5]], now - timedelta(days=10)),
+            # Archivadas: pueblan /app/archive para que la vista no salga vacía
+            ("Prototipo de onboarding v1", "Primer intento de flujo de onboarding descartado", projects[2], None, None, "archived", 3, "task", 2, 3, [], now - timedelta(days=30)),
+            ("Spike: web sockets vs polling", "Investigación de tiempo real descartada", projects[1], None, None, "archived", 4, "task", 1, 4, [], now - timedelta(days=45)),
         ]
 
         tasks = []
@@ -333,9 +372,22 @@ class Command(BaseCommand):
                 due_date=due,
                 completed_at=now - timedelta(days=random.randint(1, 20)) if state == "completed" else None,
             )
+            if t.completed_at:
+                # auto_now_add fuerza created_at=now: hay que retrodatarlo
+                # con update() para que lead time (created→completed) > 0
+                backdate = t.completed_at - timedelta(
+                    days=random.randint(1, 10),
+                    hours=random.randint(0, 23),
+                )
+                Task.objects.filter(pk=t.pk).update(created_at=backdate)
+                t.created_at = backdate
             if task_tags:
                 t.tags.set(task_tags)
             tasks.append(t)
+        # Algunas favoritas para que la vista /app/favorites no quede vacía
+        for idx in (0, 2, 7):
+            if idx < len(tasks):
+                tasks[idx].favorited_by.add(user)
         self.stdout.write(f"  Tareas: {len(tasks)}")
         return tasks
 
@@ -508,7 +560,7 @@ class Command(BaseCommand):
         rules = [
             ("Auto P0 en bloqueo", "Cuando una tarea pasa a blocked, asignar prioridad P0", "task_blocked", "set_priority", {"priority": 0}),
             ("Notificar tareas vencidas", "Cuando una tarea vence, crear notificación", "task_overdue", "create_notification", {"message": "Tarea vencida"}),
-            ("Subtareas a in_progress", "Cuando una tarea se completa, mover subtareas a in_progress", "task_completed", "subtasks_in_progress", {}),
+            ("Subtareas a En progreso", "Cuando una tarea se completa, mover subtareas a En progreso", "task_completed", "subtasks_in_progress", {}),
         ]
         created = []
         for name, desc, trigger, action, params in rules:
@@ -527,19 +579,19 @@ class Command(BaseCommand):
 
         objectives_data = [
             ("Mejorar calidad del código", "Reducir bugs en producción y mejorar cobertura de tests", [
-                ("Reducir bugs en producción a < 5/mes", 10, 3, "count"),
-                ("Aumentar cobertura de tests a 80%", 80, 45, "percentage"),
-                ("Reducir tiempo de CI a < 10 min", 30, 18, "minutes"),
+                ("Reducir bugs en producción a < 5/mes", 10, 3, "bugs", "decrease"),
+                ("Aumentar cobertura de tests a 80%", 80, 45, "%", "increase"),
+                ("Reducir tiempo de CI a < 10 min", 30, 18, "min", "decrease"),
             ]),
             ("Acelerar delivery", "Reducir time-to-market de nuevas features", [
-                ("Deploy 2 features/semana", 8, 5, "count"),
-                ("Reducir lead time a < 3 días", 7, 5, "days"),
-                ("Sprint completion rate > 90%", 90, 75, "percentage"),
+                ("Deploy 2 features/semana", 8, 5, "features", "increase"),
+                ("Reducir lead time a < 3 días", 7, 5, "días", "decrease"),
+                ("Sprint completion rate > 90%", 90, 75, "%", "increase"),
             ]),
             ("Mejorar experiencia móvil", "App más rápida y estable", [
-                ("Reducir crash rate a < 0.5%", 1, 2, "percentage"),
-                ("App startup < 2 segundos", 2, 3, "seconds"),
-                ("Rating App Store > 4.5", 5, 4, "count"),
+                ("Reducir crash rate a < 0.5%", 1, 2, "%", "decrease"),
+                ("App startup < 2 segundos", 2, 3, "s", "decrease"),
+                ("Rating App Store > 4.5", 5, 4, "puntos", "increase"),
             ]),
         ]
 
@@ -549,10 +601,13 @@ class Command(BaseCommand):
                 title=title, owner=user, quarter=quarter, year=year,
                 defaults={"description": desc, "status": "in_progress", "progress": 50},
             )
-            for kr_title, target, current, unit in krs:
+            for kr_title, target, current, unit, direction in krs:
                 KeyResult.objects.get_or_create(
                     objective=obj, title=kr_title, owner=user,
-                    defaults={"target_value": target, "current_value": current, "unit": unit},
+                    defaults={
+                        "target_value": target, "current_value": current,
+                        "unit": unit, "direction": direction,
+                    },
                 )
                 count += 1
         self.stdout.write(f"  OKRs: {len(objectives_data)} objetivos, {count} key results")
@@ -640,13 +695,13 @@ class Command(BaseCommand):
     def _create_webhook_deliveries(self):
         now = timezone.now()
         deliveries = [
-            ("wh_del_001", "task.created", "created", "success", "", "todolist/api", now - timedelta(hours=2)),
-            ("wh_del_002", "task.completed", "completed", "success", "", "todolist/api", now - timedelta(hours=5)),
-            ("wh_del_003", "task.blocked", "blocked", "success", "", "todolist/api", now - timedelta(hours=8)),
-            ("wh_del_004", "task.created", "created", "failed", "Connection timeout", "todolist/api", now - timedelta(hours=12)),
-            ("wh_del_005", "sprint.started", "started", "success", "", "todolist/api", now - timedelta(days=1)),
-            ("wh_del_006", "task.overdue", "overdue", "retrying", "HTTP 503", "todolist/api", now - timedelta(days=2)),
-            ("wh_del_007", "comment.created", "created", "success", "", "todolist/api", now - timedelta(days=3)),
+            ("wh_del_001", "task.created", "created", "processed", "", "todosolutions/todolist-api", now - timedelta(hours=2)),
+            ("wh_del_002", "task.completed", "completed", "processed", "", "todosolutions/todolist-api", now - timedelta(hours=5)),
+            ("wh_del_003", "task.blocked", "blocked", "processed", "", "todosolutions/todolist-api", now - timedelta(hours=8)),
+            ("wh_del_004", "task.created", "created", "failed", "Connection timeout", "todosolutions/todolist-web", now - timedelta(hours=12)),
+            ("wh_del_005", "sprint.started", "started", "processed", "", "todosolutions/todolist-api", now - timedelta(days=1)),
+            ("wh_del_006", "task.overdue", "overdue", "retrying", "HTTP 503", "todosolutions/todolist-mobile", now - timedelta(days=2)),
+            ("wh_del_007", "comment.created", "created", "processed", "", "todosolutions/todolist-api", now - timedelta(days=3)),
         ]
         count = 0
         for did, event, action, status, error, repo, created in deliveries:
@@ -656,7 +711,7 @@ class Command(BaseCommand):
                     "event_type": event, "action": action, "status": status,
                     "error_message": error, "repo_full_name": repo,
                     "payload": {"event": event, "timestamp": created.isoformat()},
-                    "processed_at": created + timedelta(seconds=2) if status == "success" else None,
+                    "processed_at": created + timedelta(seconds=2) if status == "processed" else None,
                 },
             )
             count += 1
@@ -806,15 +861,15 @@ class Command(BaseCommand):
         now = timezone.now()
         notifs = [
             ("task_assigned", "Nueva tarea asignada", f"Se te ha asignado: {tasks[2].title}", tasks[2], None, "/app"),
-            ("task_mentioned", "Mención en comentario", "Ana te mencionó en una tarea", tasks[0], None, "/app"),
+            ("mention", "Mención en comentario", "Ana te mencionó en una tarea", tasks[0], None, "/app"),
             ("sprint_started", f"Sprint iniciado: {sprints[2].name}", sprints[2].goal, None, sprints[2], "/app/sprints"),
             ("task_overdue", "Tarea vencida", f"La tarea '{tasks[7].title}' ha pasado su fecha límite", tasks[7], None, "/app"),
             ("task_completed", "Tarea completada", f"'{tasks[0].title}' marcada como completada", tasks[0], None, "/app"),
-            ("comment_added", "Nuevo comentario", "Carlos comentó en 'Memory leak en user service'", tasks[17], None, "/app"),
+            ("task_commented", "Nuevo comentario", "Carlos comentó en 'Memory leak en user service'", tasks[17], None, "/app"),
             ("task_blocked", "Tarea bloqueada", f"'{tasks[7].title}' ha sido bloqueada", tasks[7], None, "/app"),
             ("custom", "Bienvenido a TODOlist", "Tu cuenta está lista. ¡Empieza a crear tareas!", None, None, "/app"),
             ("task_assigned", "Nueva tarea asignada", f"Se te ha asignado: {tasks[10].title}", tasks[10], None, "/app"),
-            ("sprint_completed", f"Sprint completado: {sprints[1].name}", "El sprint ha finalizado. Revisa el burndown.", None, sprints[1], "/app/burndown"),
+            ("sprint_closed", f"Sprint completado: {sprints[1].name}", "El sprint ha finalizado. Revisa el burndown.", None, sprints[1], "/app/burndown"),
         ]
         count = 0
         for i, (ntype, title, body, task, sprint, url) in enumerate(notifs):
@@ -914,16 +969,16 @@ class Command(BaseCommand):
     def _create_audit_logs(self, user, tasks, projects):
         now = timezone.now()
         logs = [
-            ("created", "project", projects[0].id, projects[0].name, {}, {"name": projects[0].name}, now - timedelta(days=60)),
-            ("updated", "task", tasks[0].id, tasks[0].title, {"state": "in_progress"}, {"state": "completed"}, now - timedelta(days=20)),
-            ("created", "task", tasks[10].id, tasks[10].title, {}, {"title": tasks[10].title}, now - timedelta(days=6)),
-            ("deleted", "task", 9999, "Tarea obsoleta", {"id": 9999}, {}, now - timedelta(days=10)),
-            ("updated", "project", projects[1].id, projects[1].name, {"description": "old"}, {"description": projects[1].description}, now - timedelta(days=30)),
-            ("created", "sprint", 1, "Sprint 14", {}, {"name": "Sprint 14"}, now - timedelta(days=28)),
-            ("updated", "task", tasks[17].id, tasks[17].title, {"state": "in_progress"}, {"state": "blocked"}, now - timedelta(days=1)),
-            ("created", "task", tasks[20].id, tasks[20].title, {}, {"title": tasks[20].title}, now - timedelta(days=35)),
-            ("updated", "task", tasks[7].id, tasks[7].title, {"state": "in_progress"}, {"state": "blocked"}, now - timedelta(days=2)),
-            ("created", "epic", 1, "Autenticación OAuth 2.0", {}, {"title": "Autenticación OAuth 2.0"}, now - timedelta(days=60)),
+            ("create", "project", projects[0].id, projects[0].name, {}, {"name": projects[0].name}, now - timedelta(days=60)),
+            ("update", "task", tasks[0].id, tasks[0].title, {"state": "in_progress"}, {"state": "completed"}, now - timedelta(days=20)),
+            ("create", "task", tasks[10].id, tasks[10].title, {}, {"title": tasks[10].title}, now - timedelta(days=6)),
+            ("delete", "task", 9999, "Tarea obsoleta", {"id": 9999}, {}, now - timedelta(days=10)),
+            ("update", "project", projects[1].id, projects[1].name, {"description": "Migrar monolito"}, {"description": projects[1].description}, now - timedelta(days=30)),
+            ("create", "sprint", 1, "Sprint 14", {}, {"name": "Sprint 14"}, now - timedelta(days=28)),
+            ("update", "task", tasks[17].id, tasks[17].title, {"state": "in_progress"}, {"state": "blocked"}, now - timedelta(days=1)),
+            ("create", "task", tasks[20].id, tasks[20].title, {}, {"title": tasks[20].title}, now - timedelta(days=35)),
+            ("update", "task", tasks[7].id, tasks[7].title, {"state": "in_progress"}, {"state": "blocked"}, now - timedelta(days=2)),
+            ("create", "epic", 1, "Autenticación OAuth 2.0", {}, {"title": "Autenticación OAuth 2.0"}, now - timedelta(days=60)),
         ]
         count = 0
         for action, rtype, rid, rname, old, new, created in logs:
@@ -949,7 +1004,7 @@ class Command(BaseCommand):
             (automations[1], "success", {"task_id": 7, "due_date": "overdue"}, {"notification": "sent"}, ""),
             (automations[2], "success", {"task_id": 0, "state": "completed"}, {"subtasks": "moved_to_in_progress"}, ""),
             (automations[0], "success", {"task_id": 17, "state": "blocked"}, {"priority": 0}, ""),
-            (automations[1], "failed", {"task_id": 99}, {}, "Task not found"),
+            (automations[1], "failed", {"task_id": 99}, {}, "Tarea no encontrada"),
         ]
         count = 0
         for rule, status, trigger, result, error in logs:
@@ -967,12 +1022,12 @@ class Command(BaseCommand):
         now = timezone.now()
         krs = list(KeyResult.objects.all()[:6])
         updates = [
-            (krs[0], 10, 7, "Fixed 3 critical bugs this sprint", now - timedelta(days=14)),
-            (krs[0], 7, 3, "Down to 3 bugs after hotfixes", now - timedelta(days=2)),
-            (krs[1], 45, 60, "Added tests for auth module", now - timedelta(days=10)),
-            (krs[1], 60, 65, "More tests for gateway", now - timedelta(days=3)),
-            (krs[2], 18, 15, "Parallelized test suites", now - timedelta(days=7)),
-            (krs[3], 5, 6, "Shipped 2 features this week", now - timedelta(days=5)),
+            (krs[0], 10, 7, "3 bugs críticos arreglados este sprint", now - timedelta(days=14)),
+            (krs[0], 7, 3, "Solo quedan 3 bugs tras los hotfixes", now - timedelta(days=2)),
+            (krs[1], 45, 60, "Tests añadidos para el módulo de auth", now - timedelta(days=10)),
+            (krs[1], 60, 65, "Más tests para el gateway", now - timedelta(days=3)),
+            (krs[2], 18, 15, "Suites de tests paralelizadas", now - timedelta(days=7)),
+            (krs[3], 5, 6, "2 features entregadas esta semana", now - timedelta(days=5)),
         ]
         count = 0
         for kr, old, new, note, created in updates:
@@ -1098,7 +1153,7 @@ class Command(BaseCommand):
     #  Recurrence Rules
     # ──────────────────────────────────────────────────────────────
 
-    def _create_recurrence_rules(self):
+    def _create_recurrence_rules(self, user):
         rules = [
             ("daily", 1, None, None),       # Daily standup
             ("weekly", 1, None, 52),         # Weekly sprint planning
@@ -1108,6 +1163,7 @@ class Command(BaseCommand):
         for freq, interval, until, cnt in rules:
             RecurrenceRule.objects.create(
                 frequency=freq, interval=interval, until=until, count=cnt,
+                owner=user,
             )
             count += 1
         self.stdout.write(f"  Reglas de recurrencia: {count}")
@@ -1172,7 +1228,7 @@ class Command(BaseCommand):
         keys = [
             ("Producción - CI/CD", ["read", "write"], True, now + timedelta(days=365)),
             ("Desarrollo - Local", ["read"], True, now + timedelta(days=90)),
-            ("Webhook listener (revoked)", ["read"], False, now - timedelta(days=1)),
+            ("Webhook listener", ["read"], False, now - timedelta(days=1)),
         ]
         count = 0
         for name, scopes, active, expires in keys:
@@ -1191,19 +1247,19 @@ class Command(BaseCommand):
     # ──────────────────────────────────────────────────────────────
 
     def _create_ai_suggestions(self, user, tasks):
+        # Los tipos deben ser los de AiSuggestion.SuggestionType — antes se
+        # usaban nombres inventados que el frontend no puede traducir.
         suggestions = [
-            (tasks[7], "priority_suggestion", {"state": "blocked", "age_days": 5},
+            (tasks[7], "priority_estimate", {"state": "blocked", "age_days": 5},
              {"suggested_priority": 0, "reason": "Tarea bloqueada por más de 3 días"}, 0.92),
-            (tasks[17], "priority_suggestion", {"state": "blocked", "age_days": 1},
+            (tasks[17], "priority_estimate", {"state": "blocked", "age_days": 1},
              {"suggested_priority": 0, "reason": "Bug en producción bloqueado"}, 0.88),
-            (tasks[2], "sprint_suggestion", {"state": "in_progress", "sprint_progress": 60},
+            (tasks[2], "blocker_detection", {"state": "in_progress", "sprint_progress": 60},
              {"suggested_action": "move_to_next_sprint", "reason": "Sprint casi finalizado y tarea sin completar"}, 0.75),
-            (tasks[10], "assignee_suggestion", {"tags": ["devops", "api"], "team": "backend"},
-             {"suggested_assignee": "carlos@todolist.com", "reason": "Tarea de DevOps asignada al equipo backend"}, 0.81),
-            (None, "summary_suggestion", {"sprint": "Sprint 16", "completed": 5, "total": 8},
-             {"summary": "Sprint al 62.5% de completitud. 2 tareas bloqueadas requieren atención.", "risk_tasks": [tasks[7].id, tasks[17].id]}, 0.90),
-            (tasks[4], "split_suggestion", {"story_points": 8, "subtasks": 0},
-             {"suggested_action": "split", "reason": "Tarea de 8 story points sin subtareas. Considerar dividir."}, 0.70),
+            (tasks[10], "description_improvement", {"tags": ["devops", "api"]},
+             {"improved_description": "Tarea de DevOps — documentar pasos de despliegue", "suggestions": ["Añadir checklist de despliegue"]}, 0.81),
+            (tasks[4], "story_point_estimate", {"story_points": 8, "subtasks": 0},
+             {"suggested_points": 5, "reason": "Tarea grande sin subtareas. Considerar dividir."}, 0.70),
         ]
         count = 0
         for task, stype, inp, out, conf in suggestions:
@@ -1242,3 +1298,308 @@ class Command(BaseCommand):
                 )
                 count += 1
         self.stdout.write(f"  Custom field values: {count}")
+
+    # --------------------------------------------------------------
+    #  Riesgos de proyecto
+    # --------------------------------------------------------------
+
+    def _create_risks(self, user, projects):
+        risks = [
+            (projects[0], "Dependencia de una sola persona en auth", "Concentración de conocimiento en el módulo de autenticación.", "high", "high", "open", "Formar a una segunda persona y documentar el flujo."),
+            (projects[0], "Scope creep en el rediseño", "Peticiones extra de marketing durante el sprint.", "medium", "medium", "mitigated", "Congelar el scope al inicio del sprint y registrar cambios como tareas nuevas."),
+            (projects[1], "Deuda técnica en el monolito", "El ritmo de migración puede resentirse por acoplamientos ocultos.", "high", "medium", "open", "Reservar 20% de capacidad por sprint para refactorización."),
+            (projects[2], "Integración de pagos puede retrasarse", "La pasarela de pago aún no ha confirmado la fecha de sandbox.", "medium", "high", "open", "Abstraer el conector de pagos detrás de una interfaz."),
+        ]
+        count = 0
+        for proj, title, desc, prob, impact, status, mit in risks:
+            ProjectRisk.objects.get_or_create(
+                project=proj, title=title,
+                defaults={
+                    "description": desc, "probability": prob,
+                    "impact": impact, "status": status, "mitigation": mit,
+                    "owner": user,
+                },
+            )
+            count += 1
+        self.stdout.write(f"  Riesgos: {count}")
+
+    # --------------------------------------------------------------
+    #  Dashboards personalizados
+    # --------------------------------------------------------------
+
+    def _create_dashboards(self, user):
+        dashboard, created = Dashboard.objects.get_or_create(
+            owner=user, name="Resumen del workspace",
+            defaults={
+                "is_default": True,
+                "widgets": [
+                    {"id": "w1", "type": "kpis", "size": "full"},
+                    {"id": "w2", "type": "my_tasks", "size": "half"},
+                    {"id": "w3", "type": "blocked", "size": "half"},
+                    {"id": "w4", "type": "velocity", "size": "half"},
+                    {"id": "w5", "type": "recent_activity", "size": "half"},
+                ],
+            },
+        )
+        self.stdout.write(f"  Dashboards: {'creado' if created else 'ya existía'}")
+
+    # --------------------------------------------------------------
+    #  Organización demo
+    # --------------------------------------------------------------
+
+    def _create_organization(self, user, projects, extra_users):
+        org, _ = Organization.objects.get_or_create(
+            slug="acme-demo",
+            defaults={
+                "name": "Acme Demo",
+                "description": "Organización de demostración que agrupa los proyectos.",
+                "owner": user,
+            },
+        )
+        OrganizationMembership.objects.get_or_create(
+            organization=org, user=user, defaults={"role": "owner"},
+        )
+        for u in extra_users[:2]:
+            OrganizationMembership.objects.get_or_create(
+                organization=org, user=u, defaults={"role": "member"},
+            )
+        # Vincula el primer proyecto a la organización
+        if projects and not projects[0].organization_id:
+            projects[0].organization = org
+            projects[0].save(update_fields=["organization"])
+        self.stdout.write("  Organización: Acme Demo")
+
+    # --------------------------------------------------------------
+    #  Políticas SLA
+    # --------------------------------------------------------------
+
+    def _create_sla_policies(self, user):
+        policies = [
+            ("Críticas — respuesta 4h", 0, 4, 24, True, True, True),
+            ("Altas — respuesta 8h", 1, 8, 48, True, True, False),
+            ("Medias — respuesta 24h", 2, 24, 120, True, False, False),
+        ]
+        count = 0
+        for name, prio, resp, res, bump, no, na in policies:
+            SlaPolicy.objects.get_or_create(
+                owner=user, name=name,
+                defaults={
+                    "priority": prio,
+                    "response_hours": resp,
+                    "resolution_hours": res,
+                    "bump_priority": bump,
+                    "notify_owner": no,
+                    "notify_assignee": na,
+                },
+            )
+            count += 1
+        self.stdout.write(f"  Políticas SLA: {count}")
+
+    # --------------------------------------------------------------
+    #  Reuniones con decisiones
+    # --------------------------------------------------------------
+
+    def _create_meetings(self, user, projects, tasks, extra_users):
+        from datetime import timedelta
+        meetings = [
+            (
+                projects[0], "Sprint planning — Offline Sync",
+                timezone.now() - timedelta(days=3), 60,
+                "Revisión del scope del sprint y capacidad del equipo.",
+                "Decidido: la sync offline usa cola persistente con merge por campo; el conflicto se resuelve en cliente.\nDecidido: se pospone el delta-sync a la v2.",
+            ),
+            (
+                projects[1], "Revisión de arquitectura",
+                timezone.now() - timedelta(days=1), 45,
+                "Estado de la migración del monolito a servicios.",
+                "Decidido: se extrae primero el módulo de auth; el gateway queda para el final.\nDecidido: contratos OpenAPI obligatorios por servicio.",
+            ),
+            (
+                projects[0], "Daily — bloqueos del sprint",
+                timezone.now() + timedelta(days=1), 15,
+                "Revisión diaria: rate limiting bloqueado, asignar segundo backend.",
+                "",
+            ),
+            (
+                projects[2], "Demo con stakeholders",
+                timezone.now() + timedelta(days=4), 30,
+                "Demo del nuevo checkout y propuesta de iteración.",
+                "",
+            ),
+        ]
+        count = 0
+        for proj, title, when, mins, notes, decisions in meetings:
+            m, created = Meeting.objects.get_or_create(
+                title=title, owner=user,
+                defaults={
+                    "project": proj, "scheduled_at": when,
+                    "duration_minutes": mins, "notes": notes,
+                    "decisions": decisions,
+                },
+            )
+            if created and extra_users:
+                m.attendees.add(user, *extra_users[:2])
+            count += 1
+        self.stdout.write(f"  Reuniones: {count}")
+
+    # --------------------------------------------------------------
+    #  Enlaces de compartición públicos
+    # --------------------------------------------------------------
+
+    def _create_share_links(self, user, projects):
+        for i, proj in enumerate(projects[:2]):
+            ShareLink.objects.get_or_create(
+                project=proj, created_by=user,
+            )
+        self.stdout.write(f"  Share links: {ShareLink.objects.filter(created_by=user).count()}")
+
+    # --------------------------------------------------------------
+    #  Formularios de intake
+    # --------------------------------------------------------------
+
+    def _create_intake_forms(self, user, projects):
+        forms = [
+            (
+                projects[0], "Reporte de bug",
+                "Formulario público para reportar errores de la app.",
+                [
+                    {"name": "title", "label": "Resumen del bug", "type": "text", "required": True},
+                    {"name": "description", "label": "Pasos para reproducir", "type": "textarea", "required": True},
+                    {"name": "priority", "label": "Severidad percibida", "type": "select", "required": False,
+                     "options": ["0", "1", "2", "3"]},
+                    {"name": "device", "label": "Dispositivo", "type": "select", "required": False,
+                     "options": ["Android", "iOS"]},
+                ],
+                {"state": "backlog", "task_type": "bug"},
+            ),
+            (
+                projects[2], "Petición de cambio web",
+                "Solicitudes de cambios para el e-commerce.",
+                [
+                    {"name": "title", "label": "Qué quieres cambiar", "type": "text", "required": True},
+                    {"name": "description", "label": "Motivo y detalles", "type": "textarea", "required": True},
+                    {"name": "url", "label": "Página afectada", "type": "text", "required": False},
+                ],
+                {"state": "backlog"},
+            ),
+        ]
+        count = 0
+        for proj, name, desc, schema, defaults in forms:
+            IntakeForm.objects.get_or_create(
+                owner=user, project=proj, name=name,
+                defaults={
+                    "description": desc, "schema": schema,
+                    "task_defaults": defaults,
+                },
+            )
+            count += 1
+        self.stdout.write(f"  Intake forms: {count}")
+
+    # --------------------------------------------------------------
+    #  Pizarras
+    # --------------------------------------------------------------
+
+    def _create_whiteboards(self, user, projects):
+        wb, _ = Whiteboard.objects.get_or_create(
+            project=projects[0], owner=user, name="Mapa de arquitectura",
+            defaults={
+                "content": {
+                    "nodes": [
+                        {"id": "n1", "x": 80, "y": 80, "text": "App móvil", "color": "#1976d2", "w": 160, "h": 64},
+                        {"id": "n2", "x": 320, "y": 80, "text": "API Gateway", "color": "#7b1fa2", "w": 160, "h": 64},
+                        {"id": "n3", "x": 560, "y": 80, "text": "Backend Django", "color": "#388e3c", "w": 160, "h": 64},
+                        {"id": "n4", "x": 320, "y": 220, "text": "Cache local", "color": "#f57c00", "w": 160, "h": 64},
+                    ],
+                    "edges": [
+                        {"from": "n1", "to": "n2"},
+                        {"from": "n2", "to": "n3"},
+                        {"from": "n1", "to": "n4"},
+                    ],
+                },
+            },
+        )
+        self.stdout.write("  Pizarras: 1")
+
+    # --------------------------------------------------------------
+    #  Transiciones de workflow
+    # --------------------------------------------------------------
+
+    def _create_workflow_transitions(self, projects):
+        from apps.projects.models import WorkflowTransition
+        edges = [
+            ("backlog", "pending"),
+            ("pending", "in_progress"),
+            ("in_progress", "review"),
+            ("review", "completed"),
+            ("pending", "blocked"),
+            ("in_progress", "blocked"),
+            ("blocked", "pending"),
+            ("completed", "archived"),
+            ("pending", "cancelled"),
+        ]
+        for a, b in edges:
+            WorkflowTransition.objects.get_or_create(
+                project=projects[0], from_state=a, to_state=b,
+            )
+        self.stdout.write(
+            f"  Transiciones de workflow: "
+            f"{WorkflowTransition.objects.filter(project=projects[0]).count()}"
+        )
+
+    # --------------------------------------------------------------
+    #  Portafolios
+    # --------------------------------------------------------------
+
+    def _create_portfolios(self, user, projects):
+        p, created = Portfolio.objects.get_or_create(
+            owner=user, name="Producto 2026",
+            defaults={"color": "#7b1fa2"},
+        )
+        if created or p.projects.count() == 0:
+            p.projects.set(projects[:2])
+        self.stdout.write(
+            f"  Portafolios: {Portfolio.objects.filter(owner=user).count()}"
+        )
+
+    # --------------------------------------------------------------
+    #  Calendarios externos (iCal inbound)
+    # --------------------------------------------------------------
+
+    def _create_external_calendars(self, user):
+        from apps.collaboration.models import ExternalCalendar
+        cal, _ = ExternalCalendar.objects.get_or_create(
+            user=user, name="Calendario equipo (Google)",
+            defaults={
+                "url": "https://calendar.google.com/calendar/ical/demo/basic.ics",
+                "color": "#4caf50",
+                "last_synced_at": timezone.now(),
+            },
+        )
+        self.stdout.write(
+            f"  Calendarios externos: "
+            f"{ExternalCalendar.objects.filter(user=user).count()}"
+        )
+
+    # --------------------------------------------------------------
+    #  Wiki
+    # --------------------------------------------------------------
+
+    def _create_wiki_pages(self, user, projects):
+        from apps.wiki.models import WikiPage
+        pages = [
+            (projects[2], None, "Guía de onboarding",
+             "# Onboarding\n\nBienvenido al equipo. Pasos iniciales:\n\n- Clona el repo y ejecuta `docker compose up`\n- Lee la guía de estilo\n- Pide acceso a los entornos de staging\n"),
+            (projects[2], None, "Convenciones de código",
+             "# Convenciones\n\n- Python: black + isort, líneas de 100\n- TypeScript: prettier + eslint strict\n- Commits: conventional commits en inglés\n"),
+            (projects[1], None, "Runbook de despliegue",
+             "# Runbook\n\n1. Mergear a main\n2. CI ejecuta tests y build\n3. Deploy a staging automático\n4. Promoción manual a producción\n"),
+        ]
+        for proj, parent, title, content in pages:
+            WikiPage.objects.get_or_create(
+                title=title, owner=user,
+                defaults={"project": proj, "parent": parent,
+                          "content": content, "updated_by": user},
+            )
+        self.stdout.write(
+            f"  Páginas wiki: {WikiPage.objects.filter(owner=user).count()}"
+        )

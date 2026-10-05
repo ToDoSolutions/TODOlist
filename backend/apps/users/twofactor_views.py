@@ -45,6 +45,28 @@ def twofactor_manage(request):
         action = request.data.get("action", "setup")
 
         if action == "setup":
+            # Re-setup sobre un 2FA ya activo equivaldría a desactivarlo:
+            # exigir el segundo factor, igual que DELETE.
+            try:
+                tf_existing = user.twofactor
+            except TwoFactorSecret.DoesNotExist:
+                tf_existing = None
+            if tf_existing is not None and tf_existing.is_enabled:
+                limited = _check_2fa_rate_limit(user)
+                if limited:
+                    return limited
+                code = request.data.get("code", "")
+                if not (
+                    tf_existing.verify_totp(code)
+                    or tf_existing.use_backup_code(code)
+                ):
+                    record_2fa_failure(user)
+                    return Response(
+                        {"error": "Código inválido"},
+                        status=status.HTTP_400_BAD_REQUEST,
+                    )
+                reset_2fa_failures(user)
+
             # Generar nuevo secret
             secret = pyotp.random_base32()
             tf, created = TwoFactorSecret.objects.get_or_create(

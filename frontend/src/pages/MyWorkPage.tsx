@@ -25,11 +25,17 @@ import {
   CheckCircle2,
   CalendarPlus,
 } from "lucide-react";
-import { tasksApi, bulkOpsApi, type MyWorkTask } from "../api/resources";
+import {
+  tasksApi,
+  bulkOpsApi,
+  type DayPlan,
+  type MyWorkTask,
+} from "../api/resources";
 import { notify } from "../notify";
 import type { TaskState } from "../types";
 import { TASK_STATE_I18N_KEYS } from "../i18n/batchTaskUi";
 import PageHeader from "../components/ui/PageHeader";
+import { ErrorState } from "../components/ui/states";
 import { PageSkeleton } from "../components/ui/skeletons";
 
 function Section({
@@ -135,8 +141,9 @@ export default function MyWorkPage() {
   const dateLocale = i18n.language === "en" ? enUS : es;
   const qc = useQueryClient();
   const [postponeAnchor, setPostponeAnchor] = useState<HTMLElement | null>(null);
+  const [dayPlan, setDayPlan] = useState<DayPlan | null>(null);
 
-  const { data, isLoading, isError } = useQuery({
+  const { data, isLoading, isError, refetch } = useQuery({
     queryKey: ["my-work"],
     queryFn: tasksApi.myWork,
   });
@@ -153,8 +160,33 @@ export default function MyWorkPage() {
     onError: () => notify.error(t("p.work.myWork.postponeError")),
   });
 
+  // Time-blocking: el backend ordena las tareas abiertas en bloques
+  // consecutivos y persiste el inicio en start_date.
+  const planDayMut = useMutation({
+    mutationFn: () => tasksApi.planDay(),
+    onSuccess: (plan) => {
+      setDayPlan(plan);
+      if (plan.slots.length === 0) {
+        notify.info(t("p.work.myWork.planDayEmpty"));
+      } else {
+        notify.success(
+          t("p.work.myWork.planDayDone", { count: plan.slots.length }),
+        );
+      }
+      qc.invalidateQueries({ queryKey: ["tasks"] });
+    },
+    onError: () => notify.error(t("p.work.myWork.planDayError")),
+  });
+
   if (isError) {
-    return <Alert severity="error">{t("p.work.myWork.loadError")}</Alert>;
+    return (
+      <Box maxWidth={760} mx="auto" mt={4}>
+        <ErrorState
+          title={t("p.work.myWork.loadError")}
+          onRetry={() => void refetch()}
+        />
+      </Box>
+    );
   }
   if (isLoading) {
     return (
@@ -205,6 +237,35 @@ export default function MyWorkPage() {
         title={t("p.work.home.todayHeading")}
         description={`${todayLabel} · ${subtitle}`}
       />
+
+      <Box display="flex" justifyContent="flex-end" mb={1}>
+        <Button
+          size="small"
+          variant="outlined"
+          startIcon={<CalendarClock size={16} />}
+          onClick={() => planDayMut.mutate()}
+          disabled={planDayMut.isPending}
+        >
+          {t("p.work.myWork.planDay")}
+        </Button>
+      </Box>
+
+      {dayPlan && dayPlan.slots.length > 0 && (
+        <Paper variant="outlined" sx={{ p: 2, mb: 2 }}>
+          <Stack spacing={0.5}>
+            {dayPlan.slots.map((slot) => (
+              <Stack key={slot.id} direction="row" spacing={1.5} alignItems="center">
+                <Typography variant="caption" color="text.secondary" sx={{ minWidth: 110 }}>
+                  {format(new Date(slot.start), "HH:mm")}–{format(new Date(slot.end), "HH:mm")}
+                </Typography>
+                <Typography variant="body2" noWrap>
+                  {slot.title}
+                </Typography>
+              </Stack>
+            ))}
+          </Stack>
+        </Paper>
+      )}
 
       <Stack spacing={4}>
         <Section

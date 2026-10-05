@@ -27,8 +27,8 @@ import {
 import { Search, Download, Columns3, Trash2 } from "lucide-react";
 import Papa from "papaparse";
 import { saveAs } from "file-saver";
-import { useMutation, useQueryClient } from "@tanstack/react-query";
-import { tasksApi, bulkOpsApi, type ApiPayload } from "../api/resources";
+import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import { tasksApi, bulkOpsApi, projectsApi, type ApiPayload } from "../api/resources";
 import { notify } from "../notify";
 import { useUiStore } from "../store/uiStore";
 import { useConfirm } from "./ConfirmDialog";
@@ -55,7 +55,8 @@ type SortField =
   | "due_date"
   | "task_type"
   | "story_points"
-  | "sprint_name";
+  | "sprint_name"
+  | "project";
 type SortDir = "asc" | "desc";
 
 const COLUMNS = [
@@ -67,6 +68,7 @@ const COLUMNS = [
   { id: "size", label: "p.board.colSize", width: 70, editable: true },
   { id: "sprint_name", label: "p.board.colSprint", width: 120, editable: false },
   { id: "epic_title", label: "p.board.colEpic", width: 120, editable: false },
+  { id: "project", label: "p.board.colProject", width: 140, editable: false },
   { id: "due_date", label: "p.board.colDue", width: 110, editable: true },
 ] as const;
 
@@ -92,6 +94,28 @@ export default function TaskTableView({ tasks, onEdit }: Props) {
   const tableSize = density === "compact" ? "small" : "medium";
   const isVisible = (id: string) => !hiddenCols.includes(id);
   const visibleColumns = COLUMNS.filter((c) => c.id === "title" || isVisible(c.id));
+
+  // Nombres de proyecto para la columna "Proyecto" (caché compartida
+  // ["projects"], misma query que TaskDialog/TaskListItem).
+  const { data: projectsData } = useQuery({
+    queryKey: ["projects"],
+    queryFn: projectsApi.list,
+    enabled: isVisible("project"),
+  });
+  const projectById = useMemo(() => {
+    const map = new Map<number, string>();
+    if (Array.isArray(projectsData))
+      for (const p of projectsData as { id: number; name: string }[])
+        map.set(p.id, p.name);
+    return map;
+  }, [projectsData]);
+  const projectLabel = (task: Task) => {
+    const base = task.project
+      ? (projectById.get(task.project) ?? `#${task.project}`)
+      : "";
+    const extra = task.extra_projects?.length ?? 0;
+    return base + (extra > 0 ? ` +${extra}` : "");
+  };
 
   const bulkUpdate = useMutation({
     mutationFn: ({ ids, data }: { ids: number[]; data: ApiPayload }) =>
@@ -188,7 +212,10 @@ export default function TaskTableView({ tasks, onEdit }: Props) {
       sorted.map((task) => {
         const row: Record<string, unknown> = {};
         for (const c of visibleColumns)
-          row[t(c.label)] = (task as unknown as Record<string, unknown>)[c.id] ?? "";
+          row[t(c.label)] =
+            c.id === "project"
+              ? projectLabel(task)
+              : ((task as unknown as Record<string, unknown>)[c.id] ?? "");
         return row;
       }),
     );
@@ -204,6 +231,7 @@ export default function TaskTableView({ tasks, onEdit }: Props) {
         <TextField
           size="small"
           placeholder={t("p.board.searchPlaceholder")}
+          inputProps={{ "aria-label": t("p.board.searchPlaceholder") }}
           value={search}
           onChange={(e) => setSearch(e.target.value)}
           InputProps={{
@@ -306,7 +334,7 @@ export default function TaskTableView({ tasks, onEdit }: Props) {
         </Paper>
       )}
 
-      <TableContainer component={Paper} variant="outlined">
+      <TableContainer component={Paper} variant="outlined" sx={{ overflowX: "auto" }}>
         <Table size={tableSize} stickyHeader>
           <TableHead>
             <TableRow>
@@ -586,6 +614,31 @@ export default function TaskTableView({ tasks, onEdit }: Props) {
                       <Typography variant="body2" noWrap sx={{ maxWidth: 100 }}>
                         {task.epic_title}
                       </Typography>
+                    ) : (
+                      <Typography variant="body2" color="text.disabled">
+                        —
+                      </Typography>
+                    )}
+                  </TableCell>
+                )}
+
+                {/* Proyecto (canónico + "+N" por hogares extra) */}
+                {isVisible("project") && (
+                  <TableCell>
+                    {task.project ? (
+                      <Tooltip
+                        title={
+                          (task.extra_projects?.length ?? 0) > 0
+                            ? (task.extra_projects ?? [])
+                                .map((id) => projectById.get(id) ?? `#${id}`)
+                                .join(", ")
+                            : ""
+                        }
+                      >
+                        <Typography variant="body2" noWrap sx={{ maxWidth: 130 }}>
+                          {projectLabel(task)}
+                        </Typography>
+                      </Tooltip>
                     ) : (
                       <Typography variant="body2" color="text.disabled">
                         —

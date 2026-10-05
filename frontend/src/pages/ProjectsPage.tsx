@@ -13,10 +13,11 @@ import {
   Chip,
   IconButton,
   Tooltip,
-  Alert,
   Grid,
   MenuItem,
   CircularProgress,
+  Checkbox,
+  FormControlLabel,
 } from "@mui/material";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import {
@@ -35,6 +36,7 @@ import { projectTemplatesApi } from "../api/featOrg";
 import { HEALTH_SX_COLORS, type ProjectHealthFields } from "../api/featComp";
 import { formatDate } from "../lib/dates";
 import PageHeader from "../components/ui/PageHeader";
+import { EmptyState, ErrorState } from "../components/ui/states";
 import { CardGridSkeleton } from "../components/ui/skeletons";
 import type { Project } from "../types";
 import { notify } from "../notify";
@@ -69,11 +71,13 @@ export default function ProjectsPage() {
   const [tplForm, setTplForm] = useState({ name: "", description: "" });
   const [saveTplProject, setSaveTplProject] = useState<Project | null>(null);
   const [tplName, setTplName] = useState("");
+  const [tplPublic, setTplPublic] = useState(false);
 
   const {
     data: projects = [],
     isLoading,
     error,
+    refetch,
   } = useQuery({
     queryKey: ["projects"],
     queryFn: projectsApi.list,
@@ -127,7 +131,7 @@ export default function ProjectsPage() {
   // Se cargan solo al abrir el diálogo (lista corta, incluye builtin).
   const { data: templates = [] } = useQuery({
     queryKey: ["project-templates"],
-    queryFn: projectTemplatesApi.list,
+    queryFn: () => projectTemplatesApi.list(),
     enabled: tplDialogOpen,
   });
   const selectedTpl = templates.find((tpl) => tpl.id === tplId);
@@ -154,12 +158,29 @@ export default function ProjectsPage() {
       projectTemplatesApi.fromProject({
         project_id: saveTplProject!.id,
         name: tplName,
+        public: tplPublic,
       }),
     onSuccess: () => {
       notify.success(t("p.org.templates.saved"));
       qc.invalidateQueries({ queryKey: ["project-templates"] });
       setSaveTplProject(null);
       setTplName("");
+      setTplPublic(false);
+    },
+    onError: () => notify.error(t("p.org.templates.saveError")),
+  });
+
+  // Publicar/retirar del catálogo comunitario (solo plantillas propias)
+  const publishTplMut = useMutation({
+    mutationFn: ({ id, isPublic }: { id: number; isPublic: boolean }) =>
+      projectTemplatesApi.update(id, { is_public: isPublic }),
+    onSuccess: (_r, v) => {
+      notify.success(
+        v.isPublic
+          ? t("p.org.templates.published")
+          : t("p.org.templates.unpublished"),
+      );
+      qc.invalidateQueries({ queryKey: ["project-templates"] });
     },
     onError: () => notify.error(t("p.org.templates.saveError")),
   });
@@ -206,13 +227,29 @@ export default function ProjectsPage() {
       {isLoading && <CardGridSkeleton cards={6} />}
 
       {error && !isLoading && (
-        <Alert severity="error" sx={{ mb: 2 }}>
-          {t("p.misc.projects.loadError")}
-        </Alert>
+        <ErrorState
+          title={t("p.misc.projects.loadError")}
+          onRetry={() => void refetch()}
+        />
       )}
 
       {!isLoading && projects.length === 0 && !error && (
-        <Alert severity="info">{t("p.misc.projects.empty")}</Alert>
+        <EmptyState
+          title={t("p.misc.projects.emptyTitle")}
+          description={t("p.misc.projects.empty")}
+          action={
+            <Button
+              variant="contained"
+              startIcon={<Plus size={18} />}
+              onClick={() => {
+                setForm(emptyForm);
+                setDialogOpen(true);
+              }}
+            >
+              {t("p.misc.projects.new")}
+            </Button>
+          }
+        />
       )}
 
       {!isLoading && projects.length > 0 && (
@@ -252,7 +289,18 @@ export default function ProjectsPage() {
                         alignItems="center"
                         justifyContent="space-between"
                       >
-                        <Typography variant="h6" noWrap sx={{ fontWeight: 600 }}>
+                        <Typography
+                          variant="h6"
+                          title={project.name}
+                          sx={{
+                            fontWeight: 600,
+                            display: "-webkit-box",
+                            WebkitBoxOrient: "vertical",
+                            WebkitLineClamp: 2,
+                            overflow: "hidden",
+                            lineHeight: 1.25,
+                          }}
+                        >
                           {project.name}
                         </Typography>
                         <Stack
@@ -603,6 +651,14 @@ export default function ProjectsPage() {
                         label={t("p.org.templates.builtin")}
                       />
                     )}
+                    {tpl.is_public && !tpl.is_builtin && !tpl.is_mine && (
+                      <Chip
+                        size="small"
+                        color="secondary"
+                        variant="outlined"
+                        label={t("p.org.templates.community")}
+                      />
+                    )}
                     <Chip
                       size="small"
                       variant="outlined"
@@ -618,6 +674,30 @@ export default function ProjectsPage() {
               <Typography variant="body2" color="text.secondary">
                 {selectedTpl.description}
               </Typography>
+            )}
+            {selectedTpl && (selectedTpl.author || (selectedTpl.use_count ?? 0) > 0) && (
+              <Typography variant="caption" color="text.secondary">
+                {selectedTpl.author && `${selectedTpl.author} · `}
+                {(selectedTpl.use_count ?? 0) > 0 &&
+                  t("p.org.templates.uses", { count: selectedTpl.use_count })}
+              </Typography>
+            )}
+            {selectedTpl?.is_mine && !selectedTpl.is_builtin && (
+              <FormControlLabel
+                control={
+                  <Checkbox
+                    checked={!!selectedTpl.is_public}
+                    onChange={(e) =>
+                      publishTplMut.mutate({
+                        id: selectedTpl.id,
+                        isPublic: e.target.checked,
+                      })
+                    }
+                    size="small"
+                  />
+                }
+                label={t("p.org.templates.publish")}
+              />
             )}
             {selectedTpl && (selectedTpl.config?.tasks?.length ?? 0) > 0 && (
               <Box>
@@ -685,6 +765,23 @@ export default function ProjectsPage() {
               onChange={(e) => setTplName(e.target.value)}
               fullWidth
               autoFocus
+            />
+            <FormControlLabel
+              control={
+                <Checkbox
+                  checked={tplPublic}
+                  onChange={(e) => setTplPublic(e.target.checked)}
+                  size="small"
+                />
+              }
+              label={
+                <>
+                  {t("p.org.templates.publish")}
+                  <Typography variant="caption" display="block" color="text.secondary">
+                    {t("p.org.templates.publishHint")}
+                  </Typography>
+                </>
+              }
             />
           </Stack>
         </DialogContent>

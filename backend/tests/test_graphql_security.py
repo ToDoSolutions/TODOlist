@@ -431,3 +431,83 @@ class TestIsolation:
             context=_ctx(self.user),
         )
         assert len(r.data["allSprints"]) == 1
+
+
+@pytest.mark.django_db
+class TestUserTypeRestriction:
+    """El tipo User solo expone campos públicos (paridad REST).
+
+    Sin un UserType registrado, graphene-django autogenera uno con TODOS
+    los campos del modelo: password hash, ical_token, inbound_email_token
+    y scim_* serían consultables por cualquier usuario autenticado.
+    """
+
+    def _task(self, user):
+        project, _ = Project.objects.get_or_create(owner=user, name="PU")
+        task, _ = Task.objects.get_or_create(
+            owner=user, project=project, title="TT"
+        )
+        return task
+
+    def test_owner_no_expone_password(self, gql_user):
+        task = self._task(gql_user)
+        r = schema.execute(
+            f'{{ task(id: {task.id}) {{ owner {{ password }} }} }}',
+            context=_ctx(gql_user),
+        )
+        assert r.errors
+
+    def test_owner_no_expone_tokens(self, gql_user):
+        task = self._task(gql_user)
+        query = (
+            "{ task(id: %d) { owner { icalToken inboundEmailToken "
+            "scimExternalId } } }"
+        ) % task.id
+        r = schema.execute(query, context=_ctx(gql_user))
+        assert r.errors
+
+    def test_owner_expone_campos_publicos(self, gql_user):
+        task = self._task(gql_user)
+        query = (
+            "{ task(id: %d) { owner { id username email "
+            "firstName lastName } } }"
+        ) % task.id
+        r = schema.execute(query, context=_ctx(gql_user))
+        assert not r.errors
+        assert r.data["task"]["owner"]["email"] == gql_user.email
+
+
+@pytest.mark.django_db
+class TestListLimits:
+    """Las listas GraphQL están acotadas (REST pagina; GraphQL no)."""
+
+    def test_all_tasks_respeta_limit(self, gql_user):
+        project, _ = Project.objects.get_or_create(owner=gql_user, name="PL")
+        for i in range(3):
+            Task.objects.get_or_create(
+                owner=gql_user, project=project, title=f"T{i}"
+            )
+        r = schema.execute(
+            "{ allTasks(limit: 2) { id } }", context=_ctx(gql_user)
+        )
+        assert not r.errors
+        assert len(r.data["allTasks"]) == 2
+
+    def test_all_tags_respeta_limit(self, gql_user):
+        for i in range(3):
+            Tag.objects.get_or_create(owner=gql_user, name=f"t{i}")
+        r = schema.execute(
+            "{ allTags(limit: 1) { id } }", context=_ctx(gql_user)
+        )
+        assert len(r.data["allTags"]) == 1
+
+    def test_cap_limit_unidad(self):
+        from apps.graphql_app.schema import (
+            DEFAULT_LIST_LIMIT,
+            MAX_LIST_LIMIT,
+            _cap_limit,
+        )
+        assert _cap_limit(None) == DEFAULT_LIST_LIMIT
+        assert _cap_limit(10) == 10
+        assert _cap_limit(99999) == MAX_LIST_LIMIT
+        assert _cap_limit(-5) == 0

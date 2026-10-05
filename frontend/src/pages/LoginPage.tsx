@@ -31,6 +31,7 @@ import { useNavigate, Link as RouterLink, useLocation } from "react-router-dom";
 import { useAuth } from "../auth/AuthContext";
 import { notify } from "../notify";
 import { githubApi, type ApiError } from "../api/resources";
+import { apiErrorText } from "../lib/apiError";
 import { ssoApi, type SsoProvider } from "../api/featEnt";
 import { useState, useEffect } from "react";
 import { motion } from "framer-motion";
@@ -109,8 +110,7 @@ export default function LoginPage() {
       }
       const msg =
         err.response?.data?.totp_code ||
-        err.response?.data?.detail ||
-        t("p.auth.errors.loginFailed");
+        apiErrorText(err, t, "p.auth.errors.loginFailed");
       setServerError(typeof msg === "string" ? msg : t("p.auth.errors.invalid2fa"));
       notify.error(typeof msg === "string" ? msg : t("p.auth.errors.invalid2fa"));
     }
@@ -124,7 +124,7 @@ export default function LoginPage() {
       window.location.href = auth_url;
     } catch (e) {
       const err = e as ApiError;
-      const msg = err.response?.data?.error || t("p.auth.errors.githubConnect");
+      const msg = apiErrorText(e, t, "p.auth.errors.githubConnect");
       setServerError(msg);
       notify.error(msg);
       setGithubLoading(false);

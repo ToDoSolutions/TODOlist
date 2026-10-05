@@ -1,5 +1,6 @@
-import { useState } from "react";
+﻿import { useState } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
+import { TableSkeleton } from "../components/ui/skeletons";
 import {
   Box,
   Typography,
@@ -12,8 +13,6 @@ import {
   DialogTitle,
   DialogContent,
   DialogActions,
-  CircularProgress,
-  Alert,
   useTheme,
 } from "@mui/material";
 import { Plus, Trash2, Tag as TagIcon } from "lucide-react";
@@ -22,6 +21,8 @@ import { tagsApi } from "../api/resources";
 import { Tag } from "../types";
 import { notify } from "../notify";
 import { useConfirm } from "../components/ConfirmDialog";
+import PageHeader from "../components/ui/PageHeader";
+import { ErrorState } from "../components/ui/states";
 
 export default function TagsPage() {
   const { t } = useTranslation();
@@ -37,6 +38,7 @@ export default function TagsPage() {
     data: tagsData,
     isLoading,
     isError,
+    refetch,
   } = useQuery({
     queryKey: ["tags"],
     queryFn: tagsApi.list,
@@ -94,24 +96,23 @@ export default function TagsPage() {
 
   return (
     <Box>
-      <Stack direction="row" alignItems="center" justifyContent="space-between" mb={2}>
-        <Typography variant="h5" fontWeight={700}>
-          {t("p.ops.tags.title")}
-        </Typography>
-        <Button variant="contained" startIcon={<Plus size={18} />} onClick={openNew}>
-          {t("p.ops.tags.new")}
-        </Button>
-      </Stack>
+      <PageHeader
+        title={t("p.ops.tags.title")}
+        actions={
+          <Button variant="contained" startIcon={<Plus size={18} />} onClick={openNew}>
+            {t("p.ops.tags.new")}
+          </Button>
+        }
+      />
 
       {isError && (
-        <Alert severity="error" sx={{ mb: 2 }}>
-          {t("p.ops.tags.loadError")}
-        </Alert>
+        <ErrorState
+          title={t("p.ops.tags.loadError")}
+          onRetry={() => void refetch()}
+        />
       )}
       {isLoading ? (
-        <Box display="flex" justifyContent="center" py={6}>
-          <CircularProgress />
-        </Box>
+        <TableSkeleton />
       ) : tags.length === 0 ? (
         <Paper variant="outlined" sx={{ p: 6, textAlign: "center" }}>
           <TagIcon size={32} style={{ color: theme.palette.divider }} />
@@ -128,7 +129,11 @@ export default function TagsPage() {
                 label={tag.name}
                 sx={{ bgcolor: tag.color, color: "common.white", m: 0.5, pr: 0.5 }}
                 onDelete={async () => {
-                  if (await confirm(t("p.ops.tags.confirmDelete", { name: tag.name })))
+                  if (
+                        await confirm(t("p.ops.tags.confirmDelete", { name: tag.name }), {
+                          confirmLabel: t("common.delete"),
+                        })
+                      )
                     removeMut.mutate(tag.id);
                 }}
                 onClick={() => openEdit(tag)}

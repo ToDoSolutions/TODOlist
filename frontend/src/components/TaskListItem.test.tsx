@@ -14,6 +14,7 @@ vi.mock("../api/resources", () => ({
     activities: vi.fn().mockResolvedValue([]),
   },
   sprintsApi: { list: vi.fn().mockResolvedValue({ results: [] }) },
+  projectsApi: { list: vi.fn().mockResolvedValue({ results: [] }) },
 }));
 vi.mock("../notify", () => ({ notify: vi.fn() }));
 

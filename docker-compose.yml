@@ -1,3 +1,41 @@
+# Env compartido backend/worker/beat — el Dockerfile sirve daphne
+# (HTTP+WS); las migraciones las aplica `backend` antes de levantar.
+x-backend-env: &backend-env
+  DJANGO_SETTINGS_MODULE: config.settings
+  DJANGO_DEBUG: ${DJANGO_DEBUG:-1}
+  DJANGO_SECRET_KEY: ${DJANGO_SECRET_KEY:-dev-insecure-change-me}
+  DJANGO_ALLOWED_HOSTS: localhost,127.0.0.1,backend
+  DJANGO_CORS_ALLOW_ALL: ${DJANGO_CORS_ALLOW_ALL:-1}
+  DJANGO_FRONTEND_URL: ${DJANGO_FRONTEND_URL:-http://localhost:5173}
+  POSTGRES_DB: ${POSTGRES_DB:-todolist}
+  POSTGRES_USER: ${POSTGRES_USER:-todolist}
+  POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-todolist}
+  POSTGRES_HOST: db
+  POSTGRES_PORT: 5432
+  REDIS_HOST: redis
+  REDIS_PORT: 6379
+  # Worker/beat heredan lo necesario de sus tareas: digests por email,
+  # Web Push, sync de GitHub y cifrado de datos.
+  DATA_ENCRYPTION_KEYS: ${DATA_ENCRYPTION_KEYS:-dev-key-1-change-me}
+  # Los defaults NO pueden ser "" — os.getenv no aplica su default con
+  # la var definida (EMAIL_BACKEND="" rompe el envío, int("") en PORT).
+  EMAIL_BACKEND: ${EMAIL_BACKEND:-django.core.mail.backends.console.EmailBackend}
+  EMAIL_HOST: ${EMAIL_HOST:-}
+  EMAIL_PORT: ${EMAIL_PORT:-25}
+  EMAIL_HOST_USER: ${EMAIL_HOST_USER:-}
+  EMAIL_HOST_PASSWORD: ${EMAIL_HOST_PASSWORD:-}
+  EMAIL_USE_TLS: ${EMAIL_USE_TLS:-}
+  EMAIL_NOTIFICATIONS_ENABLED: ${EMAIL_NOTIFICATIONS_ENABLED:-0}
+  VAPID_PUBLIC_KEY: ${VAPID_PUBLIC_KEY:-}
+  VAPID_PRIVATE_KEY: ${VAPID_PRIVATE_KEY:-}
+  VAPID_CLAIMS_SUBJECT: ${VAPID_CLAIMS_SUBJECT:-mailto:admin@todolist.local}
+  GITHUB_APP_ID: ${GITHUB_APP_ID:-}
+  GITHUB_APP_PRIVATE_KEY: ${GITHUB_APP_PRIVATE_KEY:-}
+  GITHUB_APP_CLIENT_ID: ${GITHUB_APP_CLIENT_ID:-}
+  GITHUB_APP_CLIENT_SECRET: ${GITHUB_APP_CLIENT_SECRET:-}
+  GITHUB_APP_WEBHOOK_SECRET: ${GITHUB_APP_WEBHOOK_SECRET:-}
+  GITHUB_APP_NAME: ${GITHUB_APP_NAME:-}
+
 services:
   db:
     image: postgres:16-alpine
@@ -9,7 +47,8 @@ services:
     volumes:
       - postgres_data:/var/lib/postgresql/data
     ports:
-      - "5432:5432"
+      # Solo localhost: accesible para tooling del host, no expuesto a la LAN.
+      - "127.0.0.1:5432:5432"
     healthcheck:
       test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-todolist}"]
       interval: 5s
@@ -20,7 +59,7 @@ services:
     image: redis:7-alpine
     container_name: todolist_redis
     ports:
-      - "6379:6379"
+      - "127.0.0.1:6379:6379"
     healthcheck:
       test: ["CMD", "redis-cli", "ping"]
       interval: 5s
@@ -30,23 +69,14 @@ services:
   backend:
     build: ./backend
     container_name: todolist_backend
-    command: sh -c "python manage.py migrate &&
-                    python manage.py seed_dev &&
-                    python manage.py runserver 0.0.0.0:8000"
+    # runserver de Channels sirve HTTP y WebSockets en dev.
+    # SEED_DEV=1 (env del compose) carga los datos de demo; por defecto off.
+    command: sh -c "python manage.py migrate || exit 1;
+                    [ \"$${SEED_DEV:-0}\" = \"1\" ] && python manage.py seed_dev || true;
+                    exec python manage.py runserver 0.0.0.0:8000"
     environment:
-      DJANGO_SETTINGS_MODULE: config.settings
-      DJANGO_DEBUG: ${DJANGO_DEBUG:-1}
-      DJANGO_SECRET_KEY: ${DJANGO_SECRET_KEY:-dev-insecure-change-me}
-      DJANGO_ALLOWED_HOSTS: localhost,127.0.0.1,backend
-      DJANGO_CORS_ALLOW_ALL: ${DJANGO_CORS_ALLOW_ALL:-1}
-      DJANGO_FRONTEND_URL: ${DJANGO_FRONTEND_URL:-http://localhost:5173}
-      POSTGRES_DB: ${POSTGRES_DB:-todolist}
-      POSTGRES_USER: ${POSTGRES_USER:-todolist}
-      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-todolist}
-      POSTGRES_HOST: db
-      POSTGRES_PORT: 5432
-      REDIS_HOST: redis
-      REDIS_PORT: 6379
+      <<: *backend-env
+      SEED_DEV: ${SEED_DEV:-0}
     volumes:
       - ./backend:/app
     ports:
@@ -57,8 +87,36 @@ services:
       redis:
         condition: service_healthy
 
+  celery:
+    build: ./backend
+    container_name: todolist_celery
+    # Sin worker los comandos del beat se encolan y nadie los ejecuta:
+    # recurrencia, recordatorios, outbox, sync de GitHub, digests.
+    command: celery -A config worker -l info
+    environment: *backend-env
+    volumes:
+      - ./backend:/app
+    depends_on:
+      backend:
+        condition: service_started
+      redis:
+        condition: service_healthy
+
+  celery-beat:
+    build: ./backend
+    container_name: todolist_celery_beat
+    command: celery -A config beat -l info
+    environment: *backend-env
+    volumes:
+      - ./backend:/app
+    depends_on:
+      celery:
+        condition: service_started
+
   frontend:
-    build: ./frontend
+    build:
+      context: ./frontend
+      dockerfile: Dockerfile.dev
     container_name: todolist_frontend
     command: npm run dev -- --host 0.0.0.0
     environment:

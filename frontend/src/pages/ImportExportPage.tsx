@@ -624,7 +624,7 @@ export default function ImportExportPage() {
       )}
 
       {step === 2 && (
-        <Paper variant="outlined" sx={{ p: 3 }}>
+        <Paper variant="outlined" sx={{ p: 3, overflowX: "auto" }}>
           <Stack direction="row" alignItems="center" spacing={1} mb={2}>
             <Typography variant="subtitle1" fontWeight={700}>
               {t("p.public.import.previewRows", {

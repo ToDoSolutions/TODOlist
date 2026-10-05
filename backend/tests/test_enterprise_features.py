@@ -300,6 +300,29 @@ class TestMeetings:
         detail = c.get(f"/api/meetings/{mid}/").json()
         assert len(detail["tasks_ids"]) == 1
 
+    def test_viewer_no_crea_task_desde_meeting(self, authed_client):
+        """Un viewer del proyecto puede leer la reunión pero no inyectar
+        tareas en el proyecto a través de ella."""
+        c = authed_client
+        p = Project.objects.create(owner=_me(), name="Con viewers")
+        mid = c.post("/api/meetings/", {
+            "title": "M", "scheduled_at": timezone.now().isoformat(),
+            "project": p.id,
+        }).json()["id"]
+        viewer = User.objects.create_user(
+            username="mt_v", email="mt_v@x.com", password="x" * 20)
+        from apps.collaboration.models import ProjectMember
+        ProjectMember.objects.create(project=p, user=viewer, role="viewer")
+        from rest_framework.test import APIClient
+        from rest_framework_simplejwt.tokens import RefreshToken
+        c2 = APIClient()
+        c2.credentials(
+            HTTP_AUTHORIZATION=f"Bearer {RefreshToken.for_user(viewer).access_token}")
+        # Lectura OK, pero create_task exige escritura en el proyecto
+        assert c2.get(f"/api/meetings/{mid}/").status_code == 200
+        resp = c2.post(f"/api/meetings/{mid}/create_task/", {"title": "x"})
+        assert resp.status_code == 403
+
     def test_meeting_aislamiento(self, authed_client):
         c = authed_client
         c.post("/api/meetings/", {
@@ -350,6 +373,31 @@ class TestIntakeForms:
         assert task.task_type == "bug"
         assert task.tags.filter(name="intake").exists()
         assert "Urgencia" in task.description
+        # Paridad REST: seq de proyecto asignado y position > 0
+        assert task.seq == 1
+        assert task.position >= 1
+
+    def test_submit_extra_projects_defaults(self, authed_client):
+        """task_defaults.extra_projects homea la tarea si el owner tiene
+        escritura allí; el canónico y proyectos ajenos se descartan."""
+        c = authed_client
+        u = _me()
+        p = self._project()
+        extra = Project.objects.create(owner=u, name="Triaje")
+        ajeno = Project.objects.create(
+            owner=User.objects.create_user(
+                username="int_o", email="int_o@x.com", password="x" * 20),
+            name="Ajeno",
+        )
+        payload = self._form(p)
+        payload["task_defaults"]["extra_projects"] = [extra.id, ajeno.id, p.id]
+        fid = c.post("/api/intake-forms/", payload, format="json").json()["id"]
+        resp = c.post(f"/api/intake-forms/{fid}/submit/", {
+            "data": {"title": "Bug", "urgencia": "alta"},
+        }, format="json")
+        assert resp.status_code == 201
+        task = Task.objects.get(id=resp.json()["task_id"])
+        assert list(task.extra_projects.values_list("id", flat=True)) == [extra.id]
 
     def test_submit_valida_required(self, authed_client):
         c = authed_client

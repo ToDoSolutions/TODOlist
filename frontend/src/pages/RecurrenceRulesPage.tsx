@@ -1,7 +1,8 @@
-import { formatDate } from "../lib/dates";
+﻿import { formatDate } from "../lib/dates";
 import { useMemo, useState } from "react";
 import { RRule } from "rrule";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
+import { TableSkeleton } from "../components/ui/skeletons";
 import {
   Box,
   Typography,
@@ -30,6 +31,8 @@ import { recurrenceRulesApi } from "../api/resources";
 import type { RecurrenceRuleItem } from "../types";
 import { notify } from "../notify";
 import { useConfirm } from "../components/ConfirmDialog";
+import PageHeader from "../components/ui/PageHeader";
+import { ErrorState } from "../components/ui/states";
 
 // Preview de próximas fechas según frecuencia elegida (module-level:
 // constante, no depende del render)
@@ -55,7 +58,7 @@ export default function RecurrenceRulesPage() {
   const [frequency, setFrequency] = useState("weekly");
   const [interval, setInterval] = useState(1);
 
-  const { data, isLoading, isError } = useQuery({
+  const { data, isLoading, isError, refetch } = useQuery({
     queryKey: ["recurrence-rules"],
     queryFn: recurrenceRulesApi.list,
   });
@@ -90,33 +93,31 @@ export default function RecurrenceRulesPage() {
     },
   });
 
-  if (isLoading) return <CircularProgress />;
+  if (isLoading) return <TableSkeleton />;
   if (isError)
     return (
-      <Alert severity="error" sx={{ mt: 2 }}>
-        {t("p.ops.recurrence.loadError")}
-      </Alert>
+      <Box maxWidth={900} mx="auto" mt={4}>
+        <ErrorState
+          title={t("p.ops.recurrence.loadError")}
+          onRetry={() => void refetch()}
+        />
+      </Box>
     );
 
   return (
     <Box>
-      <Box
-        sx={{
-          display: "flex",
-          justifyContent: "space-between",
-          alignItems: "center",
-          mb: 2,
-        }}
-      >
-        <Typography variant="h5">{t("p.ops.recurrence.title")}</Typography>
-        <Button
-          variant="contained"
-          startIcon={<Plus size={16} />}
-          onClick={() => setOpen(true)}
-        >
-          {t("p.ops.recurrence.new")}
-        </Button>
-      </Box>
+      <PageHeader
+        title={t("p.ops.recurrence.title")}
+        actions={
+          <Button
+            variant="contained"
+            startIcon={<Plus size={16} />}
+            onClick={() => setOpen(true)}
+          >
+            {t("p.ops.recurrence.new")}
+          </Button>
+        }
+      />
 
       <TableContainer component={Paper}>
         <Table size="small">
@@ -151,7 +152,11 @@ export default function RecurrenceRulesPage() {
                     size="small"
                     color="error"
                     onClick={async () => {
-                      if (await confirm(t("p.ops.recurrence.confirmDelete")))
+                      if (
+                        await confirm(t("p.ops.recurrence.confirmDelete"), {
+                          confirmLabel: t("common.delete"),
+                        })
+                      )
                         deleteMutation.mutate(r.id);
                     }}
                     title={t("common.delete")}

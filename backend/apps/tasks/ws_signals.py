@@ -15,8 +15,26 @@ logger = logging.getLogger(__name__)
 
 
 def _task_recipients(task):
-    """Usuarios a notificar: owner + miembros del proyecto."""
-    ids = {task.owner_id}
+    """Usuarios a notificar vía WS: owner + assignee(s) + watchers +
+    miembros (y org) de los proyectos donde la tarea vive."""
+    ids = {task.owner_id, task.assignee_id}
+    try:
+        ids.update(task.assignees.values_list("id", flat=True))
+        ids.update(task.watchers.values_list("id", flat=True))
+    except ValueError:
+        pass  # instancia sin pk persistida
+
+    def _members_of(project):
+        """Miembros directos + miembros de la organización del proyecto
+        (for_user incluye org; sin esto no recibían push)."""
+        ids.update(project.members.values_list("user_id", flat=True))
+        if project.organization_id:
+            ids.update(
+                project.organization.memberships.values_list(
+                    "user_id", flat=True
+                )
+            )
+
     if task.project_id:
         # En cascade delete del proyecto, task.project ya no existe en BD:
         # el descriptor haría un query que lanza Project.DoesNotExist.
@@ -26,7 +44,22 @@ def _task_recipients(task):
         except Project.DoesNotExist:
             project = None
         if project is not None:
-            ids.update(project.members.values_list("user_id", flat=True))
+            _members_of(project)
+    # Multi-homing: miembros (directos y de org) de hogares extra — dos
+    # queries sobre la tabla M2M, sin N+1 por proyecto.
+    try:
+        through = task.extra_projects.through.objects.filter(task=task)
+        ids.update(
+            through.values_list("project__members__user_id", flat=True)
+        )
+        ids.update(
+            through.values_list(
+                "project__organization__memberships__user_id", flat=True
+            )
+        )
+    except Exception:  # post_delete: la M2M puede estar ya purgada
+        logger.debug("extra_projects recipients failed", exc_info=True)
+    ids.discard(None)
     return ids
 
 

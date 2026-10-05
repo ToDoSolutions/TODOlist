@@ -176,7 +176,10 @@ def get_capacity_data(user):
     projects = accessible_projects(user).filter(is_archived=False)
     capacity = []
     for p in projects:
-        tasks = Task.objects.filter(project=p)
+        # Multi-homing: incluye las tareas homeadas en el proyecto
+        tasks = Task.objects.filter(
+            Q(project=p) | Q(extra_projects=p)
+        ).distinct()
         open_tasks = tasks.exclude(state__in=["completed", "cancelled", "archived"])
         total_points = open_tasks.aggregate(Sum("story_points"))["story_points__sum"] or 0
         capacity.append({

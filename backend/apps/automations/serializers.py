@@ -65,6 +65,24 @@ class AutomationRuleSerializer(serializers.ModelSerializer):
             raise serializers.ValidationError(
                 {"action_params": "sprint_id requerido"}
             )
+        elif action == AutomationRule.Action.CALL_WEBHOOK:
+            url = str(params.get("url", "")).strip()
+            if not url:
+                raise serializers.ValidationError(
+                    {"action_params": "call_webhook requiere 'url'"}
+                )
+            from urllib.parse import urlparse
+            parsed = urlparse(url)
+            if parsed.scheme not in ("http", "https") or not parsed.netloc:
+                raise serializers.ValidationError(
+                    {"action_params": "url inválida (solo http/https)"}
+                )
+            # SSRF: misma política que los webhooks salientes
+            from apps.integrations_chat.services import _is_safe_url
+            if not _is_safe_url(url):
+                raise serializers.ValidationError(
+                    {"action_params": "url no permitida (destino interno)"}
+                )
         return data
 
 

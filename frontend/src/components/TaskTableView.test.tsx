@@ -8,6 +8,8 @@ import type { Task } from "../types";
 
 vi.mock("../api/resources", () => ({
   tasksApi: { update: vi.fn() },
+  bulkOpsApi: { update: vi.fn(), delete: vi.fn() },
+  projectsApi: { list: vi.fn().mockResolvedValue({ results: [] }) },
 }));
 vi.mock("../notify", () => ({ notify: vi.fn() }));
 

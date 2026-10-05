@@ -41,17 +41,21 @@ import {
   Pencil,
   Eye,
   Folder,
+  BarChart3,
 } from "lucide-react";
 import { useNavigate } from "react-router-dom";
 import { useTranslation } from "react-i18next";
-import { sprintsApi, projectsApi, type Sprint } from "../api/resources";
+import { sprintsApi, projectsApi, type Sprint, type SprintMetrics } from "../api/resources";
 import { sprintCloseApi, type MoveIncompleteTo } from "../api/featSect";
 import { DateField } from "../components/DateField";
+import { EmptyState, ErrorState } from "../components/ui/states";
+import { formatDate as fmtDate } from "../lib/dates";
 import type { Task, Project } from "../types";
 import { PRIORITY_LABELS, TaskState } from "../types";
 import { TASK_STATE_I18N_KEYS } from "../i18n/batchTaskUi";
 import { notify } from "../notify";
 import { useConfirm } from "../components/ConfirmDialog";
+import PageHeader from "../components/ui/PageHeader";
 import { useProject } from "../auth/ProjectContext";
 
 function formatDate(d: Date) {
@@ -73,6 +77,7 @@ export default function SprintsPage() {
   const [nextSprintId, setNextSprintId] = useState<number | "">("");
   const [editDialog, setEditDialog] = useState<Sprint | null>(null);
   const [viewTasksSprint, setViewTasksSprint] = useState<Sprint | null>(null);
+  const [metricsSprint, setMetricsSprint] = useState<Sprint | null>(null);
   const [editForm, setEditForm] = useState(() => ({
     name: "",
     goal: "",
@@ -114,6 +119,16 @@ export default function SprintsPage() {
     queryFn: () => sprintsApi.getTasks(closeDialog!.id),
     enabled: !!closeDialog,
   });
+  const {
+    data: sprintMetrics,
+    isLoading: isLoadingMetrics,
+    refetch: refetchMetrics,
+  } = useQuery({
+    queryKey: ["sprint-metrics", metricsSprint?.id],
+    queryFn: () => sprintsApi.getMetrics(metricsSprint!.id),
+    enabled: !!metricsSprint,
+  });
+
   const incompleteCount = closingTasks.filter(
     (task: Task) =>
       task.state !== "completed" &&
@@ -233,23 +248,35 @@ export default function SprintsPage() {
 
   return (
     <Box maxWidth={900} mx="auto">
-      <Stack direction="row" justifyContent="space-between" alignItems="center" mb={3}>
-        <Typography variant="h5" fontWeight={700}>
-          {t("nav.sprints")}
-        </Typography>
-        <Button
-          variant="contained"
-          startIcon={<Plus size={18} />}
-          onClick={() => setDialogOpen(true)}
-        >
-          {t("p.shell.newSprint")}
-        </Button>
-      </Stack>
+      <PageHeader
+        title={t("nav.sprints")}
+        actions={
+          <Button
+            variant="contained"
+            startIcon={<Plus size={18} />}
+            onClick={() => setDialogOpen(true)}
+          >
+            {t("p.shell.newSprint")}
+          </Button>
+        }
+      />
 
       {isLoading && <LinearProgress />}
 
       {sprints.length === 0 && !isLoading && (
-        <Alert severity="info">{t("p.plan.sprints.empty")}</Alert>
+        <EmptyState
+          title={t("p.plan.sprints.emptyTitle")}
+          description={t("p.plan.sprints.empty")}
+          action={
+            <Button
+              variant="contained"
+              startIcon={<Plus size={18} />}
+              onClick={() => setDialogOpen(true)}
+            >
+              {t("p.shell.newSprint")}
+            </Button>
+          }
+        />
       )}
 
       <Stack spacing={2}>
@@ -276,7 +303,7 @@ export default function SprintsPage() {
                     />
                     <Chip
                       icon={<Calendar size={14} />}
-                      label={`${sprint.start_date} → ${sprint.end_date}`}
+                      label={`${fmtDate(sprint.start_date)} → ${fmtDate(sprint.end_date)}`}
                       size="small"
                       variant="outlined"
                     />
@@ -319,6 +346,11 @@ export default function SprintsPage() {
                     <Tooltip title={t("p.plan.epics.viewTasks")}>
                       <IconButton size="small" onClick={() => setViewTasksSprint(sprint)}>
                         <Eye size={16} />
+                      </IconButton>
+                    </Tooltip>
+                    <Tooltip title={t("p.plan.sprints.metrics")}>
+                      <IconButton size="small" onClick={() => setMetricsSprint(sprint)}>
+                        <BarChart3 size={16} />
                       </IconButton>
                     </Tooltip>
                     <Tooltip title={t("common.edit")}>
@@ -489,7 +521,7 @@ export default function SprintsPage() {
                     >
                       {closeTargets.map((s) => (
                         <MenuItem key={s.id} value={s.id}>
-                          {s.name} ({s.start_date} → {s.end_date})
+                          {s.name} ({fmtDate(s.start_date)} → {fmtDate(s.end_date)})
                         </MenuItem>
                       ))}
                     </Select>
@@ -605,6 +637,100 @@ export default function SprintsPage() {
           <Button onClick={() => setViewTasksSprint(null)}>{t("common.close")}</Button>
         </DialogActions>
       </Dialog>
+
+      {/* Dialog métricas del sprint (GET /sprints/{id}/metrics/):
+          conteos por estado, story points y scope creep */}
+      <Dialog
+        open={!!metricsSprint}
+        onClose={() => setMetricsSprint(null)}
+        maxWidth="sm"
+        fullWidth
+      >
+        <DialogTitle>
+          {t("p.plan.sprints.metricsTitle", { name: metricsSprint?.name })}
+        </DialogTitle>
+        <DialogContent>
+          {isLoadingMetrics ? (
+            <Stack alignItems="center" sx={{ py: 3 }}>
+              <CircularProgress size={32} />
+            </Stack>
+          ) : !sprintMetrics ? (
+            <ErrorState
+              title={t("p.plan.sprints.metricsError")}
+              onRetry={() => void refetchMetrics()}
+            />
+          ) : (
+            <MetricsBody m={sprintMetrics} />
+          )}
+        </DialogContent>
+        <DialogActions>
+          <Button onClick={() => setMetricsSprint(null)}>{t("common.close")}</Button>
+        </DialogActions>
+      </Dialog>
     </Box>
+  );
+}
+
+function MetricsBody({ m }: { m: SprintMetrics }) {
+  const { t } = useTranslation();
+  return (
+    <Stack spacing={2} sx={{ mt: 0.5 }}>
+      <Box>
+        <Stack direction="row" justifyContent="space-between" mb={0.5}>
+          <Typography variant="body2" color="text.secondary">
+            {t("p.plan.sprints.metricsProgress")}
+          </Typography>
+          <Typography variant="body2" fontWeight={700}>
+            {m.done}/{m.total_tasks} · {m.progress_pct}%
+          </Typography>
+        </Stack>
+        <LinearProgress
+          variant="determinate"
+          value={m.progress_pct}
+          sx={{ height: 8, borderRadius: 1 }}
+        />
+      </Box>
+      <Stack direction="row" spacing={1} flexWrap="wrap" useFlexGap>
+        <Chip
+          size="small"
+          color="success"
+          variant="outlined"
+          label={t("p.plan.sprints.metricsDone", { count: m.done })}
+        />
+        <Chip
+          size="small"
+          color="primary"
+          variant="outlined"
+          label={t("p.plan.sprints.metricsInProgress", { count: m.in_progress })}
+        />
+        <Chip
+          size="small"
+          color="error"
+          variant="outlined"
+          label={t("p.plan.sprints.metricsBlocked", { count: m.blocked })}
+        />
+        <Chip
+          size="small"
+          variant="outlined"
+          label={t("p.plan.sprints.metricsPending", { count: m.pending })}
+        />
+      </Stack>
+      {m.story_points_total > 0 && (
+        <Typography variant="body2" color="text.secondary">
+          {t("p.plan.sprints.metricsPoints", {
+            done: m.story_points_done,
+            total: m.story_points_total,
+          })}
+        </Typography>
+      )}
+      {m.added_after_start > 0 && (
+        <Alert severity="warning" icon={false} sx={{ py: 0.5 }}>
+          {t("p.plan.sprints.metricsScopeCreep", {
+            count: m.added_after_start,
+            pct: m.scope_creep_pct,
+          })}
+        </Alert>
+      )}
+    </Stack>
   );
 }

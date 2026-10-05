@@ -206,7 +206,7 @@ def _send_email_notification(recipient, title, body, action_url):
     sin propagar — nunca rompe el notify in-app.
     """
     try:
-        from django.core.mail import send_mail
+        from django.core.mail import get_connection, send_mail
         from django.template.loader import render_to_string
 
         if not recipient.email:
@@ -238,6 +238,9 @@ def _send_email_notification(recipient, title, body, action_url):
             recipient_list=[recipient.email],
             fail_silently=True,
             html_message=html_message,
+            # notify() corre dentro del request (post_save): un SMTP
+            # colgado sin timeout bloqueaba el endpoint entero.
+            connection=get_connection(timeout=15),
         )
         return bool(sent)
     except Exception:

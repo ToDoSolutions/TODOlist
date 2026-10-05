@@ -170,11 +170,16 @@ def public_share(request, token):
             status=status.HTTP_404_NOT_FOUND,
         )
     project = link.project
+    from django.db.models import Q
     tasks = (
-        project.tasks
+        # Multi-homing: canónicas + homeadas (misma semilla que ?project=)
+        project.tasks.model.objects.filter(
+            Q(project=project) | Q(extra_projects=project)
+        )
         .exclude(state="archived")
         .select_related("assignee")
         .order_by("-created_at")
+        .distinct()
     )
     return Response({
         "project": {
@@ -189,8 +194,11 @@ def public_share(request, token):
                 "state": t.state,
                 "priority": t.priority,
                 "due_date": t.due_date,
-                "assignee_email": (
-                    t.assignee.email if t.assignee else None
+                # PII: el enlace público expone el nombre visible, no el
+                # email del asignado.
+                "assignee_name": (
+                    t.assignee.first_name or t.assignee.username
+                    if t.assignee else None
                 ),
             }
             for t in tasks

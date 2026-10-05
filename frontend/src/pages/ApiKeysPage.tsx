@@ -1,5 +1,6 @@
-import { formatDateTime } from "../lib/dates";
+﻿import { formatDateTime } from "../lib/dates";
 import { useState } from "react";
+import { TableSkeleton } from "../components/ui/skeletons";
 import {
   Box,
   Typography,
@@ -16,7 +17,6 @@ import {
   InputLabel,
   Select,
   MenuItem,
-  CircularProgress,
   Alert,
   IconButton,
   Tooltip,
@@ -34,6 +34,7 @@ import { apiKeysApi } from "../api/resources";
 import type { ApiKeyItem } from "../types";
 import { notify } from "../notify";
 import { useConfirm } from "../components/ConfirmDialog";
+import PageHeader from "../components/ui/PageHeader";
 import { useTranslation } from "react-i18next";
 
 export default function ApiKeysPage() {
@@ -93,25 +94,27 @@ export default function ApiKeysPage() {
 
   return (
     <Box maxWidth={800} mx="auto">
-      <Stack direction="row" alignItems="center" justifyContent="space-between" mb={3}>
-        <Stack direction="row" alignItems="center" spacing={1}>
-          <Key size={24} style={{ color: theme.palette.primary.main }} />
-          <Typography variant="h5" fontWeight={700}>
+      <PageHeader
+        title={
+          <>
+            <Key size={22} style={{ color: theme.palette.primary.main, verticalAlign: "text-bottom", marginRight: 8 }} />
             {t("nav.apiKeys")}
-          </Typography>
-        </Stack>
-        <Button
-          variant="contained"
-          startIcon={<Plus size={18} />}
-          onClick={() => {
-            setForm({ name: "", scopes: ["read"] });
-            setNewKey(null);
-            setDialogOpen(true);
-          }}
-        >
-          {t("p.admin.apiKeys.new")}
-        </Button>
-      </Stack>
+          </>
+        }
+        actions={
+          <Button
+            variant="contained"
+            startIcon={<Plus size={18} />}
+            onClick={() => {
+              setForm({ name: "", scopes: ["read"] });
+              setNewKey(null);
+              setDialogOpen(true);
+            }}
+          >
+            {t("p.admin.apiKeys.new")}
+          </Button>
+        }
+      />
 
       <Alert severity="info" sx={{ mb: 2 }}>
         {t("p.admin.apiKeys.infoPre")} <code>Authorization: ApiKey &lt;tu_key&gt;</code>{" "}
@@ -126,9 +129,7 @@ export default function ApiKeysPage() {
       </Alert>
 
       {isLoading ? (
-        <Box display="flex" justifyContent="center" py={5}>
-          <CircularProgress />
-        </Box>
+        <TableSkeleton />
       ) : keyList.length === 0 ? (
         <Paper variant="outlined" sx={{ p: 6, textAlign: "center" }}>
           <Key size={48} color="text.disabled" />

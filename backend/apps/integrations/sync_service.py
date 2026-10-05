@@ -142,11 +142,14 @@ def import_issue_as_task(issue_data, repo, user):
         return existing.task, False  # ya existía
 
     task_state = ISSUE_TO_TASK_STATE.get(state, Task.State.PENDING)
+    from apps.tasks.services import next_position_seq
+    pos, _seq = next_position_seq(user)
     task = Task.objects.create(
         owner=user,
         title=title,
         description=body[:2000],
         state=task_state,
+        position=pos,
     )
 
     GitHubIssueLink.objects.create(

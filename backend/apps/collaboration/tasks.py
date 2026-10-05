@@ -50,7 +50,11 @@ def sync_external_calendar(calendar):
         return _fail("URL no permitida (destino interno o no resoluble)")
 
     try:
-        resp = requests.get(calendar.url, timeout=15)
+        # allow_redirects=False: la URL fue validada por _is_safe_url;
+        # seguir un 30x re-resolvería el destino sin revalidar (SSRF).
+        resp = requests.get(
+            calendar.url, timeout=15, allow_redirects=False
+        )
         resp.raise_for_status()
         content = resp.content[:MAX_FEED_BYTES]
     except requests.RequestException as e:

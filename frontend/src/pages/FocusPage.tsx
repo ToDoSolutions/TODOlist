@@ -33,6 +33,7 @@ import { useQuery } from "@tanstack/react-query";
 import { tasksApi } from "../api/resources";
 import type { Task } from "../types";
 import { notify } from "../notify";
+import PageHeader from "../components/ui/PageHeader";
 
 type FocusMode = "work" | "break";
 
@@ -236,9 +237,7 @@ export default function FocusPage() {
 
   return (
     <Box sx={{ maxWidth: 720, mx: "auto" }}>
-      <Typography variant="h5" fontWeight={700} mb={3}>
-        {t("p.taskx.focus.title")}
-      </Typography>
+      <PageHeader title={t("p.taskx.focus.title")} />
 
       <Paper variant="outlined" sx={{ p: 3 }}>
         <Stack alignItems="center" spacing={2.5}>

@@ -31,8 +31,15 @@ class TaskQuerySet(models.QuerySet):
             )
             # Multi-assignee: los asignados pueden editar la tarea
             qs |= Q(assignees=user)
+            # Multi-homing: editor/owner en un hogar extra puede escribir
+            qs |= Q(
+                extra_projects__members__user=user,
+                extra_projects__members__role__in=["owner", "editor"],
+            )
         else:
             qs |= Q(project__members__user=user)
+            # Multi-homing: miembro de un hogar extra puede leer
+            qs |= Q(extra_projects__members__user=user)
             # Org member → lectura en proyectos de la organización
             qs |= Q(
                 project__organization__memberships__user=user,
@@ -217,6 +224,16 @@ class Task(models.Model):
     # Recordatorio puntual (lo envía el beat send-due-reminders)
     reminder_at = models.DateTimeField(null=True, blank=True)
     reminder_sent = models.BooleanField(default=False)
+    # UID que el cliente CalDAV asignó al crear la tarea (round-trip:
+    # un PUT posterior del mismo uid actualiza en vez de duplicar)
+    caldav_uid = models.CharField(max_length=255, blank=True, default="", db_index=True)
+    # Multi-homing (estilo Asana): `project` es el hogar canónico
+    # (ref/seq, sección, sprint); `extra_projects` son hogares extra —
+    # la tarea aparece al filtrar por ese proyecto y sus miembros
+    # obtienen acceso (lectura/escritura según su rol allí)
+    extra_projects = models.ManyToManyField(
+        "projects.Project", related_name="homed_tasks", blank=True
+    )
     recurrence = models.ForeignKey(
         RecurrenceRule,
         on_delete=models.SET_NULL,
@@ -296,13 +313,59 @@ class Task(models.Model):
     def __str__(self) -> str:
         return self.title
 
+    @classmethod
+    def from_db(cls, db, field_names, values):
+        instance = super().from_db(db, field_names, values)
+        # Marca el valor persistido: save() distingue el bump
+        # automático (F() atómico) de una asignación manual de version.
+        instance._persisted_version = (
+            instance.version if "version" in field_names else None
+        )
+        return instance
+
+    def refresh_from_db(self, using=None, fields=None, **kwargs):
+        super().refresh_from_db(using=using, fields=fields, **kwargs)
+        if fields is None or "version" in fields:
+            self._persisted_version = self.version
+
     def save(self, *args, **kwargs):
-        """Incrementa la versión en cada save (excepto si se indica lo contrario)."""
+        """Incrementa la versión en cada save (excepto si se indica lo contrario).
+
+        El incremento usa ``F("version") + 1`` cuando la instancia trae
+        el valor persistido (``_persisted_version``): el UPDATE hace
+        ``version = version + 1`` en el servidor, así que dos saves
+        concurrentes no escriben el mismo ``version+1`` (el offline
+        sync detecta conflictos por version — un bump perdido ocultaba
+        una escritura ganadora).
+
+        Si el caller asignó ``task.version`` explícitamente se respeta
+        ese valor (+1), como hacía la implementación anterior. Con
+        ``update_fields`` que no incluya ``version`` no se bumpa (ni en
+        BD ni en memoria — antes quedaba un +1 fantasma en la instancia).
+        """
         increment = kwargs.pop("increment_version", True)
-        if increment and self.pk:
-            # Solo incrementar si ya existe (update), no en create
-            self.version = (self.version or 1) + 1
+        update_fields = kwargs.get("update_fields")
+        bumped = False
+        if (
+            increment
+            and self.pk
+            and (update_fields is None or "version" in update_fields)
+        ):
+            persisted = getattr(self, "_persisted_version", None)
+            if persisted == self.version or (
+                persisted is None and self.version in (None, 1)
+            ):
+                # Version intacta desde la carga → bump atómico en BD
+                self.version = models.F("version") + 1
+                bumped = True
+            else:
+                # Caller asignó version a mano → respetarla y bump
+                self.version = (self.version or 1) + 1
         super().save(*args, **kwargs)
+        if bumped:
+            # La instancia conserva la expresión F — releer el entero real
+            self.refresh_from_db(fields=["version"])
+        self._persisted_version = self.version
 
     def generate_next_occurrence(self):
         """Genera la siguiente instancia de una tarea recurrente."""
@@ -316,6 +379,8 @@ class Task(models.Model):
 
         next_due = self.recurrence.next_due_date(self.due_date or timezone.now())
 
+        from .services import next_position_seq
+        pos, seq = next_position_seq(self.owner, self.project)
         new_task = Task.objects.create(
             owner=self.owner,
             project=self.project,
@@ -325,9 +390,13 @@ class Task(models.Model):
             priority=self.priority,
             due_date=next_due,
             recurrence=self.recurrence,
+            position=pos,
+            seq=seq,
         )
         if self.tags.exists():
             new_task.tags.set(self.tags.all())
+        # Multi-homing: la ocurrencia hereda los hogares extra
+        new_task.extra_projects.set(self.extra_projects.all())
 
         self.recurrence.save(update_fields=["occurrences_generated"])
 
@@ -654,19 +723,51 @@ class TaskTemplate(models.Model):
         return self.name
 
     def create_task(self, user, overrides=None):
-        """Crea una tarea a partir de la plantilla."""
+        """Crea una tarea a partir de la plantilla.
+
+        Paridad con la creación por API: ``position`` al final de la
+        lista del usuario y ``seq`` del proyecto (ref "MP-12"). La
+        plantilla puede fijar ``extra_projects`` (multi-homing, solo
+        proyectos editables por el usuario) y ``tags`` (por nombre).
+        """
         data = dict(self.template_data)
         if overrides:
             data.update(overrides)
         project = self.project or Project.objects.filter(owner=user).first()
-        return Task.objects.create(
+        state = data.get("state", "pending")
+        if state not in [c[0] for c in Task.State.choices]:
+            state = "pending"
+        try:
+            priority = int(data.get("priority", 3))
+        except (TypeError, ValueError):
+            priority = 3
+        if priority not in [c[0] for c in Task.Priority.choices]:
+            priority = 3
+        from apps.tasks.services import next_position_seq
+        position, seq = next_position_seq(user, project)
+        task = Task.objects.create(
             owner=user,
             project=project,
+            seq=seq,
+            position=position,
             title=data.get("title", self.name),
             description=data.get("description", ""),
-            priority=data.get("priority", 3),
-            state=data.get("state", "pending"),
+            priority=priority,
+            state=state,
         )
+        extra_ids = data.get("extra_projects") or []
+        if extra_ids:
+            from apps.projects.models import accessible_projects
+            task.extra_projects.set(
+                accessible_projects(user, write=True)
+                .exclude(pk=project.id if project else None)
+                .filter(pk__in=extra_ids)
+            )
+        for tag_name in data.get("tags", []):
+            from apps.tags.models import Tag
+            tag, _ = Tag.objects.get_or_create(owner=user, name=str(tag_name))
+            task.tags.add(tag)
+        return task
 
 
 class CustomField(models.Model):

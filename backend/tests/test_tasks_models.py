@@ -105,6 +105,47 @@ class TestTaskTemplate:
         assert task.priority == 3
         assert task.state == "pending"
 
+    def test_create_task_assigns_seq_and_position(self):
+        """Paridad REST: seq del proyecto y position al final de la lista."""
+        template = TaskTemplate.objects.create(
+            owner=self.user, name="T", project=self.project,
+        )
+        task = template.create_task(self.user)
+        assert task.seq == 1
+        assert task.position >= 1
+        task2 = template.create_task(self.user)
+        assert task2.seq == 2
+
+    def test_create_task_extra_projects_and_tags(self):
+        """extra_projects solo incluye proyectos editables (ni el canónico
+        ni ajenos); tags se crean por nombre."""
+        extra = Project.objects.create(owner=self.user, name="Extra")
+        ajeno = Project.objects.create(
+            owner=User.objects.create_user(
+                username="tt2", email="tt2@x.com", password="pass"),
+            name="Ajeno",
+        )
+        template = TaskTemplate.objects.create(
+            owner=self.user, name="T", project=self.project,
+            template_data={
+                "title": "X",
+                "extra_projects": [extra.id, ajeno.id, self.project.id],
+                "tags": ["plantilla"],
+            },
+        )
+        task = template.create_task(self.user)
+        assert list(task.extra_projects.values_list("id", flat=True)) == [extra.id]
+        assert task.tags.filter(name="plantilla").exists()
+
+    def test_create_task_invalid_values_clamped(self):
+        template = TaskTemplate.objects.create(
+            owner=self.user, name="T",
+            template_data={"state": "bogus", "priority": 99},
+        )
+        task = template.create_task(self.user)
+        assert task.state == "pending"
+        assert task.priority == 3
+
 
 @pytest.mark.django_db
 class TestTaskRelation:

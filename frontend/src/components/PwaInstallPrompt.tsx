@@ -71,6 +71,7 @@ export default function PwaInstallPrompt() {
               size="small"
               color="inherit"
               onClick={() => setShowInstall(false)}
+              aria-label={t("common.close")}
             >
               <X size={16} />
             </IconButton>
@@ -87,7 +88,12 @@ export default function PwaInstallPrompt() {
           </Stack>
         }
         action={
-          <IconButton size="small" color="inherit" onClick={() => setShowOffline(false)}>
+          <IconButton
+            size="small"
+            color="inherit"
+            onClick={() => setShowOffline(false)}
+            aria-label={t("common.close")}
+          >
             <X size={16} />
           </IconButton>
         }

@@ -83,6 +83,23 @@ class TestTaskDuplicate:
         assert cloned_child.subtasks_children.count() == 0
         assert grandchild.parent_id == child.id
 
+    def test_duplicate_gets_fresh_seq_and_position(
+        self, authed_client, user, project
+    ):
+        """La copia no comparte la ref "MP-12" ni la posición del
+        original: recibe el siguiente seq del proyecto y va al final
+        de la lista."""
+        task = Task.objects.create(
+            owner=user, project=project, title="Original", seq=1,
+            position=3,
+        )
+        resp = authed_client.post(f"/api/tasks/{task.id}/duplicate/")
+        assert resp.status_code == 201
+        clone = Task.objects.get(id=resp.data["id"])
+        assert clone.seq == 2
+        assert clone.position != task.position
+        assert clone.project_id == project.id
+
     def test_duplicate_resets_completed_to_pending(self, authed_client, user):
         task = Task.objects.create(
             owner=user, title="Hecha",
@@ -218,7 +235,9 @@ class TestProductivity:
         assert daily[-1]["date"] == today.isoformat()
 
         assert resp.data["total"] == 3
-        assert resp.data["best_day"] == 2
+        # best_day es la FECHA con más completadas (el frontend la formatea
+        # con parseISO) — antes devolvía el count y rompía la página.
+        assert resp.data["best_day"] == today.isoformat()
         assert resp.data["avg_per_day"] == round(3 / 7, 1)
         # Hoy tiene ≥1 → racha desde hoy (ayer=0 corta)
         assert resp.data["streak"] == 1

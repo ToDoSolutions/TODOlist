@@ -109,6 +109,25 @@ class TestMeetingVideo:
             == 403
         )
 
+    def test_attendee_no_puede_editar_ni_borrar(
+        self, authed_client_other, user, other_user
+    ):
+        """Regresión: update/destroy usaban el queryset de lectura —
+        un attendee (o viewer del proyecto) podía editar o borrar
+        la reunión completa."""
+        m = _meeting(user)
+        m.attendees.add(other_user)
+        r = authed_client_other.patch(
+            f"/api/meetings/{m.id}/", {"title": "editada"}, format="json"
+        )
+        assert r.status_code == 403
+        assert (
+            authed_client_other.delete(f"/api/meetings/{m.id}/").status_code
+            == 403
+        )
+        m.refresh_from_db()
+        assert m.title != "editada"
+
     def test_jitsi_base_url_override(self, authed_client, user, settings):
         """JITSI_BASE_URL es configurable (self-hosting) y sin barra final."""
         settings.JITSI_BASE_URL = "https://jitsi.example.com/"

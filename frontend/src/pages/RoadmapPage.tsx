@@ -4,7 +4,6 @@ import { advancedMetricsApi } from "../api/resources";
 import {
   Box,
   Typography,
-  CircularProgress,
   Paper,
   Chip,
   Stack,
@@ -13,6 +12,9 @@ import {
 } from "@mui/material";
 import { Flag } from "lucide-react";
 import { useNavigate } from "react-router-dom";
+import PageHeader from "../components/ui/PageHeader";
+import { PageSkeleton } from "../components/ui/skeletons";
+import { ErrorState } from "../components/ui/states";
 
 interface RoadmapTask {
   id: number;
@@ -51,21 +53,34 @@ const LABEL_WIDTH = 200;
 
 function ts(s: string | null | undefined): number | null {
   if (!s) return null;
-  const t = new Date(s).getTime();
+  // "YYYY-MM-DD" = fecha calendario, no instante UTC (mismo
+  // off-by-one que Gantt en husos detrás de UTC).
+  const m = /^(\d{4})-(\d{2})-(\d{2})$/.exec(s);
+  const t = (m
+    ? new Date(Number(m[1]), Number(m[2]) - 1, Number(m[3]))
+    : new Date(s)
+  ).getTime();
   return isNaN(t) ? null : t;
 }
 
 export default function RoadmapPage() {
   const { t } = useTranslation();
   const navigate = useNavigate();
-  const { data, isLoading, isError } = useQuery<RoadmapData>({
+  const { data, isLoading, isError, refetch } = useQuery<RoadmapData>({
     queryKey: ["roadmap"],
     queryFn: () => advancedMetricsApi.roadmap(),
   });
 
-  if (isLoading) return <CircularProgress sx={{ m: 4 }} />;
+  if (isLoading) return <PageSkeleton kind="table" />;
   if (isError || !data)
-    return <Typography sx={{ m: 4 }}>{t("p.plan.roadmap.loadError")}</Typography>;
+    return (
+      <Box maxWidth={1200} mx="auto" mt={4}>
+        <ErrorState
+          title={t("p.plan.roadmap.loadError")}
+          onRetry={() => void refetch()}
+        />
+      </Box>
+    );
 
   // Rango global: min start → max end de epics y milestones
   const starts: number[] = [];
@@ -92,11 +107,28 @@ export default function RoadmapPage() {
 
   const x = (t: number) => LABEL_WIDTH + ((t - t0) / span) * 800;
 
+  // Reparto de milestones en filas: cada chip ocupa ~160px; si choca con
+  // el borde derecho del chip previo de la misma fila, baja a la siguiente.
+  const milestoneRow = new Map<string, number>();
+  const rowEdges: number[] = [];
+  for (const m of data.milestones) {
+    const s = ts(m.start);
+    if (!s) continue;
+    const left = x(s);
+    const est = Math.min(m.name.length * 7 + 32, 220);
+    let r = rowEdges.findIndex((edge) => edge <= left);
+    if (r < 0) {
+      r = rowEdges.length;
+      rowEdges.push(0);
+    }
+    rowEdges[r] = left + est;
+    milestoneRow.set(`${m.kind ?? "sprint"}-${m.id}`, r);
+  }
+  const milestoneRows = Math.max(rowEdges.length, 1);
+
   return (
     <Box p={3} overflow="auto">
-      <Typography variant="h5" gutterBottom>
-        {t("p.plan.roadmap.title")}
-      </Typography>
+      <PageHeader title={t("p.plan.roadmap.title")} />
       <Paper sx={{ position: "relative", p: 2, minWidth: LABEL_WIDTH + 800 }}>
         {/* línea de hoy */}
         <Box
@@ -110,8 +142,10 @@ export default function RoadmapPage() {
             opacity: 0.5,
           }}
         />
-        {/* milestones */}
-        <Stack direction="row" spacing={1} mb={2} ml={`${LABEL_WIDTH}px`}>
+        {/* milestones — chips absolutos por fecha; se reparten en filas
+             para que los labels no se solapen cuando dos sprints están
+             cerca en el tiempo */}
+        <Box mb={2} ml={`${LABEL_WIDTH}px`} sx={{ position: "relative", height: milestoneRows * 28 }}>
           {data.milestones.map((m) => {
             const s = ts(m.start);
             return s ? (
@@ -137,14 +171,16 @@ export default function RoadmapPage() {
                   }
                   sx={{
                     position: "absolute",
-                    left: x(s),
+                    left: x(s) - LABEL_WIDTH,
+                    top: (milestoneRow.get(`${m.kind ?? "sprint"}-${m.id}`) ?? 0) * 28,
+                    maxWidth: 220,
                     cursor: m.kind === "task" ? "pointer" : "default",
                   }}
                 />
               </Tooltip>
             ) : null;
           })}
-        </Stack>
+        </Box>
         {/* épica lanes */}
         {data.epics.map((epic) => {
           const s = ts(epic.start);
@@ -188,7 +224,7 @@ export default function RoadmapPage() {
                 </Box>
               </Stack>
               {/* tareas de la épica */}
-              <Stack ml={LABEL_WIDTH} spacing={0.5}>
+              <Stack ml={`${LABEL_WIDTH}px`} spacing={0.5}>
                 {epic.tasks.slice(0, 8).map((t) => (
                   <Typography
                     key={t.id}

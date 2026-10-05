@@ -1,5 +1,7 @@
-import { useState } from "react";
+﻿import { useState } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
+import { TableSkeleton } from "../components/ui/skeletons";
+import PageHeader from "../components/ui/PageHeader";
 import {
   Box,
   Typography,
@@ -16,6 +18,7 @@ import {
   CircularProgress,
   Alert,
   Chip,
+  MenuItem,
   Table,
   TableBody,
   TableCell,
@@ -25,18 +28,17 @@ import {
 } from "@mui/material";
 import { Plus, Pencil, Trash2, Copy, FileText } from "lucide-react";
 import { useTranslation } from "react-i18next";
-import { taskTemplatesApi, type ApiPayload } from "../api/resources";
-import type { TaskTemplateItem } from "../types";
+import { taskTemplatesApi, projectsApi, type ApiPayload } from "../api/resources";
+import type { TaskTemplateItem, Project } from "../types";
 import { notify } from "../notify";
+import { TASK_STATE_I18N_KEYS } from "../i18n/batchTaskUi";
 
 interface TaskTemplate {
   id: number;
   name: string;
   description?: string;
-  default_priority?: number;
-  default_project?: number;
-  default_project_name?: string;
-  default_state?: string;
+  project?: number;
+  template_data?: Record<string, unknown>;
 }
 
 interface TemplateForm {
@@ -83,6 +85,16 @@ export default function TaskTemplatesPage() {
   const templates: TaskTemplate[] = Array.isArray(templatesData)
     ? templatesData
     : ((templatesData as { results?: TaskTemplateItem[] } | undefined)?.results ?? []);
+
+  // Los ids de proyecto se resuelven a nombre — "#3" crudo no dice nada
+  // en la tabla y el form pedía el número a mano.
+  const { data: projectsData } = useQuery({
+    queryKey: ["projects"],
+    queryFn: projectsApi.list,
+  });
+  const projects: Project[] = projectsData ?? [];
+  const projectName = (id?: number | null) =>
+    id == null ? "—" : (projects.find((p) => p.id === id)?.name ?? `#${id}`);
 
   const createMut = useMutation({
     mutationFn: () =>
@@ -182,19 +194,17 @@ export default function TaskTemplatesPage() {
 
   return (
     <Box maxWidth={900} mx="auto">
-      <Stack direction="row" alignItems="center" justifyContent="space-between" mb={2}>
-        <Typography variant="h5" fontWeight={700}>
-          {t("p.ops.templates.title")}
-        </Typography>
-        <Button variant="contained" startIcon={<Plus size={18} />} onClick={openNew}>
-          {t("p.ops.templates.new")}
-        </Button>
-      </Stack>
+      <PageHeader
+        title={t("p.ops.templates.title")}
+        actions={
+          <Button variant="contained" startIcon={<Plus size={18} />} onClick={openNew}>
+            {t("p.ops.templates.new")}
+          </Button>
+        }
+      />
 
       {isLoading ? (
-        <Box display="flex" justifyContent="center" py={6}>
-          <CircularProgress />
-        </Box>
+        <TableSkeleton />
       ) : templates.length === 0 ? (
         <Paper variant="outlined" sx={{ p: 6, textAlign: "center" }}>
           <FileText size={32} style={{ color: theme.palette.divider }} />
@@ -203,7 +213,7 @@ export default function TaskTemplatesPage() {
           </Typography>
         </Paper>
       ) : (
-        <Paper variant="outlined">
+        <Paper variant="outlined" sx={{ overflowX: "auto" }}>
           <Table size="small">
             <TableHead>
               <TableRow>
@@ -239,12 +249,18 @@ export default function TaskTemplatesPage() {
                     </Typography>
                   </TableCell>
                   <TableCell>
-                    <Chip size="small" label={`P${tpl.default_priority ?? "—"}`} />
+                    <Chip
+                      size="small"
+                      label={
+                        tpl.template_data?.priority != null
+                          ? `P${tpl.template_data.priority}`
+                          : "—"
+                      }
+                    />
                   </TableCell>
                   <TableCell>
                     <Typography variant="body2">
-                      {tpl.default_project_name ??
-                        (tpl.default_project ? `#${tpl.default_project}` : "—")}
+                      {projectName(tpl.project)}
                     </Typography>
                   </TableCell>
                   <TableCell align="right">
@@ -303,16 +319,26 @@ export default function TaskTemplatesPage() {
             <TextField
               label={t("p.ops.templates.defaultProject")}
               fullWidth
-              type="number"
+              select
               value={form.default_project_id}
               onChange={(e) => setForm({ ...form, default_project_id: e.target.value })}
-            />
+            >
+              <MenuItem value="">—</MenuItem>
+              {projects.map((p) => (
+                <MenuItem key={p.id} value={String(p.id)}>{p.name}</MenuItem>
+              ))}
+            </TextField>
             <TextField
               label={t("p.ops.templates.defaultState")}
               fullWidth
+              select
               value={form.default_state}
               onChange={(e) => setForm({ ...form, default_state: e.target.value })}
-            />
+            >
+              {Object.entries(TASK_STATE_I18N_KEYS).map(([state, key]) => (
+                <MenuItem key={state} value={state}>{t(key)}</MenuItem>
+              ))}
+            </TextField>
           </Stack>
         </DialogContent>
         <DialogActions>
@@ -351,10 +377,15 @@ export default function TaskTemplatesPage() {
             <TextField
               label={t("p.ops.templates.projectOverride")}
               fullWidth
-              type="number"
+              select
               value={override.project_id}
               onChange={(e) => setOverride({ ...override, project_id: e.target.value })}
-            />
+            >
+              <MenuItem value="">—</MenuItem>
+              {projects.map((p) => (
+                <MenuItem key={p.id} value={String(p.id)}>{p.name}</MenuItem>
+              ))}
+            </TextField>
           </Stack>
         </DialogContent>
         <DialogActions>

@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { useTranslation } from "react-i18next";
 import {
@@ -168,6 +168,15 @@ export default function RolesPage() {
   });
   const projects = Array.isArray(projectsData) ? projectsData : [];
 
+  // Preselecciona el primer proyecto — evita la pantalla vacía de
+  // "Selecciona un proyecto" que obliga a un clic extra siempre.
+  useEffect(() => {
+    if (selectedProject === "" && projects.length > 0) {
+      const first = projects[0] as { id?: number };
+      if (first?.id != null) setSelectedProject(first.id);
+    }
+  }, [projects, selectedProject]);
+
   const { data: membersData, isLoading: membersLoading } = useQuery({
     queryKey: ["project-members", selectedProject],
     queryFn: () => collaborationApi.projectMembers.list(Number(selectedProject)),
@@ -195,7 +204,7 @@ export default function RolesPage() {
         ]}
       />
 
-      <Paper variant="outlined">
+      <Paper variant="outlined" sx={{ overflowX: "auto" }}>
         <Table size="small">
           <caption
             style={{ textAlign: "left", padding: 8, opacity: 0.7, captionSide: "bottom" }}

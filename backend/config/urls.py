@@ -68,6 +68,12 @@ urlpatterns = [
     path("api/", include("apps.tasks.urls")),
     path("api/", include("apps.tags.urls")),
 
+    # MCP server (JSON-RPC Streamable HTTP para agentes/LLMs)
+    path("api/", include("apps.mcp.urls")),
+
+    # CalDAV (clientes de tareas: Thunderbird, Tasks.org, Apple…)
+    path("api/", include("apps.caldav.urls")),
+
     # Integraciones (GitHub)
     path("api/", include("apps.integrations.urls")),
     path("api/", include("apps.notifications.urls")),
@@ -85,6 +91,10 @@ urlpatterns = [
     # GraphQL (IDE/introspection solo en DEBUG)
     path("graphql/", GraphQLView.as_view(graphiql=settings.DEBUG), name="graphql"),
 ]
+
+# SCIM 2.0 provisioning (IdP → usuarios/organizaciones). Siempre montado:
+# sin SCIM_ENABLED/tokens válidos el middleware rechaza con 401.
+urlpatterns += [path("scim/v2/", include("django_scim.urls"))]
 
 if settings.DEBUG:
     urlpatterns += static(settings.MEDIA_URL, document_root=settings.MEDIA_ROOT)

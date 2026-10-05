@@ -1,5 +1,7 @@
-import { useState, useMemo, useCallback } from "react";
+﻿import { useState, useMemo, useCallback } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
+import { TableSkeleton } from "../components/ui/skeletons";
+import PageHeader from "../components/ui/PageHeader";
 import {
   Box,
   Typography,
@@ -34,6 +36,7 @@ import { Plus, Pencil, Trash2, Clock, Timer, BarChart3 } from "lucide-react";
 import { useTranslation } from "react-i18next";
 import { timeEntriesApi, tasksApi, projectsApi } from "../api/resources";
 import { notify } from "../notify";
+import { formatDate } from "../lib/dates";
 import { DateField } from "../components/DateField";
 import type { Task, Project } from "../types";
 
@@ -337,14 +340,14 @@ export default function TimeEntriesPage() {
 
   return (
     <Box maxWidth={900} mx="auto">
-      <Stack direction="row" alignItems="center" justifyContent="space-between" mb={2}>
-        <Typography variant="h5" fontWeight={700}>
-          {t("p.ops.time.title")}
-        </Typography>
-        <Button variant="contained" startIcon={<Plus size={18} />} onClick={openNew}>
-          {t("p.ops.time.new")}
-        </Button>
-      </Stack>
+      <PageHeader
+        title={t("p.ops.time.title")}
+        actions={
+          <Button variant="contained" startIcon={<Plus size={18} />} onClick={openNew}>
+            {t("p.ops.time.new")}
+          </Button>
+        }
+      />
 
       {/* Estadísticas */}
       <Paper variant="outlined" sx={{ p: 2, mb: 2 }}>
@@ -475,9 +478,7 @@ export default function TimeEntriesPage() {
       </Stack>
 
       {isLoading ? (
-        <Box display="flex" justifyContent="center" py={6}>
-          <CircularProgress />
-        </Box>
+        <TableSkeleton />
       ) : filteredEntries.length === 0 ? (
         <Paper variant="outlined" sx={{ p: 6, textAlign: "center" }}>
           <Clock size={32} style={{ color: theme.palette.divider }} />
@@ -488,7 +489,7 @@ export default function TimeEntriesPage() {
       ) : (
         <Stack spacing={2}>
           {groupedEntries.map((group) => (
-            <Paper key={group.taskId} variant="outlined">
+            <Paper key={group.taskId} variant="outlined" sx={{ overflowX: "auto" }}>
               <Box
                 sx={{
                   px: 2,
@@ -530,7 +531,7 @@ export default function TimeEntriesPage() {
                           label={formatDuration(secondsToMinutes(e.duration_seconds))}
                         />
                       </TableCell>
-                      <TableCell>{dateFromISO(e.started_at)}</TableCell>
+                      <TableCell>{formatDate(e.started_at)}</TableCell>
                       <TableCell>
                         <Typography
                           variant="body2"

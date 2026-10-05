@@ -1,4 +1,6 @@
-import { useState } from "react";
+﻿import { useState } from "react";
+import { TableSkeleton } from "../components/ui/skeletons";
+import PageHeader from "../components/ui/PageHeader";
 import {
   Box,
   Typography,
@@ -164,32 +166,32 @@ export default function CustomFieldsPage() {
 
   return (
     <Box maxWidth={900} mx="auto">
+      <PageHeader
+        title={
+          <>
+            <Settings size={22} style={{ color: theme.palette.primary.main, verticalAlign: "text-bottom", marginRight: 8 }} />
+            {t("p.ops.cf.title")}
+          </>
+        }
+        actions={
+          <Button
+            variant="contained"
+            startIcon={<Plus size={18} />}
+            onClick={() => {
+              setForm({ project_id: "", name: "", type: "text", options: "" });
+              setDialogOpen(true);
+            }}
+          >
+            {t("p.ops.cf.new")}
+          </Button>
+        }
+      />
       <Alert severity="info" sx={{ mb: 3 }}>
         {t("p.ops.cf.infoAlert")}
       </Alert>
-      <Stack direction="row" alignItems="center" justifyContent="space-between" mb={3}>
-        <Stack direction="row" alignItems="center" spacing={1}>
-          <Settings size={24} style={{ color: theme.palette.primary.main }} />
-          <Typography variant="h5" fontWeight={700}>
-            {t("p.ops.cf.title")}
-          </Typography>
-        </Stack>
-        <Button
-          variant="contained"
-          startIcon={<Plus size={18} />}
-          onClick={() => {
-            setForm({ project_id: "", name: "", type: "text", options: "" });
-            setDialogOpen(true);
-          }}
-        >
-          {t("p.ops.cf.new")}
-        </Button>
-      </Stack>
 
       {isLoading ? (
-        <Box display="flex" justifyContent="center" py={5}>
-          <CircularProgress />
-        </Box>
+        <TableSkeleton />
       ) : fieldList.length === 0 ? (
         <Paper variant="outlined" sx={{ p: 6, textAlign: "center" }}>
           <Settings size={48} color="text.disabled" />
@@ -354,7 +356,11 @@ export default function CustomFieldsPage() {
                               size="small"
                               color="error"
                               onClick={async () => {
-                                if (await confirm(t("p.ops.cf.confirmDeleteValue")))
+                                if (
+                      await confirm(t("p.ops.cf.confirmDeleteValue"), {
+                        confirmLabel: t("common.delete"),
+                      })
+                    )
                                   removeValueMut.mutate(v.id);
                               }}
                             >

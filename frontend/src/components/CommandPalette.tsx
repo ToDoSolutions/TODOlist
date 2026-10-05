@@ -83,7 +83,9 @@ export default function CommandPalette({
   }
   // El efecto solo sincroniza con el DOM (focus), no toca state.
   useEffect(() => {
-    if (open) setTimeout(() => inputRef.current?.focus(), 50);
+    if (!open) return;
+    const id = setTimeout(() => inputRef.current?.focus(), 50);
+    return () => clearTimeout(id);
   }, [open]);
 
   const qc = useQueryClient();
@@ -358,6 +360,7 @@ export default function CommandPalette({
         inputRef={inputRef}
         fullWidth
         placeholder={t("p.board.palette.placeholder")}
+        inputProps={{ "aria-label": t("p.board.palette.placeholder") }}
         value={query}
         onChange={(e) => setQuery(e.target.value)}
         onKeyDown={onKeyDown}

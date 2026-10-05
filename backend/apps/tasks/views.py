@@ -1,6 +1,7 @@
 import os
 
 from django.conf import settings
+from django.db.models import F
 from django.utils import timezone
 from rest_framework import status, viewsets
 from rest_framework.decorators import action
@@ -77,8 +78,10 @@ class TaskCreateUpdateViewSetMixin:
 class TaskViewSet(TaskCreateUpdateViewSetMixin, viewsets.ModelViewSet):
     """CRUD de tareas con filtros por estado, prioridad, etiqueta, proyecto, sprint, épica, tipo."""
 
+    # "project" se filtra a mano en get_queryset para incluir
+    # extra_projects (multi-homing: la tarea aparece en todos sus hogares)
     filterset_fields = [
-        "state", "priority", "project", "tags", "task_type",
+        "state", "priority", "tags", "task_type",
         "sprint", "epic", "parent", "section", "is_milestone",
     ]
     search_fields = ["title", "description"]
@@ -107,6 +110,7 @@ class TaskViewSet(TaskCreateUpdateViewSetMixin, viewsets.ModelViewSet):
             "recurrence", "section",
         ).prefetch_related(
             "tags", "subtasks", "assignees", "watchers", "favorited_by",
+            "extra_projects",
             "approvals__requester", "approvals__approver",
             Prefetch(
                 "comments",
@@ -134,6 +138,13 @@ class TaskViewSet(TaskCreateUpdateViewSetMixin, viewsets.ModelViewSet):
         )
         from .selectors import apply_task_filters
         qs = apply_task_filters(qs, self.request.query_params)
+        # ?project=N incluye las tareas multi-homeadas en ese proyecto
+        project_param = self.request.query_params.get("project")
+        if project_param:
+            from django.db.models import Q as _Q
+            qs = qs.filter(
+                _Q(project=project_param) | _Q(extra_projects=project_param)
+            ).distinct()
         # Favoritos es por-usuario (M2M), no expresable via filterset
         if self.request.query_params.get("favorite") == "true":
             qs = qs.filter(favorited_by=self.request.user)
@@ -161,25 +172,13 @@ class TaskViewSet(TaskCreateUpdateViewSetMixin, viewsets.ModelViewSet):
         return obj
 
     def perform_create(self, serializer):
-        from django.db.models import Max
-        next_pos = (
-            Task.objects.for_user(self.request.user).aggregate(
-                m=Max("position")
-            )["m"]
-            or 0
-        ) + 1
+        from .services import next_position_seq
         # seq por proyecto para la ref legible ("MP-12"); sin proyecto
         # queda en 0 y el ref cae al id (Task.seq no es único: los
         # updates masivos podrían colisionar transitoriamente).
-        project = serializer.validated_data.get("project")
-        seq = 0
-        if project is not None:
-            seq = (
-                Task.objects.filter(project=project).aggregate(
-                    m=Max("seq")
-                )["m"]
-                or 0
-            ) + 1
+        next_pos, seq = next_position_seq(
+            self.request.user, serializer.validated_data.get("project")
+        )
         serializer.save(
             owner=self.request.user, position=next_pos, seq=seq
         )
@@ -203,6 +202,36 @@ class TaskViewSet(TaskCreateUpdateViewSetMixin, viewsets.ModelViewSet):
             new_value=serializer.data["title"],
         )
         return Response(serializer.data, status=status.HTTP_201_CREATED)
+
+    @action(detail=True, methods=["post"])
+    def subtasks_reorder(self, request, pk=None):
+        """Reordena el checklist: {order: [subtask_id, ...]}.
+
+        Los Subtask creados por POST subtasks/ llevan order=0 por defecto,
+        así que un swap a dos PATCH no funcionaba: este endpoint
+        reenumera la lista completa (mismo patrón que
+        POST /project-sections/reorder/)."""
+        task = self.get_object()
+        ids = request.data.get("order")
+        if ids is None and hasattr(request.data, "getlist"):
+            # Clientes multipart (form-data): order llega como clave repetida
+            ids = [int(i) for i in request.data.getlist("order")]
+        if not isinstance(ids, list) or not all(isinstance(i, int) for i in ids):
+            return Response(
+                {"order": "Se esperaba una lista de ids."},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+        subs = {s.id: s for s in task.subtasks.all()}
+        if set(ids) != set(subs.keys()):
+            return Response(
+                {"order": "Los ids deben ser exactamente las subtareas de la tarea."},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+        for position, sid in enumerate(ids):
+            if subs[sid].order != position:
+                subs[sid].order = position
+                subs[sid].save(update_fields=["order"])
+        return Response({"detail": "ok"})
 
     @action(detail=True, methods=["post"])
     def comments(self, request, pk=None):
@@ -369,20 +398,16 @@ class TaskViewSet(TaskCreateUpdateViewSetMixin, viewsets.ModelViewSet):
                 {"approver": "Usuario no encontrado o inactivo."},
                 status=status.HTTP_400_BAD_REQUEST,
             )
-        if task.project_id is not None:
-            from apps.projects.models import accessible_projects
-            if not accessible_projects(approver).filter(
-                id=task.project_id
-            ).exists():
-                return Response(
-                    {
-                        "approver": (
-                            "El aprobador no tiene acceso al proyecto "
-                            "de la tarea."
-                        )
-                    },
-                    status=status.HTTP_400_BAD_REQUEST,
-                )
+        # El aprobador debe poder leer la tarea (proyecto canónico,
+        # hogar extra, assignee, watcher u org). Solo se abre a cualquier
+        # usuario si la tarea no tiene ningún hogar (comportamiento previo).
+        if (
+            task.project_id is not None or task.extra_projects.exists()
+        ) and not Task.objects.for_user(approver).filter(pk=task.pk).exists():
+            return Response(
+                {"approver": "El aprobador no tiene acceso a la tarea."},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
         approval = TaskApproval.objects.create(
             task=task,
             requester=request.user,
@@ -399,7 +424,7 @@ class TaskViewSet(TaskCreateUpdateViewSetMixin, viewsets.ModelViewSet):
                 + (f" — {approval.note}" if approval.note else "")
             ),
             task=task,
-            action_url=f"/app/tasks?task={task.id}",
+            action_url=f"/app/tasks/{task.id}",
         )
         return Response(
             TaskApprovalSerializer(approval).data,
@@ -450,7 +475,7 @@ class TaskViewSet(TaskCreateUpdateViewSetMixin, viewsets.ModelViewSet):
                 )
             ),
             task=task,
-            action_url=f"/app/tasks?task={task.id}",
+            action_url=f"/app/tasks/{task.id}",
         )
         return Response(TaskApprovalSerializer(approval).data)
 
@@ -635,8 +660,12 @@ class TaskViewSet(TaskCreateUpdateViewSetMixin, viewsets.ModelViewSet):
                 status=status.HTTP_404_NOT_FOUND,
             )
         for pos, tid in enumerate(task_ids):
-            writable[tid].position = pos
-        Task.objects.bulk_update(writable.values(), ["position"])
+            task = writable[tid]
+            task.position = pos
+            # bulk_update no llama a save(): el bump de version hay que
+            # hacerlo a mano para que offline sync detecte el cambio.
+            task.version += 1
+        Task.objects.bulk_update(writable.values(), ["position", "version"])
         return Response({"updated": len(task_ids)})
 
     @action(detail=False, methods=["post"])
@@ -690,6 +719,49 @@ class TaskViewSet(TaskCreateUpdateViewSetMixin, viewsets.ModelViewSet):
         ).filter(id=updates["parent"]).exists():
             return Response({"error": "Tarea padre no válida"}, status=status.HTTP_400_BAD_REQUEST)
         qs = Task.objects.for_user(request.user, write=True).filter(id__in=task_ids)
+        # Coherencia proyecto↔sprint/epic (misma regla que el PATCH
+        # individual): si se fijan explícitamente deben pertenecer al
+        # proyecto efectivo de cada tarea afectada.
+        from django.db.models import Q
+
+        from .models import Epic
+
+        for field, model in (("sprint", Sprint), ("epic", Epic)):
+            if updates.get(field):
+                bound_pid = model.objects.filter(
+                    id=updates[field]
+                ).values_list("project_id", flat=True).first()
+                if bound_pid is not None:
+                    if "project" in updates:
+                        if updates["project"] != bound_pid:
+                            return Response(
+                                {"error": f"{field} pertenece a otro proyecto"},
+                                status=status.HTTP_400_BAD_REQUEST,
+                            )
+                    elif qs.exclude(project_id=bound_pid).exists():
+                        return Response(
+                            {"error": f"{field} pertenece a otro proyecto"},
+                            status=status.HTTP_400_BAD_REQUEST,
+                        )
+        # Al cambiar project en masa hay que soltar las relaciones del
+        # proyecto canónico que no pertenezcan al destino (sprint/epic/
+        # section) — qs.update() no revalida invariantes. Los valores
+        # explícitos ya se validaron arriba.
+        if "project" in updates:
+            new_pid = updates["project"]
+            for f in ("sprint", "epic", "section"):
+                if f in updates:
+                    continue
+                qs.exclude(
+                    Q(**{f"{f}__isnull": True})
+                    | Q(**{f"{f}__project_id__isnull": True})
+                    | Q(**{f"{f}__project_id": new_pid})
+                ).update(**{f: None})
+            # El proyecto canónico no puede quedar como hogar extra
+            if new_pid:
+                Task.extra_projects.through.objects.filter(
+                    task__in=qs, project_id=new_pid
+                ).delete()
         # Respetar workflows: si el estado cambia, cada tarea con proyecto
         # que tenga transiciones definidas debe poder seguir la arista.
         if "state" in updates:
@@ -733,7 +805,11 @@ class TaskViewSet(TaskCreateUpdateViewSetMixin, viewsets.ModelViewSet):
                 t.generate_next_occurrence()
         elif updates.get("state"):
             updates["completed_at"] = None
-        updated = qs.update(**updates)
+        # qs.update() no llama a save(): hay que mantener version (optimistic
+        # locking de offline sync) y updated_at a mano.
+        updated = qs.update(
+            updated_at=timezone.now(), version=F("version") + 1, **updates
+        )
         return Response({"updated": updated})
 
     @action(detail=False, methods=["get"])
@@ -777,7 +853,9 @@ class TaskViewSet(TaskCreateUpdateViewSetMixin, viewsets.ModelViewSet):
             qs = qs.filter(
                 Q(title__icontains=query) | Q(description__icontains=query)
             )
-        qs = qs.select_related("project", "sprint").prefetch_related("tags")[:50]
+        qs = qs.select_related("project", "sprint").prefetch_related(
+            "tags", "extra_projects"
+        )[:50]
 
         serializer = self.get_serializer(qs, many=True)
         return Response({"results": serializer.data, "count": len(serializer.data)})
@@ -983,6 +1061,106 @@ class TaskViewSet(TaskCreateUpdateViewSetMixin, viewsets.ModelViewSet):
             )),
         })
 
+    @action(detail=False, methods=["post"], url_path="plan-day")
+    def plan_day(self, request):
+        """Time-blocking simple: ordena las tareas abiertas del usuario
+        (vencidas → hoy → prioridad → due_date) en bloques consecutivos y
+        persiste el inicio de cada bloque en ``Task.start_date``.
+
+        Body: {"date"?: "YYYY-MM-DD", "start_hour"?: int,
+               "default_minutes"?: int, "gap_minutes"?: int, "limit"?: int}
+        Duración de bloque: estimate_hours*60 o default_minutes.
+        """
+        from datetime import UTC
+        from datetime import datetime as dt
+        from datetime import time as dtime
+
+        from django.db.models import Q
+
+        user = request.user
+        data = request.data or {}
+        tz = timezone.get_current_timezone()
+        now = timezone.now()
+
+        day_raw = data.get("date")
+        try:
+            day = (
+                dt.strptime(day_raw, "%Y-%m-%d")
+                .replace(tzinfo=UTC)
+                .date() if day_raw else now.date()
+            )
+        except (TypeError, ValueError):
+            return Response({"error": "date inválida"}, status=400)
+        try:
+            start_hour = int(data.get("start_hour", 9))
+            default_minutes = int(data.get("default_minutes", 60))
+            gap = int(data.get("gap_minutes", 10))
+            limit = min(int(data.get("limit", 8)), 30)
+        except (TypeError, ValueError):
+            return Response({"error": "parámetros inválidos"}, status=400)
+        if not (0 <= start_hour <= 23) or default_minutes <= 0 or gap < 0:
+            return Response({"error": "parámetros inválidos"}, status=400)
+
+        cursor = timezone.make_aware(dt.combine(day, dtime(start_hour)), tz)
+        if day == now.date() and cursor < now:
+            # hoy ya empezado: redondear al siguiente cuarto de hora
+            minutes = ((now.minute // 15) + 1) * 15
+            cursor = now.replace(
+                minute=0, second=0, microsecond=0
+            ) + timezone.timedelta(minutes=minutes)
+
+        candidates = list(
+            Task.objects.for_user(user, write=True)
+            .filter(Q(assignee=user) | Q(assignees=user))
+            .exclude(state__in=["completed", "cancelled", "archived"])
+            .select_related("project")
+            .order_by("priority", "due_date")[:limit * 3]
+        )
+        day_start = dt.combine(day, dtime.min, tzinfo=tz)
+        day_end = day_start + timezone.timedelta(days=1)
+
+        def _sort_key(t):
+            due = t.due_date
+            if due and due < now:
+                bucket = 0  # vencida
+            elif due and day_start <= due < day_end:
+                bucket = 1  # vence ese día
+            else:
+                bucket = 2
+            return (bucket, t.priority if t.priority is not None else 3,
+                    due or timezone.datetime.max.replace(tzinfo=tz))
+
+        candidates.sort(key=_sort_key)
+
+        slots = []
+        touched = []
+        for t in candidates[:limit]:
+            try:
+                mins = int(float(t.estimate_hours) * 60) if t.estimate_hours \
+                    else default_minutes
+            except (TypeError, ValueError):
+                mins = default_minutes
+            mins = max(15, min(mins, 480))
+            end = cursor + timezone.timedelta(minutes=mins)
+            t.start_date = cursor
+            t.version = (t.version or 0) + 1
+            t.updated_at = now
+            touched.append(t)
+            slots.append({
+                "id": t.id,
+                "title": t.title,
+                "start": cursor.isoformat(),
+                "end": end.isoformat(),
+                "minutes": mins,
+            })
+            cursor = end + timezone.timedelta(minutes=gap)
+
+        if touched:
+            Task.objects.bulk_update(
+                touched, ["start_date", "version", "updated_at"]
+            )
+        return Response({"date": day.isoformat(), "slots": slots})
+
     @action(detail=False, methods=["get"])
     def burnup(self, request):
         """Datos para burnup chart: completado vs scope en el tiempo."""
@@ -1107,8 +1285,14 @@ class TaskViewSet(TaskCreateUpdateViewSetMixin, viewsets.ModelViewSet):
         if not sprint:
             return Response({"error": "Sprint no encontrado"}, status=status.HTTP_404_NOT_FOUND)
         qs = Task.objects.for_user(request.user, write=True).filter(id__in=task_ids)
-        # Solo mover tareas del mismo proyecto que el sprint
-        updated = qs.filter(project=sprint.project).update(sprint_id=sprint.id)
+        # Solo mover tareas del mismo proyecto que el sprint.
+        # qs.update() no dispara save(): bump de version/updated_at manual
+        # para que offline sync y los clientes vean el cambio.
+        updated = qs.filter(project=sprint.project).update(
+            sprint_id=sprint.id,
+            updated_at=timezone.now(),
+            version=F("version") + 1,
+        )
         return Response({"moved": updated})
 
     # --- Duplicado, recordatorios y productividad ---
@@ -1122,14 +1306,18 @@ class TaskViewSet(TaskCreateUpdateViewSetMixin, viewsets.ModelViewSet):
         "id", "owner", "parent", "recurrence",
         "completed_at", "reminder_at", "reminder_sent",
         "created_at", "updated_at", "version",
+        # seq/position: la copia recibe valores nuevos (nunca comparte
+        # la ref "MP-12" ni la posición del original)
+        "seq", "position",
     }
 
-    def _duplicate_task(self, source, owner, parent=None):
+    def _duplicate_task(self, source, owner, parent=None, allowed_projects=None):
         """Clona una tarea: escalares + tags + assignees + checklist +
         valores de campos personalizados.
 
         No copia comentarios, adjuntos, relaciones, entradas de tiempo,
-        watchers ni la regla de recurrencia.
+        watchers ni la regla de recurrencia. Los hogares extra se copian
+        solo si el duplicador tiene permiso de escritura allí.
         """
         data = {
             f.name: getattr(source, f.name)
@@ -1139,9 +1327,17 @@ class TaskViewSet(TaskCreateUpdateViewSetMixin, viewsets.ModelViewSet):
         # La copia nunca nace completada: vuelve a pendiente
         if data.get("state") == Task.State.COMPLETED:
             data["state"] = Task.State.PENDING
+        from .services import next_position_seq
+        data["position"], data["seq"] = next_position_seq(
+            owner, data.get("project")
+        )
         clone = Task.objects.create(owner=owner, parent=parent, **data)
         clone.tags.set(source.tags.all())
         clone.assignees.set(source.assignees.all())
+        if allowed_projects is not None:
+            clone.extra_projects.set(
+                source.extra_projects.filter(pk__in=allowed_projects)
+            )
         # Checklist (Subtask) — conserva is_done y orden
         for sub in source.subtasks.all():
             Subtask.objects.create(
@@ -1165,11 +1361,19 @@ class TaskViewSet(TaskCreateUpdateViewSetMixin, viewsets.ModelViewSet):
         adjuntos, relaciones, entradas de tiempo ni watchers.
         """
         from django.db import transaction
+
+        from apps.projects.models import accessible_projects
         task = self.get_object()
+        allowed = accessible_projects(request.user, write=True)
         with transaction.atomic():
-            clone = self._duplicate_task(task, owner=request.user)
+            clone = self._duplicate_task(
+                task, owner=request.user, allowed_projects=allowed
+            )
             for child in task.subtasks_children.all():
-                self._duplicate_task(child, owner=request.user, parent=clone)
+                self._duplicate_task(
+                    child, owner=request.user,
+                    parent=clone, allowed_projects=allowed,
+                )
             TaskActivity.objects.create(
                 task=clone, actor=request.user,
                 action=TaskActivity.ActionType.CREATED,
@@ -1259,7 +1463,10 @@ class TaskViewSet(TaskCreateUpdateViewSetMixin, viewsets.ModelViewSet):
             "streak": streak,
             "total": total,
             "avg_per_day": round(total / days, 1),
-            "best_day": max(counts.values(), default=0),
+            # Día con más completadas (fecha ISO); null si no hubo ninguna
+            "best_day": (
+                max(counts, key=counts.get).isoformat() if counts else None
+            ),
         })
 
 
@@ -1321,17 +1528,24 @@ class CommentViewSet(viewsets.ModelViewSet):
                 {"error": "emoji requerido (máx 8 chars)"},
                 status=status.HTTP_400_BAD_REQUEST,
             )
-        reactions = dict(comment.reactions or {})
-        users = reactions.get(emoji, [])
-        if request.user.id in users:
-            users.remove(request.user.id)
-            if not users:
-                reactions.pop(emoji)
-        else:
-            users.append(request.user.id)
-            reactions[emoji] = users
-        comment.reactions = reactions
-        comment.save(update_fields=["reactions"])
+        from django.db import transaction
+        with transaction.atomic():
+            # read-modify-write sobre JSONField: lock de fila para que
+            # dos reacciones simultáneas no se sobrescriban.
+            comment = (
+                Comment.objects.select_for_update().get(pk=comment.pk)
+            )
+            reactions = dict(comment.reactions or {})
+            users = reactions.get(emoji, [])
+            if request.user.id in users:
+                users.remove(request.user.id)
+                if not users:
+                    reactions.pop(emoji)
+            else:
+                users.append(request.user.id)
+                reactions[emoji] = users
+            comment.reactions = reactions
+            comment.save(update_fields=["reactions"])
         return Response(CommentSerializer(comment).data)
 
 
@@ -1368,7 +1582,9 @@ class SprintViewSet(viewsets.ModelViewSet):
     @action(detail=True, methods=["get"])
     def tasks(self, request, pk=None):
         sprint = self.get_object()
-        tasks = Task.objects.for_user(request.user).filter(sprint=sprint)
+        tasks = Task.objects.for_user(request.user).filter(
+            sprint=sprint
+        ).prefetch_related("extra_projects")
         serializer = TaskSerializer(tasks, many=True)
         return Response(serializer.data)
 
@@ -1388,11 +1604,6 @@ class SprintViewSet(viewsets.ModelViewSet):
         """
         from django.db import transaction
         sprint = self.get_object()
-        if sprint.state != Sprint.SprintState.ACTIVE:
-            return Response(
-                {"error": "Solo se pueden cerrar sprints activos"},
-                status=status.HTTP_400_BAD_REQUEST,
-            )
         move_to = request.data.get("move_incomplete_to")
         # Compat: next_sprint_id legacy equivale a un id destino
         if move_to in (None, ""):
@@ -1428,6 +1639,23 @@ class SprintViewSet(viewsets.ModelViewSet):
                 )
         moved = 0
         with transaction.atomic():
+            # Lock de fila + check dentro del atomic: dos cierres
+            # concurrentes no pueden pasar ambos el check de ACTIVE.
+            sprint = (
+                Sprint.objects.select_for_update()
+                .filter(pk=sprint.pk)
+                .first()
+            )
+            if sprint is None:
+                return Response(
+                    {"error": "Sprint no encontrado"},
+                    status=status.HTTP_404_NOT_FOUND,
+                )
+            if sprint.state != Sprint.SprintState.ACTIVE:
+                return Response(
+                    {"error": "Solo se pueden cerrar sprints activos"},
+                    status=status.HTTP_400_BAD_REQUEST,
+                )
             incomplete = sprint.tasks.exclude(
                 state__in=[
                     Task.State.COMPLETED,
@@ -1437,10 +1665,15 @@ class SprintViewSet(viewsets.ModelViewSet):
             )
             if move_to_backlog or target_sprint is not None:
                 new_sprint = None if move_to_backlog else target_sprint
-                for t in incomplete:
-                    t.sprint = new_sprint
-                    t.save(update_fields=["sprint"])
-                    moved += 1
+                # Update masivo: un save() por tarea disparaba los 3
+                # pre_save de captura. bump manual de version +
+                # updated_at para que offline sync vea el cambio
+                # (mismo patrón que bulk_update/reorder).
+                moved = incomplete.update(
+                    sprint=new_sprint,
+                    version=F("version") + 1,
+                    updated_at=timezone.now(),
+                )
             sprint.state = Sprint.SprintState.CLOSED
             sprint.save(update_fields=["state"])
         return Response({
@@ -1502,7 +1735,9 @@ class EpicViewSet(viewsets.ModelViewSet):
     @action(detail=True, methods=["get"])
     def tasks(self, request, pk=None):
         epic = self.get_object()
-        tasks = Task.objects.for_user(request.user).filter(epic=epic)
+        tasks = Task.objects.for_user(request.user).filter(
+            epic=epic
+        ).prefetch_related("extra_projects")
         serializer = TaskSerializer(tasks, many=True)
         return Response(serializer.data)
 

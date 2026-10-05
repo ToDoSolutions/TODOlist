@@ -31,8 +31,12 @@ import {
   Activity as ActivityIcon,
   Users,
 } from "lucide-react";
-import { format, isPast, isToday, parseISO } from "date-fns";
-import { es } from "date-fns/locale";
+import { isPast, isToday, parseISO } from "date-fns";
+import {
+  formatDateTimeShort,
+  formatMonthYear,
+  formatShort,
+} from "../lib/dates";
 import PageHeader from "../components/ui/PageHeader";
 import MetricCard from "../components/ui/MetricCard";
 import { EmptyState } from "../components/ui/states";
@@ -299,7 +303,7 @@ export default function ProjectOverviewPage() {
               {t("p.misc.projectOverview.membersCount", {
                 count: Array.isArray(members) ? members.length : 0,
               })}{" "}
-              · {format(parseISO(project.created_at), "MMMM yyyy", { locale: es })}
+              · {formatMonthYear(project.created_at)}
             </Typography>
           </Box>
           <Box minWidth={200}>
@@ -370,8 +374,8 @@ export default function ProjectOverviewPage() {
                     {activeSprint.name}
                   </Typography>
                   <Typography variant="caption" color="text.secondary">
-                    {format(parseISO(activeSprint.start_date), "d MMM", { locale: es })} –{" "}
-                    {format(parseISO(activeSprint.end_date), "d MMM", { locale: es })} ·{" "}
+                    {formatShort(activeSprint.start_date)} –{" "}
+                    {formatShort(activeSprint.end_date)} ·{" "}
                     {t("p.misc.tasksCount", { count: activeSprint.task_count })}
                   </Typography>
                   {activeSprint.goal && (
@@ -556,7 +560,10 @@ export default function ProjectOverviewPage() {
                             {m.user_email[0]?.toUpperCase()}
                           </Avatar>
                         }
-                        label={`${m.user_email} · ${m.role}`}
+                        label={`${m.user_email} · ${t(
+                          `p.auth.invitation.roles.${m.role}`,
+                          { defaultValue: m.role },
+                        )}`}
                       />
                     ),
                   )}
@@ -579,7 +586,7 @@ export default function ProjectOverviewPage() {
                     <Box key={i}>
                       <Typography variant="caption" color="text.secondary">
                         {a.actor ?? t("p.misc.projectOverview.system")} ·{" "}
-                        {format(parseISO(a.created_at), "d MMM HH:mm", { locale: es })}
+                        {formatDateTimeShort(a.created_at)}
                       </Typography>
                       <Typography variant="body2">{a.summary}</Typography>
                     </Box>

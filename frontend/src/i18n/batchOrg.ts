@@ -52,6 +52,13 @@ const batchOrg = {
     "p.org.templates.templateName": "Nombre de la plantilla",
     "p.org.templates.saved": "Plantilla creada",
     "p.org.templates.saveError": "No se pudo guardar la plantilla",
+    "p.org.templates.publish": "Compartir en el catálogo comunitario",
+    "p.org.templates.publishHint": "Cualquier usuario podrá verla y aplicarla a sus proyectos",
+    "p.org.templates.community": "Comunidad",
+    "p.org.templates.uses_one": "{{count}} uso",
+    "p.org.templates.uses_other": "{{count}} usos",
+    "p.org.templates.published": "Plantilla publicada",
+    "p.org.templates.unpublished": "Plantilla retirada del catálogo",
     // Etiquetas de estado (ProjectSettingsPage)
     "p.org.stateLabels.title": "Etiquetas de estados",
     "p.org.stateLabels.hint":
@@ -148,6 +155,13 @@ const batchOrg = {
     "p.org.templates.templateName": "Template name",
     "p.org.templates.saved": "Template created",
     "p.org.templates.saveError": "Could not save the template",
+    "p.org.templates.publish": "Share in the community catalog",
+    "p.org.templates.publishHint": "Any user will be able to see it and apply it to their projects",
+    "p.org.templates.community": "Community",
+    "p.org.templates.uses_one": "{{count}} use",
+    "p.org.templates.uses_other": "{{count}} uses",
+    "p.org.templates.published": "Template published",
+    "p.org.templates.unpublished": "Template removed from catalog",
     // State labels (ProjectSettingsPage)
     "p.org.stateLabels.title": "State labels",
     "p.org.stateLabels.hint":

@@ -508,16 +508,18 @@ class TestOAuthCallbackEdgeCases:
             "avatar_url": "",
         }
         # El email NO está verificado → no debe vincularse a la cuenta existente.
-        # Intenta crear usuario con email duplicado → IntegrityError (la vista no
-        # lo captura, pero lo importante es que nunca linkea ni emite tokens).
+        # La cuenta nueva se crea con alias @github.local (no ocupa el email
+        # real) y la instalación GitHub no apunta al usuario existente.
         mock_oauth.get_verified_emails.return_value = {"other@github.com"}
-        from django.db import IntegrityError
-        with pytest.raises(IntegrityError):
-            api_client.post(
-                "/api/auth/github/callback/",
-                {"code": "c", "state": "s"},
-                format="json",
-            )
+        resp = api_client.post(
+            "/api/auth/github/callback/",
+            {"code": "c", "state": "s"},
+            format="json",
+        )
+        assert resp.status_code == 200
+        assert resp.data["user"]["email"] != "user@test.com"
+        inst = GitHubInstallation.objects.get(github_user_id=99999)
+        assert inst.user_id != user.id
 
 
 @pytest.mark.django_db

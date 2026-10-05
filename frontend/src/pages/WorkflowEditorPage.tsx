@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import {
   Box,
@@ -48,6 +48,15 @@ export default function WorkflowEditorPage() {
     queryFn: projectsApi.list,
   });
   const projects = Array.isArray(projectsData) ? projectsData : [];
+
+  // Preselecciona el primer proyecto — evita la pantalla "Selecciona
+  // un proyecto" que obliga a un clic extra siempre.
+  useEffect(() => {
+    if (projectId === "" && projects.length > 0) {
+      const first = projects[0] as { id?: number };
+      if (first?.id != null) setProjectId(first.id);
+    }
+  }, [projects, projectId]);
 
   const { data: transitions } = useQuery({
     queryKey: ["workflow-transitions", projectId],
@@ -240,7 +249,7 @@ export default function WorkflowEditorPage() {
           </Paper>
 
           {/* Vista de tabla accesible */}
-          <Paper variant="outlined">
+          <Paper variant="outlined" sx={{ overflowX: "auto" }}>
             <Table size="small">
               <caption
                 style={{
@@ -284,6 +293,7 @@ export default function WorkflowEditorPage() {
                                   from: STATE_LABELS[e.from_state as TaskState],
                                   to: STATE_LABELS[e.to_state as TaskState],
                                 }),
+                                { confirmLabel: t("common.delete") },
                               )
                             )
                               deleteMut.mutate(e.id);

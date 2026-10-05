@@ -1,6 +1,7 @@
 import { ReactNode } from "react";
 import { Box, Button, Typography } from "@mui/material";
 import { AlertTriangle, Inbox, Lock, RefreshCw, WifiOff } from "lucide-react";
+import { useTranslation } from "react-i18next";
 
 interface StateProps {
   title: string;
@@ -52,11 +53,12 @@ export function EmptyState(props: StateProps) {
 
 /** Vacío causado por filtros/búsqueda: distinto mensaje que el vacío inicial. */
 export function EmptyFilterState(props: Omit<StateProps, "title"> & { title?: string }) {
+  const { t } = useTranslation();
   return (
     <StateBox
       icon={<Inbox size={48} strokeWidth={1.2} />}
-      title="Sin resultados con estos filtros"
-      description="Prueba a ampliar la búsqueda o limpiar algunos filtros."
+      title={t("common.emptyFilter.title")}
+      description={t("common.emptyFilter.desc")}
       {...props}
     />
   );
@@ -64,6 +66,7 @@ export function EmptyFilterState(props: Omit<StateProps, "title"> & { title?: st
 
 /** Error recuperable con reintento. */
 export function ErrorState({ onRetry, ...props }: StateProps & { onRetry?: () => void }) {
+  const { t } = useTranslation();
   return (
     <StateBox
       icon={<AlertTriangle size={48} strokeWidth={1.2} />}
@@ -75,7 +78,7 @@ export function ErrorState({ onRetry, ...props }: StateProps & { onRetry?: () =>
             startIcon={<RefreshCw size={16} />}
             onClick={onRetry}
           >
-            Reintentar
+            {t("common.retry")}
           </Button>
         ))
       }
@@ -86,11 +89,12 @@ export function ErrorState({ onRetry, ...props }: StateProps & { onRetry?: () =>
 
 /** Sin permisos: distinto de error genérico. */
 export function PermissionState(props: Omit<StateProps, "title"> & { title?: string }) {
+  const { t } = useTranslation();
   return (
     <StateBox
       icon={<Lock size={48} strokeWidth={1.2} />}
-      title="No tienes acceso a este recurso"
-      description="Pide acceso al propietario o a un administrador del proyecto."
+      title={t("common.noAccess.title")}
+      description={t("common.noAccess.desc")}
       {...props}
     />
   );
@@ -98,11 +102,12 @@ export function PermissionState(props: Omit<StateProps, "title"> & { title?: str
 
 /** Modo offline: aviso de datos potencialmente obsoletos. */
 export function OfflineState(props: Omit<StateProps, "title"> & { title?: string }) {
+  const { t } = useTranslation();
   return (
     <StateBox
       icon={<WifiOff size={48} strokeWidth={1.2} />}
-      title="Sin conexión"
-      description="Estás viendo datos locales. Los cambios se sincronizarán al reconectar."
+      title={t("common.offline.title")}
+      description={t("common.offline.desc")}
       {...props}
     />
   );

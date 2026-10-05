@@ -9,7 +9,6 @@ import {
   Typography,
   ToggleButton,
   ToggleButtonGroup,
-  CircularProgress,
   Alert,
 } from "@mui/material";
 import { Flame, CheckCircle2, TrendingUp, Trophy } from "lucide-react";
@@ -28,6 +27,9 @@ import {
 } from "recharts";
 import { useTheme } from "@mui/material";
 import { taskX2Api } from "../api/featTask2";
+import PageHeader from "../components/ui/PageHeader";
+import { ErrorState } from "../components/ui/states";
+import { CardGridSkeleton } from "../components/ui/skeletons";
 
 const RANGES = [7, 30, 90] as const;
 
@@ -37,7 +39,7 @@ export default function ProductivityPage() {
   const theme = useTheme();
   const [days, setDays] = useState<number>(30);
 
-  const { data, isLoading, isError } = useQuery({
+  const { data, isLoading, isError, refetch } = useQuery({
     queryKey: ["task-productivity", days],
     queryFn: () => taskX2Api.productivity(days),
   });
@@ -93,39 +95,32 @@ export default function ProductivityPage() {
 
   return (
     <Box sx={{ maxWidth: 960, mx: "auto" }}>
-      <Stack
-        direction="row"
-        alignItems="center"
-        justifyContent="space-between"
-        mb={3}
-        flexWrap="wrap"
-        useFlexGap
-        spacing={1}
-      >
-        <Typography variant="h5" fontWeight={700}>
-          {t("p.taskx.prod.title")}
-        </Typography>
-        <ToggleButtonGroup
-          size="small"
-          exclusive
-          value={days}
-          onChange={(_, v) => v && setDays(v)}
-          aria-label={t("p.taskx.prod.title")}
-        >
-          {RANGES.map((r) => (
-            <ToggleButton key={r} value={r}>
-              {t(`p.taskx.prod.range${r}`)}
-            </ToggleButton>
-          ))}
-        </ToggleButtonGroup>
-      </Stack>
+      <PageHeader
+        title={t("p.taskx.prod.title")}
+        actions={
+          <ToggleButtonGroup
+            size="small"
+            exclusive
+            value={days}
+            onChange={(_, v) => v && setDays(v)}
+            aria-label={t("p.taskx.prod.title")}
+          >
+            {RANGES.map((r) => (
+              <ToggleButton key={r} value={r}>
+                {t(`p.taskx.prod.range${r}`)}
+              </ToggleButton>
+            ))}
+          </ToggleButtonGroup>
+        }
+      />
 
       {isLoading ? (
-        <Stack alignItems="center" py={6}>
-          <CircularProgress />
-        </Stack>
+        <CardGridSkeleton cards={4} />
       ) : isError ? (
-        <Alert severity="error">{t("p.taskx.prod.error")}</Alert>
+        <ErrorState
+          title={t("p.taskx.prod.error")}
+          onRetry={() => void refetch()}
+        />
       ) : (
         <>
           {/* Tarjetas de métricas */}

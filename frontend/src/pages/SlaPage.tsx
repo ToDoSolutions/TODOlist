@@ -1,7 +1,8 @@
-import { useState } from "react";
+﻿import { useState } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { useNavigate } from "react-router-dom";
 import { useTranslation } from "react-i18next";
+import { TableSkeleton } from "../components/ui/skeletons";
 import {
   Box,
   Typography,
@@ -121,14 +122,23 @@ export default function SlaPage() {
       />
 
       {isLoading ? (
-        <CircularProgress />
+        <TableSkeleton />
       ) : list.length === 0 ? (
         <EmptyState
           title={t("p.admin.sla.emptyTitle")}
           description={t("p.admin.sla.emptyDesc")}
+          action={
+            <Button
+              variant="contained"
+              startIcon={<Plus size={15} />}
+              onClick={() => openDialog("new")}
+            >
+              {t("p.admin.sla.newPolicy")}
+            </Button>
+          }
         />
       ) : (
-        <Paper variant="outlined">
+        <Paper variant="outlined" sx={{ overflowX: "auto" }}>
           <Table size="small">
             <TableHead>
               <TableRow>
@@ -195,7 +205,9 @@ export default function SlaPage() {
                       aria-label={t("p.admin.sla.ariaDelete", { name: p.name })}
                       onClick={async () => {
                         if (
-                          await confirm(t("p.admin.sla.confirmDelete", { name: p.name }))
+                          await confirm(t("p.admin.sla.confirmDelete", { name: p.name }), {
+                    confirmLabel: t("common.delete"),
+                  })
                         )
                           deleteMut.mutate(p.id);
                       }}

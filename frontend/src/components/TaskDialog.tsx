@@ -44,6 +44,8 @@ import {
   ExternalLink,
   Copy,
   ShieldCheck,
+  ChevronUp,
+  ChevronDown,
 } from "lucide-react";
 
 const EmojiPicker = lazy(() => import("emoji-picker-react"));
@@ -60,11 +62,15 @@ import {
   tagsApi,
   tasksApi,
   attachmentsApi,
+  encryptionApi,
   type ApiError,
 } from "../api/resources";
+import { loadPrivateKeyB64 } from "../lib/e2ee";
+import { createEncryptedTask } from "../lib/encryptedTask";
 import { taskXApi, useUndoDelete, type TaskX, type TaskXPatch } from "../api/featTask";
 import { taskX2Api } from "../api/featTask2";
 import { sectionsApi } from "../api/featSect";
+import TaskCustomFields from "./TaskCustomFields";
 import {
   approvalsApi,
   approverDirectory,
@@ -74,6 +80,7 @@ import {
 } from "../api/featTask3";
 import type { AttachmentItem } from "../types";
 import { notify } from "../notify";
+import { apiErrorText } from "../lib/apiError";
 import { useConfirm } from "./ConfirmDialog";
 import {
   Task,
@@ -82,9 +89,12 @@ import {
   TaskState,
   TaskRelation,
   RelationType,
+  TaskSize,
+  SIZE_LABELS,
 } from "../types";
 import { TASK_RELATION_I18N_KEYS, TASK_STATE_I18N_KEYS } from "../i18n/batchTaskUi";
 import { format } from "date-fns";
+import { formatDateTimeShort } from "../lib/dates";
 
 interface Props {
   open: boolean;
@@ -109,6 +119,13 @@ interface FormValues {
   recurrence_frequency: string;
   recurrence_interval: number;
   is_milestone: boolean;
+  encrypt: boolean;
+  extra_projects: number[];
+  // Estimación: existen en backend y se renderizan (kanban/tabla) pero
+  // no había editor — story_points, horas estimadas y talla.
+  story_points: string;
+  estimate_hours: string;
+  size: TaskSize | "";
 }
 
 /** Campos de aprobación/tiempo registrado que el backend añade a Task. */
@@ -167,6 +184,16 @@ export default function TaskDialog({
   const [editingSubtaskId, setEditingSubtaskId] = useState<number | null>(null);
   const [editSubtaskTitle, setEditSubtaskTitle] = useState("");
 
+  // E2EE en el flujo de creación: disponible solo si el usuario tiene
+  // par RSA registrado (pública activa) y la privada en este dispositivo.
+  const { data: activeEncKey } = useQuery({
+    queryKey: ["encryption-active-key"],
+    queryFn: encryptionApi.getActiveKey,
+    enabled: open && !task,
+    retry: false,
+  });
+  const e2eeAvailable = !task && !!activeEncKey && !!loadPrivateKeyB64();
+
   const { data: projectsData } = useQuery({
     queryKey: ["projects"],
     queryFn: projectsApi.list,
@@ -191,6 +218,11 @@ export default function TaskDialog({
       tags: [],
       assignees: [],
       is_milestone: false,
+      encrypt: false,
+      extra_projects: [],
+      story_points: "",
+      estimate_hours: "",
+      size: "",
     },
   });
 
@@ -236,6 +268,12 @@ export default function TaskDialog({
         tags: task?.tags || [],
         assignees: tx?.assignees ?? (tx?.assignees_detail ?? []).map((u) => u.id),
         is_milestone: task?.is_milestone ?? false,
+        extra_projects: task?.extra_projects ?? [],
+        story_points:
+          task?.story_points != null ? String(task.story_points) : "",
+        estimate_hours:
+          task?.estimate_hours != null ? String(task.estimate_hours) : "",
+        size: task?.size ?? "",
       });
     }
   }, [open, task, defaultProjectId, reset]);
@@ -244,6 +282,8 @@ export default function TaskDialog({
     mutationFn: async (values: FormValues) => {
       // `section` es writable en create/PATCH según el contrato nuevo;
       // TaskXPatch (featTask.ts, otro batch) aún no lo declara.
+      const numOrNull = (v: string): number | null =>
+        v.trim() === "" ? null : Number(v);
       const payload: TaskXPatch & {
         section?: number | null;
         is_milestone?: boolean;
@@ -258,7 +298,13 @@ export default function TaskDialog({
           ? new Date(values.reminder_at).toISOString()
           : null,
         project: values.project,
+        extra_projects: values.extra_projects.filter(
+          (id) => id !== values.project,
+        ),
         section: values.project ? values.section : null,
+        story_points: numOrNull(values.story_points),
+        estimate_hours: numOrNull(values.estimate_hours),
+        size: values.size, // CharField blank: "" limpia la talla
         tags: values.tags,
         assignees: values.assignees,
         recurrence_data: recurrenceEnabled
@@ -266,6 +312,21 @@ export default function TaskDialog({
           : undefined,
       };
       if (task) return taskXApi.update(task.id, payload);
+      if (values.encrypt && activeEncKey) {
+        // E2EE: título/descripción se cifran en cliente; el resto de los
+        // metadatos (proyecto, fecha, prioridad) queda en la Task.
+        const meta = { ...payload } as Record<string, unknown>;
+        delete meta.title;
+        delete meta.description;
+        return createEncryptedTask(
+          {
+            title: values.title,
+            description: values.description,
+            taskFields: meta,
+          },
+          activeEncKey,
+        );
+      }
       return tasksApi.create(payload as TaskInput);
     },
     onSuccess: () => {
@@ -273,8 +334,7 @@ export default function TaskDialog({
       onSaved();
     },
     onError: (e: ApiError) => {
-      const msg =
-        (e.response?.data?.title as string[] | undefined)?.[0] || t("p.task.saveError");
+      const msg = apiErrorText(e, t, "p.task.saveError");
       setServerError(msg);
       notify.error(msg);
     },
@@ -300,6 +360,23 @@ export default function TaskDialog({
 
   const removeSubtask = useMutation({
     mutationFn: (id: number) => tasksApi.removeSubtask(id),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ["tasks"] });
+      qc.invalidateQueries({ queryKey: ["task", task?.id] });
+    },
+  });
+
+  // Reorden del checklist: los subtasks nacen con order=0 (POST no lo
+  // asigna) — un swap a 2 PATCH era no-op. El endpoint reorder
+  // reenumera la lista completa.
+  const moveSubtask = useMutation({
+    mutationFn: ({ index, dir }: { index: number; dir: -1 | 1 }) => {
+      const subs = displayTask?.subtasks ?? [];
+      const ids = subs.map((s) => s.id);
+      const target = index + dir;
+      [ids[index], ids[target]] = [ids[target]!, ids[index]!];
+      return tasksApi.reorderSubtasks(task!.id, ids);
+    },
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: ["tasks"] });
       qc.invalidateQueries({ queryKey: ["task", task?.id] });
@@ -523,7 +600,7 @@ export default function TaskDialog({
       setRelType("blocks");
     },
     onError: (e: ApiError) => {
-      const msg = e.response?.data?.detail || t("p.task.relationAddError");
+      const msg = apiErrorText(e, t, "p.task.relationAddError");
       notify.error(msg);
     },
   });
@@ -645,6 +722,15 @@ export default function TaskDialog({
                 {...register("description")}
                 defaultValue={task?.description}
               />
+              {e2eeAvailable && (
+                <Tooltip title={t("p.task.encryptE2eeHint")}>
+                  <FormControlLabel
+                    control={<Checkbox {...register("encrypt")} />}
+                    label={t("p.task.encryptE2ee")}
+                    sx={{ alignSelf: "flex-start" }}
+                  />
+                </Tooltip>
+              )}
               {/* Divulgación progresiva: etiquetas y recurrencia van bajo
                 "Más opciones" para reducir la densidad del formulario base */}
               <Button
@@ -778,7 +864,7 @@ export default function TaskDialog({
                         </IconButton>
                       </Tooltip>
                     </Stack>
-                    {(displayTask?.subtasks || []).map((s) => (
+                    {(displayTask?.subtasks || []).map((s, i, arr) => (
                       <Stack key={s.id} direction="row" alignItems="center" spacing={1}>
                         <Checkbox
                           size="small"
@@ -837,6 +923,34 @@ export default function TaskDialog({
                             >
                               {s.title}
                             </Typography>
+                            <Tooltip title={t("p.task.moveSubtaskUp")}>
+                              <span>
+                                <IconButton
+                                  size="small"
+                                  disabled={i === 0 || moveSubtask.isPending}
+                                  onClick={() =>
+                                    moveSubtask.mutate({ index: i, dir: -1 })
+                                  }
+                                >
+                                  <ChevronUp size={14} />
+                                </IconButton>
+                              </span>
+                            </Tooltip>
+                            <Tooltip title={t("p.task.moveSubtaskDown")}>
+                              <span>
+                                <IconButton
+                                  size="small"
+                                  disabled={
+                                    i === arr.length - 1 || moveSubtask.isPending
+                                  }
+                                  onClick={() =>
+                                    moveSubtask.mutate({ index: i, dir: 1 })
+                                  }
+                                >
+                                  <ChevronDown size={14} />
+                                </IconButton>
+                              </span>
+                            </Tooltip>
                             <Tooltip title={t("p.task.editSubtask")}>
                               <IconButton
                                 size="small"
@@ -852,7 +966,11 @@ export default function TaskDialog({
                               <IconButton
                                 size="small"
                                 onClick={async () => {
-                                  if (await confirm(t("p.task.confirmDeleteSubtask")))
+                                  if (
+                                    await confirm(t("p.task.confirmDeleteSubtask"), {
+                                      confirmLabel: t("p.task.deleteSubtask"),
+                                    })
+                                  )
                                     removeSubtask.mutate(s.id);
                                 }}
                               >
@@ -901,7 +1019,7 @@ export default function TaskDialog({
                             sx={{ flex: 1 }}
                           >
                             {c.author_email} ·{" "}
-                            {format(new Date(c.created_at), "dd MMM HH:mm")}
+                            {formatDateTimeShort(c.created_at)}
                           </Typography>
                           <Tooltip title={t("common.edit")}>
                             <IconButton
@@ -918,7 +1036,11 @@ export default function TaskDialog({
                             <IconButton
                               size="small"
                               onClick={async () => {
-                                if (await confirm(t("p.task.confirmDeleteComment")))
+                                if (
+                                  await confirm(t("p.task.confirmDeleteComment"), {
+                                    confirmLabel: t("common.delete"),
+                                  })
+                                )
                                   removeComment.mutate(c.id);
                               }}
                             >
@@ -1057,7 +1179,11 @@ export default function TaskDialog({
                                 <IconButton
                                   size="small"
                                   onClick={async () => {
-                                    if (await confirm(t("p.task.confirmDeleteRelation")))
+                                    if (
+                                      await confirm(t("p.task.confirmDeleteRelation"), {
+                                        confirmLabel: t("p.task.deleteRelation"),
+                                      })
+                                    )
                                       removeRelation.mutate(r.id);
                                   }}
                                 >
@@ -1159,7 +1285,11 @@ export default function TaskDialog({
                               <IconButton
                                 size="small"
                                 onClick={async () => {
-                                  if (await confirm("¿Eliminar este adjunto?"))
+                                  if (
+                                    await confirm(t("p.task.confirmDeleteAttachment"), {
+                                      confirmLabel: t("p.task.deleteAttachment"),
+                                    })
+                                  )
                                     removeAttachment.mutate(a.id);
                                 }}
                               >
@@ -1280,6 +1410,58 @@ export default function TaskDialog({
                   </TextField>
                 )}
               />
+              {/* Estimación: los campos existen en backend y se
+                  renderizan en kanban/tabla — antes no había editor */}
+              <Stack direction="row" spacing={1}>
+                <Controller
+                  control={control}
+                  name="story_points"
+                  render={({ field }) => (
+                    <TextField
+                      size="small"
+                      label={t("p.task.storyPoints")}
+                      type="number"
+                      inputProps={{ min: 0, max: 100, step: 1 }}
+                      fullWidth
+                      {...field}
+                    />
+                  )}
+                />
+                <Controller
+                  control={control}
+                  name="estimate_hours"
+                  render={({ field }) => (
+                    <TextField
+                      size="small"
+                      label={t("p.task.estimateHours")}
+                      type="number"
+                      inputProps={{ min: 0, max: 9999, step: 0.5 }}
+                      fullWidth
+                      {...field}
+                    />
+                  )}
+                />
+              </Stack>
+              <Controller
+                control={control}
+                name="size"
+                render={({ field }) => (
+                  <TextField
+                    select
+                    size="small"
+                    label={t("p.task.size")}
+                    fullWidth
+                    {...field}
+                  >
+                    <MenuItem value="">{t("p.task.sizeNone")}</MenuItem>
+                    {(Object.keys(SIZE_LABELS) as TaskSize[]).map((s) => (
+                      <MenuItem key={s} value={s}>
+                        {SIZE_LABELS[s]}
+                      </MenuItem>
+                    ))}
+                  </TextField>
+                )}
+              />
               <Controller
                 control={control}
                 name="project"
@@ -1302,7 +1484,7 @@ export default function TaskDialog({
                     name={field.name}
                     ref={field.ref}
                   >
-                    <MenuItem value="">Bandeja de entrada</MenuItem>
+                    <MenuItem value="">{t("nav.inbox")}</MenuItem>
                     {projects.map((p) => (
                       <MenuItem key={p.id} value={p.id}>
                         {p.name}
@@ -1342,6 +1524,29 @@ export default function TaskDialog({
                   )}
                 />
               )}
+              {/* Multi-homing: hogares extra donde aparece la tarea
+                  (excluye el proyecto canónico — ese ya la contiene) */}
+              <Controller
+                control={control}
+                name="extra_projects"
+                render={({ field }) => (
+                  <Autocomplete
+                    multiple
+                    size="small"
+                    options={projects.filter((p) => p.id !== formProject)}
+                    getOptionLabel={(p) => p.name}
+                    isOptionEqualToValue={(a, b) => a.id === b.id}
+                    value={projects.filter((p) => field.value.includes(p.id))}
+                    onChange={(_, v) => field.onChange(v.map((p) => p.id))}
+                    renderInput={(params) => (
+                      <TextField
+                        {...params}
+                        label={t("p.task.extraProjects")}
+                      />
+                    )}
+                  />
+                )}
+              />
               <Controller
                 control={control}
                 name="due_date"
@@ -1410,6 +1615,11 @@ export default function TaskDialog({
                   />
                 )}
               />
+              {/* Campos personalizados del proyecto — solo editando y
+                  con proyecto seleccionado (los CF son por proyecto) */}
+              {task && formProject != null && (
+                <TaskCustomFields taskId={task.id} projectId={formProject} />
+              )}
               {task && (
                 <Stack direction="row" spacing={1} alignItems="center">
                   <Tooltip
@@ -1731,20 +1941,20 @@ export default function TaskDialog({
               startIcon={<Trash2 size={16} />}
               onClick={async () => {
                 if (
-                  await confirm("¿Eliminar esta tarea y todos sus datos asociados?", {
-                    confirmLabel: "Eliminar tarea",
+                  await confirm(t("p.task.confirmDeleteTaskData"), {
+                    confirmLabel: t("p.task.deleteTask"),
                   })
                 )
                   removeTask.mutate();
               }}
             >
-              Eliminar
+              {t("common.delete")}
             </Button>
           )}
           <Box sx={{ flex: 1 }} />
-          <Button onClick={onClose}>Cancelar</Button>
+          <Button onClick={onClose}>{t("common.cancel")}</Button>
           <Button type="submit" variant="contained" disabled={save.isPending}>
-            Guardar
+            {t("common.save")}
           </Button>
         </Stack>
       </Box>
@@ -1754,11 +1964,11 @@ export default function TaskDialog({
         onClose={() => setEmojiAnchor(null)}
         anchorOrigin={{ vertical: "bottom", horizontal: "left" }}
       >
-        <Suspense fallback={<Box sx={{ p: 3 }}>Cargando…</Box>}>
+        <Suspense fallback={<Box sx={{ p: 3 }}>{t("common.loading")}</Box>}>
           <EmojiPicker
             height={360}
             width={320}
-            searchPlaceHolder="Buscar emoji"
+            searchPlaceHolder={t("p.task.searchEmoji")}
             onEmojiClick={(e) => {
               if (emojiAnchor) {
                 reactComment.mutate({ id: emojiAnchor.commentId, emoji: e.emoji });

@@ -3,6 +3,8 @@ kind: Namespace
 metadata:
   name: todolist
 ---
+# NOTA: las claves del Secret deben ser nombres de env válidos
+# ([A-Za-z_][A-Za-z0-9_]*) para que envFrom las exponga al backend.
 apiVersion: v1
 kind: Secret
 metadata:
@@ -10,8 +12,8 @@ metadata:
   namespace: todolist
 type: Opaque
 stringData:
-  django-secret-key: "CHANGE_ME_IN_PRODUCTION"
-  database-url: "postgres://todolist:CHANGE_ME@postgres:5432/todolist"
+  DJANGO_SECRET_KEY: "CHANGE_ME_IN_PRODUCTION"
+  POSTGRES_PASSWORD: "CHANGE_ME_IN_PRODUCTION"
 ---
 apiVersion: apps/v1
 kind: Deployment
@@ -47,7 +49,7 @@ spec:
               valueFrom:
                 secretKeyRef:
                   name: todolist-secrets
-                  key: database-url
+                  key: POSTGRES_PASSWORD
           volumeMounts:
             - name: postgres-data
               mountPath: /var/lib/postgresql/data
@@ -99,3 +101,6 @@ data:
   DJANGO_ALLOWED_HOSTS: "todolist.local,localhost"
   REDIS_HOST: "redis"
   CORS_ALLOWED_ORIGINS: "http://todolist.local,http://localhost:5173"
+  POSTGRES_DB: "todolist"
+  POSTGRES_USER: "todolist"
+  POSTGRES_HOST: "postgres"

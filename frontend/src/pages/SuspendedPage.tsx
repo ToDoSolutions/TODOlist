@@ -1,6 +1,6 @@
 import { useNavigate } from "react-router-dom";
 import { Box, Typography, Button, Stack } from "@mui/material";
-import { OctagonPause } from "lucide-react";
+import { OctagonPause, Building2, Home } from "lucide-react";
 import { useTranslation } from "react-i18next";
 import "../i18n";
 
@@ -29,11 +29,19 @@ export default function SuspendedPage() {
         {t("p.auth.suspended.body")}
       </Typography>
       <Stack direction="row" spacing={1.5} mt={3}>
-        <Button variant="contained" onClick={() => navigate("/app")}>
-          {t("p.auth.goHome")}
-        </Button>
-        <Button variant="outlined" onClick={() => navigate("/app/admin/organizations")}>
+        <Button
+          variant="outlined"
+          startIcon={<Building2 size={15} />}
+          onClick={() => navigate("/app/admin/organizations")}
+        >
           {t("p.auth.suspended.viewOrgs")}
+        </Button>
+        <Button
+          variant="contained"
+          startIcon={<Home size={15} />}
+          onClick={() => navigate("/app")}
+        >
+          {t("p.auth.goHome")}
         </Button>
       </Stack>
     </Box>

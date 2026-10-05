@@ -158,7 +158,7 @@ function SharedTaskRow({ task }: { task: SharedTaskItem }) {
       </TableCell>
       <TableCell>
         <Typography variant="body2" color="text.secondary">
-          {task.assignee_email || "—"}
+          {task.assignee_name || "—"}
         </Typography>
       </TableCell>
     </TableRow>

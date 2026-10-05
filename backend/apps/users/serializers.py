@@ -6,18 +6,25 @@ User = get_user_model()
 
 
 class UserSerializer(serializers.ModelSerializer):
+    # El token de inbound email es una credencial: el perfil solo expone
+    # si existe (rotate/revoke en /users/me/email_token/).
+    has_inbound_email = serializers.SerializerMethodField()
+
     class Meta:
         model = User
         fields = [
             "id", "username", "email", "avatar", "timezone", "locale",
-            "email_verified", "email_verified_at", "inbound_email_token",
+            "email_verified", "email_verified_at", "has_inbound_email",
             "weekly_capacity_hours",
             "out_of_office", "out_of_office_until",
         ]
         read_only_fields = [
             "id", "email", "email_verified", "email_verified_at",
-            "inbound_email_token",
+            "has_inbound_email",
         ]
+
+    def get_has_inbound_email(self, obj):
+        return bool(obj.inbound_email_token)
 
 
 class RegisterSerializer(serializers.ModelSerializer):

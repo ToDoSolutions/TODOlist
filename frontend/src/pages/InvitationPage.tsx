@@ -13,8 +13,8 @@ import {
   Divider,
 } from "@mui/material";
 import { Mail, Check, X, ArrowLeft } from "lucide-react";
-import { format, parseISO, isPast } from "date-fns";
-import { es } from "date-fns/locale";
+import { parseISO, isPast } from "date-fns";
+import { formatDate } from "../lib/dates";
 import { useTranslation } from "react-i18next";
 import "../i18n";
 import { invitationsApi, projectsApi } from "../api/resources";
@@ -24,6 +24,8 @@ interface Invitation {
   id: number;
   target_type: "project" | "team";
   target_id: number;
+  target_name?: string | null;
+  invited_by_email?: string | null;
   email: string;
   role: string;
   invited_by: number;
@@ -128,14 +130,13 @@ export default function InvitationPage() {
   const statusInfo = STATUS_LABELS[acted ?? invitation.status];
   const pending = invitation.status === "pending" && !acted;
   const busy = acceptMut.isPending || declineMut.isPending;
-  const createdAgo = format(parseISO(invitation.created_at), "d MMM yyyy", {
-    locale: es,
-  });
+  const createdAgo = formatDate(invitation.created_at);
   const targetName =
-    invitation.target_type === "project"
+    invitation.target_name ||
+    (invitation.target_type === "project"
       ? targetProject?.name ||
         t("p.auth.invitation.targetProject", { id: invitation.target_id })
-      : t("p.auth.invitation.targetTeam", { id: invitation.target_id });
+      : t("p.auth.invitation.targetTeam", { id: invitation.target_id }));
 
   return (
     <Box display="flex" justifyContent="center" py={6} px={2}>
@@ -150,7 +151,7 @@ export default function InvitationPage() {
             <Alert severity={statusInfo.severity} sx={{ width: "100%" }}>
               {statusInfo.label}
               {invitation.responded_at &&
-                ` — ${format(parseISO(invitation.responded_at), "d MMM yyyy", { locale: es })}`}
+                ` — ${formatDate(invitation.responded_at)}`}
             </Alert>
           ) : null}
 
@@ -160,6 +161,13 @@ export default function InvitationPage() {
             <Typography variant="body1">
               {t("p.auth.invitation.invitedToPre")} <strong>{targetName}</strong>
             </Typography>
+            {invitation.invited_by_email && (
+              <Typography variant="body2" color="text.secondary" mt={0.5}>
+                {t("p.auth.invitation.invitedBy", {
+                  email: invitation.invited_by_email,
+                })}
+              </Typography>
+            )}
             <Stack direction="row" spacing={1} justifyContent="center" mt={1}>
               <Chip
                 size="small"

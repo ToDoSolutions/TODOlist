@@ -50,6 +50,16 @@ vi.mock("../api/resources", () => ({
     upload: vi.fn(),
     remove: vi.fn(),
   },
+  customFieldsApi: {
+    list: vi.fn().mockResolvedValue([]),
+    values: vi.fn().mockResolvedValue([]),
+    setValue: vi.fn(),
+    updateValue: vi.fn(),
+    removeValue: vi.fn(),
+  },
+  encryptionApi: {
+    getActiveKey: vi.fn().mockRejectedValue(new Error("no key")),
+  },
 }));
 
 import { tasksApi, attachmentsApi } from "../api/resources";
@@ -344,5 +354,39 @@ describe("TaskDialog - Adjuntos", () => {
       <TaskDialog open={true} task={baseTask} onClose={vi.fn()} onSaved={vi.fn()} />,
     );
     expect(await screen.findByLabelText("Eliminar adjunto")).toBeTruthy();
+  });
+});
+
+describe("TaskDialog - Estimación (story_points/estimate_hours/size)", () => {
+  // Estos campos existían en backend y se renderizaban en kanban/tabla
+  // pero el dialogo no los exponía: sin editor era imposible ponerlos.
+  it("precarga puntos, horas estimadas y talla al editar", async () => {
+    const task: Task = {
+      ...baseTask,
+      story_points: 5,
+      estimate_hours: 2.5,
+      size: "m",
+    };
+    renderWithProviders(
+      <TaskDialog open={true} task={task} onClose={vi.fn()} onSaved={vi.fn()} />,
+    );
+    expect(await screen.findByLabelText("Puntos")).toHaveProperty(
+      "value",
+      "5",
+    );
+    expect(await screen.findByLabelText("Horas est.")).toHaveProperty(
+      "value",
+      "2.5",
+    );
+    // El select de talla muestra la etiqueta traducida de "m"
+    expect(screen.getAllByText("M").length).toBeGreaterThan(0);
+  });
+
+  it("los campos de estimación aparecen también al crear", () => {
+    renderWithProviders(
+      <TaskDialog open={true} task={null} onClose={vi.fn()} onSaved={vi.fn()} />,
+    );
+    expect(screen.getByLabelText("Puntos")).toHaveProperty("value", "");
+    expect(screen.getByLabelText("Horas est.")).toHaveProperty("value", "");
   });
 });

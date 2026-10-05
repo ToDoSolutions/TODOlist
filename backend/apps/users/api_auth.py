@@ -36,7 +36,6 @@ class APIKeyRateThrottle(UserRateThrottle):
     """Rate limiting para API keys: 1000/hour por key."""
 
     scope = "api_key"
-    rate = "1000/hour"
 
     def get_cache_key(self, request, view):
         # Solo throttlear peticiones autenticadas con API key
@@ -69,19 +68,16 @@ class APIKeyScopePermission(BasePermission):
 class BurstRateThrottle(AnonRateThrottle):
     """Rate limiting burst: 60/min para anónimos."""
     scope = "burst"
-    rate = "60/min"
 
 
 class AuthenticatedRateThrottle(UserRateThrottle):
     """Rate limiting para usuarios autenticados: 300/hour."""
     scope = "authenticated"
-    rate = "300/hour"
 
 
 class LoginRateThrottle(AnonRateThrottle):
     """Rate limiting estricto para login: 10/min por IP."""
     scope = "login"
-    rate = "10/min"
 
 
 class RegisterRateThrottle(AnonRateThrottle):
@@ -90,7 +86,6 @@ class RegisterRateThrottle(AnonRateThrottle):
     Evita creación masiva de cuentas (spam, abuso de recursos).
     """
     scope = "register"
-    rate = "5/hour"
 
 
 class PasswordResetRateThrottle(AnonRateThrottle):
@@ -99,7 +94,6 @@ class PasswordResetRateThrottle(AnonRateThrottle):
     Evita abuso del envío de emails y enumeración por volumen.
     """
     scope = "password_reset"
-    rate = "5/hour"
 
 
 class IntakePublicRateThrottle(AnonRateThrottle):
@@ -111,6 +105,13 @@ class IntakePublicRateThrottle(AnonRateThrottle):
 class PublicShareRateThrottle(AnonRateThrottle):
     """Rate limiting para enlaces públicos de proyectos: 60/hora por IP."""
     scope = "public_share"
+
+
+class SensitiveActionRateThrottle(UserRateThrottle):
+    """Acciones destructivas autenticadas (deactivate/delete account):
+    5/hora por usuario — frena fuerza bruta de contraseña sobre una
+    sesión robada, ya que el throttle global (300/h) es demasiado laxo."""
+    scope = "sensitive_action"
 
 
 class InboundRateThrottle(AnonRateThrottle):

@@ -13,7 +13,6 @@ import type { ChatIntegration, ChatMessageLog } from "../types";
 import {
   Box,
   Typography,
-  CircularProgress,
   Paper,
   Button,
   TextField,
@@ -32,7 +31,6 @@ import {
   TableHead,
   TableRow,
   Stack,
-  Alert,
   useTheme,
   Grid,
   Card,
@@ -59,6 +57,9 @@ import {
 import { Link as RouterLink } from "react-router-dom";
 import { notify } from "../notify";
 import { useConfirm } from "../components/ConfirmDialog";
+import PageHeader from "../components/ui/PageHeader";
+import { ErrorState } from "../components/ui/states";
+import { TaskListSkeleton } from "../components/ui/skeletons";
 import { useTranslation } from "react-i18next";
 
 export default function IntegrationsPage() {
@@ -73,11 +74,11 @@ export default function IntegrationsPage() {
   const [webhookUrl, setWebhookUrl] = useState("");
   const [events, setEvents] = useState("task_created,task_completed");
 
-  const { data, isLoading, isError } = useQuery({
+  const { data, isLoading, isError, refetch } = useQuery({
     queryKey: ["chat-integrations"],
     queryFn: chatIntegrationsApi.list,
   });
-  const integrations = data?.results || data || [];
+  const integrations = data ?? [];
 
   const createMutation = useMutation({
     mutationFn: chatIntegrationsApi.create,
@@ -186,13 +187,7 @@ export default function IntegrationsPage() {
     notify.success(t("p.public.links.copied"));
   };
 
-  if (isLoading) return <CircularProgress />;
-  if (isError)
-    return (
-      <Alert severity="error" sx={{ mt: 2 }}>
-        {t("p.integr.chatLoadError")}
-      </Alert>
-    );
+  // El catálogo es estático; el query solo alimenta la sección de chat.
 
   const openEdit = (int: ChatIntegration) => {
     setEditing(int);
@@ -274,6 +269,8 @@ export default function IntegrationsPage() {
 
   return (
     <Box>
+      <PageHeader title={t("p.shell.integrations")} />
+
       {/* ===================== Catálogo ===================== */}
       <Box mb={4}>
         <Stack direction="row" alignItems="center" spacing={1} mb={0.5}>
@@ -332,11 +329,21 @@ export default function IntegrationsPage() {
           mb: 2,
         }}
       >
-        <Typography variant="h5">{t("p.integr.chatTitle")}</Typography>
+        <Typography variant="subtitle1" fontWeight={600}>
+          {t("p.integr.chatTitle")}
+        </Typography>
         <Button variant="contained" onClick={() => setOpen(true)}>
           {t("p.integr.chatNew")}
         </Button>
       </Box>
+
+      {isLoading && <TaskListSkeleton rows={2} />}
+      {isError && (
+        <ErrorState
+          title={t("p.integr.chatLoadError")}
+          onRetry={() => void refetch()}
+        />
+      )}
 
       {integrations.map((int: ChatIntegration) => (
         <Paper key={int.id} sx={{ p: 2, mb: 2 }}>
@@ -371,7 +378,11 @@ export default function IntegrationsPage() {
             </IconButton>
             <IconButton
               onClick={async () => {
-                if (await confirm(t("p.integr.chatConfirmDelete", { name: int.name })))
+                if (
+                  await confirm(t("p.integr.chatConfirmDelete", { name: int.name }), {
+                    confirmLabel: t("common.delete"),
+                  })
+                )
                   deleteMutation.mutate(int.id);
               }}
               title={t("p.integr.delete")}
@@ -572,6 +583,7 @@ export default function IntegrationsPage() {
                       if (
                         await confirm(
                           t("p.public.inbound.confirmDelete", { name: wh.name }),
+                          { confirmLabel: t("common.delete") },
                         )
                       )
                         inboundDeleteMut.mutate(wh.id);

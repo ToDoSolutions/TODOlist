@@ -54,8 +54,10 @@ class UserPublicKeyViewSet(viewsets.ModelViewSet):
         try:
             target = User.objects.get(email__iexact=email)
         except User.DoesNotExist:
-            return Response({"error": "User not found"}, status=404)
-        key = get_active_public_key(target)
+            target = None
+        # Respuesta uniforme: mismo 404 para "no existe" y "sin clave"
+        # — distinguirlos permitiría enumerar emails registrados.
+        key = get_active_public_key(target) if target else None
         if not key:
             return Response(
                 {"error": "El usuario no tiene una clave activa"}, status=404
@@ -81,18 +83,23 @@ class UserPublicKeyViewSet(viewsets.ModelViewSet):
                 status=status.HTTP_400_BAD_REQUEST,
             )
 
-        # Marcar la clave antigua como rotada (sigue activa para descifrar
-        # datos existentes hasta que se re-encripten)
-        old_key.rotated_at = timezone.now()
-        old_key.save(update_fields=["rotated_at"])
+        from django.db import transaction
+        with transaction.atomic():
+            # Marcar la clave antigua como rotada. register_public_key la
+            # desactiva para NUEVOS shares/lookups (is_active=False), pero el
+            # registro permanece y los EncryptedKeyShare que la referencian
+            # siguen resolviéndose — el descifrado de datos existentes no se
+            # ve afectado (la privada solo vive en el dispositivo).
+            old_key.rotated_at = timezone.now()
+            old_key.save(update_fields=["rotated_at"])
 
-        # Crear la nueva clave activa
-        new_key = register_public_key(
-            user=request.user,
-            public_key=new_public_key,
-            key_id=new_key_id,
-            algorithm=new_algorithm,
-        )
+            # Crear la nueva clave activa
+            new_key = register_public_key(
+                user=request.user,
+                public_key=new_public_key,
+                key_id=new_key_id,
+                algorithm=new_algorithm,
+            )
 
         # Contar shares que necesitan re-encriptación (NO se borran: el
         # servidor no tiene la clave privada; borrarlos destruiría acceso)
@@ -158,7 +165,9 @@ class EncryptedTaskViewSet(viewsets.ModelViewSet):
         from django.contrib.auth import get_user_model
         User = get_user_model()
         try:
-            target_user = User.objects.get(email=user_email)
+            # iexact: paridad con /public-keys/lookup — un email en
+            # distinto case no debe impedir el share.
+            target_user = User.objects.get(email__iexact=user_email)
         except User.DoesNotExist:
             return Response({"error": "User not found"}, status=404)
 

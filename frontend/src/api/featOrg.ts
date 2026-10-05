@@ -56,6 +56,14 @@ export interface ProjectTemplate {
   description: string;
   config: ProjectTemplateConfig;
   is_builtin: boolean;
+  /** Publicada en el catálogo comunitario (visible para todos). */
+  is_public?: boolean;
+  /** Veces que se ha aplicado desde el catálogo. */
+  use_count?: number;
+  /** username/email del autor (solo lectura). */
+  author?: string;
+  /** La plantilla pertenece al usuario actual. */
+  is_mine?: boolean;
 }
 
 export interface ApplyTemplateResult {
@@ -64,9 +72,11 @@ export interface ApplyTemplateResult {
 }
 
 export const projectTemplatesApi = {
-  list: () =>
+  list: (community?: boolean) =>
     api
-      .get<ListResponse<ProjectTemplate>>("/project-templates/")
+      .get<ListResponse<ProjectTemplate>>("/project-templates/", {
+        params: community ? { community: "true" } : undefined,
+      })
       .then((r) => unwrap(r.data)),
   create: (p: Partial<ProjectTemplate>) =>
     api.post<ProjectTemplate>("/project-templates/", p).then((r) => r.data),
@@ -79,7 +89,12 @@ export const projectTemplatesApi = {
       .post<ApplyTemplateResult>(`/project-templates/${id}/apply/`, data)
       .then((r) => r.data),
   /** Guarda la estructura de un proyecto existente como plantilla. */
-  fromProject: (data: { project_id: number; name: string }) =>
+  fromProject: (data: {
+    project_id: number;
+    name: string;
+    description?: string;
+    public?: boolean;
+  }) =>
     api
       .post<ProjectTemplate>("/project-templates/from_project/", data)
       .then((r) => r.data),

@@ -48,12 +48,26 @@ class TestTwoFactorManage:
         assert TwoFactorSecret.objects.filter(user=user).exists()
 
     def test_setup_regenerates(self, api_client, user):
-        """Verifica que setup regenera el secret si ya existe."""
-        tf = TwoFactorSecret.objects.create(user=user, secret="old", is_enabled=True)
-        api_client.post("/api/auth/2fa/", {"action": "setup"})
+        """Re-setup con 2FA activo exige el segundo factor (anti-bypass)."""
+        secret = pyotp.random_base32()
+        tf = TwoFactorSecret.objects.create(
+            user=user, secret=secret, is_enabled=True
+        )
+        # Sin código → rechazado, y el 2FA sigue activo
+        resp = api_client.post("/api/auth/2fa/", {"action": "setup"})
+        assert resp.status_code == status.HTTP_400_BAD_REQUEST
         tf.refresh_from_db()
-        assert tf.secret != "old"
-        assert tf.is_enabled is False  # Se desactiva hasta confirmar
+        assert tf.secret == secret
+        assert tf.is_enabled is True
+        # Con TOTP válido → regenera el secret y desactiva hasta confirmar
+        code = pyotp.TOTP(secret).now()
+        resp = api_client.post(
+            "/api/auth/2fa/", {"action": "setup", "code": code}
+        )
+        assert resp.status_code == status.HTTP_200_OK
+        tf.refresh_from_db()
+        assert tf.secret != secret
+        assert tf.is_enabled is False
 
     def test_confirm_valid_code(self, api_client, user):
         """Verifica que confirm con código válido activa 2FA."""
@@ -69,7 +83,8 @@ class TestTwoFactorManage:
         # Los códigos se muestran en claro al usuario pero se almacenan hasheados
         assert len(response.data["backup_codes"]) == 10
         assert len(tf.backup_codes) == 10
-        assert all(len(h) == 64 for h in tf.backup_codes)  # SHA-256 hex
+        # PBKDF2 con sal: formato "pbkdf2$<salt>$<digest>" (no reversible)
+        assert all(h.startswith("pbkdf2$") for h in tf.backup_codes)
 
     def test_confirm_invalid_code(self, api_client, user):
         """Verifica que confirm con código inválido falla."""
@@ -169,11 +184,11 @@ class TestAPIKey:
 @pytest.mark.django_db
 class TestTwoFactorSecret:
     def test_generate_backup_codes(self, user):
-        """Verifica que generate_backup_codes genera 10 códigos de 10 chars."""
+        """Verifica que generate_backup_codes genera 10 códigos de 16 chars."""
         tf = TwoFactorSecret.objects.create(user=user, secret="secret")
         codes = tf.generate_backup_codes()
         assert len(codes) == 10
-        assert all(len(c) == 10 for c in codes)
+        assert all(len(c) == 16 for c in codes)
         assert all(c.isupper() or c.isdigit() for c in "".join(codes))
 
     def test_use_backup_code(self, user):

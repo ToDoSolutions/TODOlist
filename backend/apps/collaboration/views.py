@@ -450,7 +450,9 @@ class MentionViewSet(
     permission_classes = [IsAuthenticated]
 
     def get_queryset(self):
-        return Mention.objects.filter(mentioned_user=self.request.user)
+        return Mention.objects.filter(
+            mentioned_user=self.request.user
+        ).select_related("mentioned_by", "mentioned_user")
 
 
 class AuditLogViewSet(
@@ -470,7 +472,77 @@ class AuditLogViewSet(
         resource_type = self.request.query_params.get("resource_type")
         if resource_type:
             qs = qs.filter(resource_type=resource_type)
+        if self.action == "export":
+            return self._scoped_export_qs(qs)
         return qs[:100]
+
+    @action(detail=False, methods=["get"])
+    def export(self, request):
+        """Exporta el audit log propio para SIEM/forense.
+
+        ``?fmt=csv|jsonl`` (default csv — `format` está reservado por
+        la negociación de contenido de DRF), ``?since=``/``?until=``
+        (ISO 8601), límite 10k entradas. La exportación queda auditada.
+        """
+        import csv
+        import io
+        import json
+
+        from django.http import HttpResponse
+        qs = self.get_queryset()  # ya recorta a 10k vía _scoped_export_qs
+        out_fmt = request.query_params.get("fmt", "csv")
+        AuditLog.objects.create(
+            actor=request.user, action=AuditLog.Action.EXPORT,
+            resource_type="audit_log",
+            new_values={"format": out_fmt},
+        )
+        if out_fmt == "jsonl":
+            lines = (
+                json.dumps({
+                    "created_at": l.created_at.isoformat(),
+                    "actor": l.actor.email if l.actor else None,
+                    "action": l.action,
+                    "resource_type": l.resource_type,
+                    "resource_id": l.resource_id,
+                    "resource_name": l.resource_name,
+                    "ip_address": l.ip_address,
+                    "old_values": l.old_values,
+                    "new_values": l.new_values,
+                })
+                for l in qs
+            )
+            return HttpResponse(
+                "\n".join(lines), content_type="application/x-ndjson"
+            )
+        buf = io.StringIO()
+        w = csv.writer(buf)
+        w.writerow([
+            "created_at", "actor", "action", "resource_type",
+            "resource_id", "resource_name", "ip_address",
+            "old_values", "new_values",
+        ])
+        for l in qs:
+            w.writerow([
+                l.created_at.isoformat(),
+                l.actor.email if l.actor else "",
+                l.action, l.resource_type, l.resource_id or "",
+                l.resource_name, l.ip_address or "",
+                json.dumps(l.old_values), json.dumps(l.new_values),
+            ])
+        resp = HttpResponse(buf.getvalue(), content_type="text/csv")
+        resp["Content-Disposition"] = 'attachment; filename="audit-log.csv"'
+        return resp
+
+    def _scoped_export_qs(self, qs):
+        """Rango temporal opcional + cap alto (export real, no preview)."""
+        from django.utils.dateparse import parse_datetime
+        for param, lookup in (("since", "gte"), ("until", "lte")):
+            raw = self.request.query_params.get(param)
+            if raw:
+                dt = parse_datetime(raw)
+                if dt is not None:
+                    qs = qs.filter(**{f"created_at__{lookup}": dt})
+        return qs[:10000]
 
 
 def timezone_now():
@@ -497,13 +569,33 @@ def activity_feed(request):
     for a in TaskActivity.objects.filter(
         task__in=accessible_tasks
     ).select_related("actor", "task").order_by("-created_at")[:limit]:
+        # Label legible ("Cambio de estado") + transición old → new con
+        # valores traducidos (state/priority vienen como claves crudas:
+        # "in_progress", "2"…). Antes se serializaba action+field crudos
+        # ("state_changed state"), que no aporta y queda mal en el feed.
+        def _human(field: str, value: str) -> str:
+            if not value:
+                return value
+            if field == "state":
+                return dict(Task.State.choices).get(value, value)
+            if field == "priority":
+                return dict(Task.Priority.choices).get(
+                    int(value) if value.isdigit() else value, value
+                ) or value
+            return value
+
+        transition = (
+            f" {_human(a.field, a.old_value)} → {_human(a.field, a.new_value)}"
+            if a.old_value or a.new_value else ""
+        )
         feed.append({
             "kind": "task_activity",
             "action": a.action,
             "actor": a.actor.email if a.actor else None,
             "resource": f"task:{a.task_id}",
-            "summary": f"{a.task.title}: {a.action}"
-                       + (f" {a.field}" if a.field else ""),
+            "summary": (
+                f"{a.task.title}: {a.get_action_display()}{transition}"
+            ),
             "created_at": a.created_at.isoformat(),
         })
 
@@ -515,7 +607,10 @@ def activity_feed(request):
             "action": log.action,
             "actor": request.user.email,
             "resource": f"{log.resource_type}:{log.resource_id}",
-            "summary": f"{log.action} {log.resource_type} {log.resource_name}",
+            "summary": (
+                f"{log.get_action_display()} "
+                f"{log.resource_type} {log.resource_name}"
+            ).strip(),
             "created_at": log.created_at.isoformat(),
         })
 
@@ -565,6 +660,20 @@ class MeetingViewSet(viewsets.ModelViewSet):
     def perform_create(self, serializer):
         serializer.save(owner=self.request.user)
 
+    def get_object(self):
+        """Lectura: owner/attendee/miembro del proyecto.
+        Escritura (PUT/PATCH/DELETE): exige `_user_can_write_meeting`
+        — un viewer o mero attendee no puede modificar la reunión."""
+        obj = super().get_object()
+        if (
+            self.request.method not in ("GET", "HEAD", "OPTIONS")
+            and not _user_can_write_meeting(self.request.user, obj)
+        ):
+            raise PermissionDenied(
+                "Solo el owner o un editor del proyecto puede modificar la reunión"
+            )
+        return obj
+
     def _get_writable_meeting(self, request):
         """Objeto de la reunión o 404; 403 si solo tiene acceso de lectura."""
         meeting = self.get_object()
@@ -576,8 +685,12 @@ class MeetingViewSet(viewsets.ModelViewSet):
 
     @action(detail=True, methods=["post"])
     def create_task(self, request, pk=None):
-        """Crea una tarea desde un action item de la reunión."""
-        meeting = self.get_object()
+        """Crea una tarea desde un action item de la reunión.
+
+        Requiere escritura: un viewer del proyecto (o mero attendee) no
+        puede inyectar tareas en él.
+        """
+        meeting = self._get_writable_meeting(request)
         title = request.data.get("title", "").strip()
         if not title:
             return Response(
@@ -585,9 +698,16 @@ class MeetingViewSet(viewsets.ModelViewSet):
                 status=status.HTTP_400_BAD_REQUEST,
             )
         from apps.tasks.models import Task
+        from apps.tasks.services import next_position_seq
+
+        # Paridad con perform_create: position al final de la lista del
+        # usuario y seq del proyecto para la ref legible.
+        position, seq = next_position_seq(request.user, meeting.project)
         task = Task.objects.create(
             owner=request.user,
             project=meeting.project,
+            seq=seq,
+            position=position,
             title=title,
             description=f"Action item de reunión: {meeting.title}",
             state="pending",

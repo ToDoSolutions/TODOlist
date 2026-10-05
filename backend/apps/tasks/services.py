@@ -53,6 +53,30 @@ def parse_due_date(value):
     return parsed
 
 
+def next_position_seq(user, project=None):
+    """``(position, seq)`` para crear una tarea por cualquier canal.
+
+    position va al final de la lista del usuario; seq es por proyecto
+    (ref legible "MP-12") y queda en 0 sin proyecto (el ref cae al id —
+    Task.seq no es único). Todos los canales de creación (REST, GraphQL,
+    intake, meetings, plantillas, inbound webhooks, email, GitHub sync,
+    automatizaciones) deben pasar por aquí para no re-introducir el
+    desfase de "tarea nueva con position=0/seq=0".
+    """
+    from django.db.models import Max
+
+    position = (
+        Task.objects.for_user(user).aggregate(m=Max("position"))["m"] or 0
+    ) + 1
+    seq = 0
+    if project is not None:
+        seq = (
+            Task.objects.filter(project=project).aggregate(m=Max("seq"))["m"]
+            or 0
+        ) + 1
+    return position, seq
+
+
 def apply_completion_effects(task, save=True):
     """Efectos derivados de task.state tras un cambio.
 

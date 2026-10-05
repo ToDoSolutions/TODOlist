@@ -13,6 +13,7 @@ from apps.users.security import (
     is_2fa_locked,
     record_2fa_failure,
     reset_2fa_failures,
+    verify_backup_code,
 )
 
 User = get_user_model()
@@ -66,14 +67,32 @@ class TestTwoFactorLockout:
 
 @pytest.mark.django_db
 class TestHashBackupCode:
-    def test_hash_is_sha256(self):
+    def test_hash_is_pbkdf2_salted(self):
+        """Formato pbkdf2$<salt>$<digest> con sal aleatoria por hash."""
         h = hash_backup_code("ABCD1234")
-        assert len(h) == 64
-        assert h == hash_backup_code("ABCD1234")
+        scheme, salt, digest = h.split("$", 2)
+        assert scheme == "pbkdf2"
+        assert len(salt) == 16  # 8 bytes hex
+        assert len(digest) == 64  # SHA-256 digest hex
+        # La sal hace que dos hashes del mismo código difieran
+        assert hash_backup_code("ABCD1234") != h
+        # Misma sal → mismo hash (verificación)
+        assert hash_backup_code("ABCD1234", salt) == h
 
     def test_hash_normalizes(self):
-        """Minúsculas y espacios producen el mismo hash."""
-        assert hash_backup_code("abcd1234") == hash_backup_code("  ABCD1234  ")
+        """Minúsculas y espacios verifican contra el mismo hash."""
+        stored = hash_backup_code("ABCD1234")
+        assert verify_backup_code("abcd1234", stored)
+        assert verify_backup_code("  ABCD1234  ", stored)
+        assert not verify_backup_code("OTRO", stored)
+
+    def test_verify_legacy_sha256(self):
+        """Hashes SHA-256 legacy (sin sal) siguen verificando."""
+        import hashlib
+
+        legacy = hashlib.sha256(b"ABCD1234").hexdigest()
+        assert verify_backup_code("abcd1234", legacy)
+        assert not verify_backup_code("OTRO", legacy)
 
 
 @pytest.mark.django_db

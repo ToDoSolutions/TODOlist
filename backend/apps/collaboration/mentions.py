@@ -69,7 +69,7 @@ def process_mentions(text, comment=None, task=None, mentioned_by=None):
             title=f"Mención de {mentioned_by.email if mentioned_by else 'alguien'}",
             body=f"Te han mencionado en: {task.title if task else 'un comentario'}",
             task=task,
-            action_url=f"/app/tasks?task={task.id}" if task else "",
+            action_url=f"/app/tasks/{task.id}" if task else "",
         )
 
     return mentioned_users

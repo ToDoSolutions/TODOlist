@@ -53,8 +53,9 @@ describe("TagsPage", () => {
 
   it("muestra estado de carga", () => {
     listMock.mockReturnValue(new Promise(() => {}));
-    renderPage();
-    expect(screen.getByRole("progressbar")).toBeTruthy();
+    const { container } = renderPage();
+    // Carga estructural: skeletons en lugar de spinner
+    expect(container.querySelector(".MuiSkeleton-root")).toBeTruthy();
   });
 
   it("muestra empty state sin etiquetas", async () => {
@@ -150,8 +151,8 @@ describe("TagsPage", () => {
     const deleteIcon = container.querySelector(".MuiChip-deleteIcon");
     expect(deleteIcon).toBeTruthy();
     fireEvent.click(deleteIcon!);
-    // ConfirmDialog: el delete ahora requiere confirmación
-    const confirmBtn = await screen.findByRole("button", { name: /confirmar/i });
+    // ConfirmDialog: el delete requiere confirmación con label específico
+    const confirmBtn = await screen.findByRole("button", { name: /eliminar/i });
     fireEvent.click(confirmBtn);
     await waitFor(() => expect(removeMock).toHaveBeenCalledWith(7));
   });

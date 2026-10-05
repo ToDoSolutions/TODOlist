@@ -79,7 +79,7 @@ describe("ProjectsPage", () => {
   it("muestra empty state sin proyectos", async () => {
     listMock.mockResolvedValue([]);
     renderPage();
-    await waitFor(() => expect(screen.getByText(/no hay proyectos/i)).toBeTruthy());
+    await waitFor(() => expect(screen.getByText(/sin proyectos/i)).toBeTruthy());
   });
 
   it("lista proyectos con counts", async () => {
@@ -87,7 +87,7 @@ describe("ProjectsPage", () => {
     renderPage();
     await waitFor(() => expect(screen.getByText("Proyecto A")).toBeTruthy());
     expect(screen.getByText("3 tareas")).toBeTruthy();
-    expect(screen.getByText("1 sprints")).toBeTruthy();
+    expect(screen.getByText("1 sprint")).toBeTruthy();
     expect(screen.getByText("2 épicas")).toBeTruthy();
   });
 

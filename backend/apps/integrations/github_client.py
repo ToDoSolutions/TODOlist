@@ -1,11 +1,14 @@
 """Cliente de la API de GitHub usando GitHub App authentication.
 Genera JWT, obtiene installation tokens y hace llamadas a la API REST/GraphQL.
 """
+import logging
 import time
 
 import jwt
 import requests
 from django.conf import settings
+
+logger = logging.getLogger(__name__)
 
 # Timeout por defecto para todas las llamadas HTTP a GitHub (evita
 # que un endpoint lento cuelgue workers/threads indefinidamente)
@@ -328,4 +331,5 @@ class GitHubOAuthClient:
                 if e.get("verified") and e.get("email")
             }
         except Exception:  # noqa: BLE001  # boundary intencional: fallo externo no rompe el flujo
+            logger.warning("Fallo obteniendo emails verificados de GitHub", exc_info=True)
             return set()

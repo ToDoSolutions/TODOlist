@@ -86,9 +86,20 @@ def _action_set_state(rule, params, task, sprint, user):
     new_state = params.get("state", "pending")
     if new_state not in [c[0] for c in Task.State.choices]:
         return {"error": f"Invalid state '{new_state}'"}
+    # Paridad con los otros canales: workflow transitions + efectos de
+    # completado (completed_at, siguiente ocurrencia de recurrentes).
+    from apps.tasks.services import (
+        apply_completion_effects,
+        assert_state_transition,
+    )
+    try:
+        assert_state_transition(task, new_state)
+    except ValueError as e:
+        return {"error": str(e)}
     old_state = task.state
     task.state = new_state
     task.save(update_fields=["state"])
+    apply_completion_effects(task)
     return {"old_state": old_state, "new_state": new_state}
 
 
@@ -108,8 +119,17 @@ def _action_move_to_sprint(rule, params, task, sprint, user):
     sprint_id = params.get("sprint_id")
     if not sprint_id:
         return {"skipped": "no sprint_id in action_params"}
+    from django.db.models import Q
+
+    from apps.projects.models import accessible_projects
+
     try:
-        target_sprint = Sprint.objects.get(id=sprint_id, owner=user)
+        # Mismo scope que TaskViewSet.move_to_sprint: sprints propios o
+        # de proyectos editables por el owner de la regla.
+        target_sprint = Sprint.objects.get(
+            Q(owner=user) | Q(project__in=accessible_projects(user, write=True)),
+            id=sprint_id,
+        )
         # Coherencia: el sprint debe pertenecer al proyecto de la tarea
         if task.project_id and target_sprint.project_id != task.project_id:
             return {"error": "Sprint does not belong to task's project"}
@@ -123,10 +143,25 @@ def _action_move_to_sprint(rule, params, task, sprint, user):
 
 def _action_subtasks_in_progress(rule, params, task, sprint, user):
     # Subtask usa is_done boolean, no state. Mover las tareas hijas
-    # pendientes del padre a in_progress:
-    children = Task.objects.filter(parent=task, state__in=["pending", "backlog"])
-    moved = children.update(state="in_progress")
-    return {"moved_subtasks": moved}
+    # pendientes del padre a in_progress — respetando los workflows de
+    # su proyecto (una transición prohibida solo salta esa hija).
+    from apps.tasks.services import assert_state_transition
+
+    moved = 0
+    skipped = 0
+    children = Task.objects.filter(
+        parent=task, state__in=["pending", "backlog"]
+    ).select_related("project")
+    for child in children.iterator():
+        try:
+            assert_state_transition(child, "in_progress")
+        except ValueError:
+            skipped += 1
+            continue
+        child.state = "in_progress"
+        child.save(update_fields=["state"])
+        moved += 1
+    return {"moved_subtasks": moved, "skipped_by_workflow": skipped}
 
 
 def _action_create_notification(rule, params, task, sprint, user):
@@ -153,8 +188,25 @@ def _action_create_task(rule, params, task, sprint, user):
         priority = 3
     if priority not in _valid_priorities():
         priority = 3
+    # Paridad con REST: position al final de la lista del usuario y,
+    # si viene project_id (editable por el owner de la regla), seq del
+    # proyecto para la ref legible.
+    from apps.projects.models import accessible_projects
+    from apps.tasks.services import next_position_seq
+
+    project = None
+    if params.get("project_id"):
+        project = accessible_projects(user, write=True).filter(
+            pk=params["project_id"]
+        ).first()
+        if project is None:
+            return {"error": f"Project {params['project_id']} not found or not editable"}
+    next_pos, seq = next_position_seq(user, project)
     new_task = Task.objects.create(
         owner=user,
+        project=project,
+        seq=seq,
+        position=next_pos,
         title=str(title)[:500],
         description=str(params.get("description", ""))[:5000],
         priority=priority,
@@ -249,6 +301,68 @@ def _action_post_comment(rule, params, task, sprint, user):
     return {"comment_id": comment.id}
 
 
+def _action_call_webhook(rule, params, task, sprint, user):
+    """POST a una URL arbitraria: la extensibilidad 'plugin' mínima —
+    cualquier automatización puede invocar un endpoint externo (n8n,
+    Make, función propia…). action_params: {url, secret?}.
+
+    Mismo endurecimiento que los webhooks salientes: SSRF guard,
+    HMAC si hay secret y sin redirects.
+    """
+    url = str(params.get("url", "")).strip()
+    if not url:
+        return {"skipped": "no url in action_params"}
+    from urllib.parse import urlparse
+    parsed = urlparse(url)
+    if parsed.scheme not in ("http", "https") or not parsed.netloc:
+        return {"error": "Invalid webhook URL"}
+    from apps.integrations_chat.services import _is_safe_url
+    if not _is_safe_url(url):
+        return {"error": "Webhook URL not allowed (internal destination)"}
+
+    import hashlib
+    import hmac
+    import json
+
+    import requests
+    payload = {
+        "event": "automation",
+        "rule": rule.name,
+        "trigger": rule.trigger,
+        "timestamp": timezone.now().isoformat(),
+        "task": (
+            {
+                "id": task.id, "title": task.title, "state": task.state,
+                "priority": task.priority, "project_id": task.project_id,
+            }
+            if task is not None
+            else None
+        ),
+        "sprint": (
+            {"id": sprint.id, "name": sprint.name, "state": sprint.state}
+            if sprint is not None
+            else None
+        ),
+    }
+    body = json.dumps(payload).encode()
+    headers = {"Content-Type": "application/json"}
+    secret = str(params.get("secret", ""))
+    if secret:
+        headers["X-Hub-Signature-256"] = "sha256=" + hmac.new(
+            secret.encode(), body, hashlib.sha256
+        ).hexdigest()
+    try:
+        resp = requests.post(
+            url, data=body, headers=headers, timeout=8,
+            allow_redirects=False,
+        )
+    except requests.RequestException as e:
+        return {"error": f"webhook request failed: {e.__class__.__name__}"}
+    if resp.status_code >= 400:
+        return {"error": f"webhook returned HTTP {resp.status_code}"}
+    return {"webhook_status": resp.status_code, "url": url}
+
+
 def _action_move_to_project(rule, params, task, sprint, user):
     """Mueve la tarea a otro proyecto (params: {project_id}).
 
@@ -265,8 +379,18 @@ def _action_move_to_project(rule, params, task, sprint, user):
     if target is None:
         return {"error": f"Project {project_id} not found or not editable"}
     old_project = task.project
+    # Coherencia con el proyecto canónico (misma regla que bulk_update):
+    # soltar sprint/epic/section ligados a otro proyecto y quitar el
+    # destino de los hogares extra.
+    for f in ("sprint", "epic", "section"):
+        bound = getattr(task, f"{f}_id", None)
+        if bound is not None:
+            bound_pid = getattr(getattr(task, f), "project_id", None)
+            if bound_pid is not None and bound_pid != target.id:
+                setattr(task, f, None)
     task.project = target
-    task.save(update_fields=["project"])
+    task.save(update_fields=["project", "sprint", "epic", "section"])
+    task.extra_projects.remove(target)
     return {
         "old_project": str(old_project) if old_project else None,
         "new_project": target.name,
@@ -287,6 +411,7 @@ _ACTION_HANDLERS = {
     AutomationRule.Action.SET_DUE_OFFSET: _action_set_due_offset,
     AutomationRule.Action.POST_COMMENT: _action_post_comment,
     AutomationRule.Action.MOVE_TO_PROJECT: _action_move_to_project,
+    AutomationRule.Action.CALL_WEBHOOK: _action_call_webhook,
 }
 
 
@@ -347,6 +472,13 @@ def trigger_automation(trigger_type, context=None):
     context debe contener al menos 'user' o 'task' con owner.
     Las acciones pueden disparar nuevas automatizaciones vía signals;
     se limita la profundidad para evitar bucles infinitos.
+
+    Scope deliberado: solo corren las reglas del ``owner`` de la tarea
+    (o ``context["user"]``), nunca las del actor que causó el evento —
+    las automatizaciones de un miembro no mutan el trabajo de otros en
+    proyectos compartidos. Si la semántica deseada fuera "reglas del
+    proyecto", habría que añadirlas a nivel proyecto con su modelo
+    propio; reutilizar reglas personales sería un bug de aislamiento.
     """
     if context is None:
         context = {}
@@ -396,6 +528,19 @@ def trigger_automation(trigger_type, context=None):
             # Ejecutar acción
             try:
                 action_result = execute_action(rule, context)
+                # Errores semánticos (acción no aplicable al contexto) se
+                # registran como FAILED, no como SUCCESS con "error" dentro.
+                if isinstance(action_result, dict) and "error" in action_result:
+                    AutomationLog.objects.create(
+                        rule=rule,
+                        status=AutomationLog.Status.FAILED,
+                        trigger_data=_serialize_context(context),
+                        action_result=action_result,
+                        error_message=str(action_result["error"])[:500],
+                    )
+                    results.append({"rule": rule.name, "result": action_result})
+                    _metric("failed")
+                    continue
                 AutomationRule.objects.filter(pk=rule.pk).update(
                     trigger_count=F("trigger_count") + 1,
                     last_triggered_at=timezone.now(),
@@ -577,18 +722,32 @@ def run_daily_checks():
         context = {"user": rule.owner, "check_time": str(now)}
         try:
             action_result = execute_action(rule, context)
-            AutomationRule.objects.filter(pk=rule.pk).update(
-                trigger_count=F("trigger_count") + 1,
-                last_triggered_at=now,
+            # Mismo criterio que trigger_automation: un {"error": ...} es
+            # FAILED (p.ej. acciones de tarea en reglas SCHEDULED, que no
+            # llevan task en contexto).
+            failed_result = (
+                isinstance(action_result, dict) and "error" in action_result
             )
+            if not failed_result:
+                AutomationRule.objects.filter(pk=rule.pk).update(
+                    trigger_count=F("trigger_count") + 1,
+                    last_triggered_at=now,
+                )
             AutomationLog.objects.create(
                 rule=rule,
-                status=AutomationLog.Status.SUCCESS,
+                status=(
+                    AutomationLog.Status.FAILED
+                    if failed_result
+                    else AutomationLog.Status.SUCCESS
+                ),
                 trigger_data=_serialize_context(context),
                 action_result=action_result,
+                error_message=str(action_result.get("error", ""))[:500]
+                if failed_result
+                else "",
             )
             results.append({"rule": rule.name, "result": action_result})
-            _metric("success")
+            _metric("failed" if failed_result else "success")
         except Exception as e:
             logger.exception(f"Error ejecutando regla programada {rule.name}")
             AutomationLog.objects.create(
@@ -609,9 +768,22 @@ def run_daily_checks():
         end_date__lte=now.date() + timedelta(days=2),
     )
     for sprint in soon_sprints:
+        # Dedup por sprint: esta tarea corre cada hora y el sprint sigue
+        # activo hasta 2 días — sin esto las reglas se re-disparan 24×.
+        already_fired = AutomationLog.objects.filter(
+            rule__owner=sprint.owner,
+            rule__trigger=AutomationRule.Trigger.SPRINT_CLOSED,
+            trigger_data__sprint_id=sprint.id,
+        ).exists()
+        if already_fired:
+            continue
         r = trigger_automation(
             AutomationRule.Trigger.SPRINT_CLOSED,
-            {"sprint": sprint, "user": sprint.owner},
+            {
+                "sprint": sprint,
+                "sprint_id": sprint.id,
+                "user": sprint.owner,
+            },
         )
         if r:
             results.extend(r)

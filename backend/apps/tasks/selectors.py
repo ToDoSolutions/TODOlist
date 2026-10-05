@@ -20,7 +20,10 @@ def apply_task_filters(qs, params):
     y "null" no sería una opción válida.
     """
     if params.get("no_project") == "true":
-        qs = qs.filter(project__isnull=True)
+        # Una tarea homeada en proyectos ya está clasificada
+        qs = qs.filter(project__isnull=True).exclude(
+            extra_projects__isnull=False
+        )
 
     # Presets estilo Todoist: vencidas (fecha pasada, no terminadas)
     # y sin fecha.

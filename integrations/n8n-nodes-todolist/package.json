@@ -1,0 +1,47 @@
+{
+  "name": "n8n-nodes-todolist",
+  "version": "1.0.0",
+  "description": "n8n community node for TODOlist (tasks/projects API + task webhooks)",
+  "license": "AGPL-3.0-only",
+  "author": {
+    "name": "TODOlist contributors"
+  },
+  "keywords": [
+    "n8n-community-node-package"
+  ],
+  "engines": {
+    "node": ">=20.0"
+  },
+  "files": [
+    "dist"
+  ],
+  "scripts": {
+    "build": "tsc && n8n-node build",
+    "dev": "tsc --watch",
+    "format": "prettier nodes credentials --write",
+    "lint": "n8n-node lint",
+    "lintfix": "n8n-node lint --fix",
+    "prepublishOnly": "npm run build"
+  },
+  "n8n": {
+    "n8nNodesApiVersion": 1,
+    "credentials": [
+      "dist/credentials/TodoListApi.credentials.js"
+    ],
+    "nodes": [
+      "dist/nodes/TodoList/TodoList.node.js",
+      "dist/nodes/TodoList/TodoListTrigger.node.js"
+    ]
+  },
+  "devDependencies": {
+    "@types/node": "^20.11.0",
+    "n8n-workflow": "^1.48.0",
+    "typescript": "^5.3.3",
+    "prettier": "^3.2.4",
+    "gulp": "^4.0.2",
+    "@n8n/node-cli": "latest"
+  },
+  "peerDependencies": {
+    "n8n-workflow": "*"
+  }
+}

@@ -56,6 +56,15 @@ def sso_providers(request):
                     "login_url": f"/api/auth/social/{oidc_prefix}/{oidc_id}/login/",
                     "enabled": bool(oidc_issuer),
                 },
+                {
+                    "id": getattr(settings, "SAML_PROVIDER_ID", "saml"),
+                    "name": getattr(settings, "SAML_DISPLAY_NAME", "SAML SSO"),
+                    "login_url": (
+                        f"/api/auth/social/saml/"
+                        f"{getattr(settings, 'SAML_PROVIDER_ID', 'saml')}/login/"
+                    ),
+                    "enabled": bool(getattr(settings, "SAML_IDP_SSO_URL", "")),
+                },
             ]
         }
     )

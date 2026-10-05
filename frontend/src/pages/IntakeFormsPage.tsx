@@ -38,6 +38,7 @@ import {
   intakeFormsApi,
   intakeSubmissionsApi,
   projectsApi,
+  intakeFields,
   type IntakeFormItem,
   type IntakeFormField,
 } from "../api/resources";
@@ -105,7 +106,7 @@ export default function IntakeFormsPage() {
   });
 
   const publicUrl = (token: string) =>
-    `${window.location.origin}/api/intake-forms/public/${token}/submit/`;
+    `${window.location.origin}/intake/${token}`;
 
   const copyPublicUrl = (token: string) => {
     void navigator.clipboard.writeText(publicUrl(token));
@@ -113,7 +114,11 @@ export default function IntakeFormsPage() {
   };
 
   const regenerate = async (f: IntakeFormWithToken) => {
-    if (await confirm(t("p.public.intake.confirmRegenerate", { name: f.name })))
+    if (
+        await confirm(t("p.public.intake.confirmRegenerate", { name: f.name }), {
+          confirmLabel: t("p.public.intake.regenerate"),
+        })
+      )
       rotateMut.mutate(f.id);
   };
 
@@ -171,7 +176,7 @@ export default function IntakeFormsPage() {
                     </Typography>
                     <Typography variant="caption" color="text.secondary">
                       {t("p.ops.intake.fieldsCount", {
-                        count: f.schema.fields.length,
+                        count: intakeFields(f.schema).length,
                       })}{" "}
                       ·{" "}
                       {t("p.ops.intake.submissionsCount", {
@@ -210,7 +215,10 @@ export default function IntakeFormsPage() {
                     aria-label={t("common.delete")}
                     onClick={async () => {
                       if (
-                        await confirm(t("p.ops.intake.confirmDelete", { name: f.name }))
+                        await confirm(
+                          t("p.ops.intake.confirmDelete", { name: f.name }),
+                          { confirmLabel: t("common.delete") },
+                        )
                       )
                         deleteMut.mutate(f.id);
                     }}
@@ -294,7 +302,7 @@ export default function IntakeFormsPage() {
                 {preview.description}
               </Typography>
               <Stack spacing={2}>
-                {preview.schema.fields.map((f) => (
+                {intakeFields(preview.schema).map((f) => (
                   <PreviewField
                     key={f.name}
                     field={f}
@@ -476,7 +484,7 @@ function FormBuilder({
   const [project, setProject] = useState<number | "">(initial?.project ?? "");
   const [enabled, setEnabled] = useState(initial?.enabled ?? true);
   const [fields, setFields] = useState<IntakeFormField[]>(
-    initial?.schema.fields ?? [
+    (initial ? intakeFields(initial.schema) : null) ?? [
       {
         name: "titulo",
         label: t("p.ops.intake.defaultFieldLabel"),
@@ -667,7 +675,7 @@ function FormBuilder({
               description,
               project: Number(project),
               enabled,
-              schema: { fields },
+              schema: fields,
             } as IntakeFormItem)
           }
         >

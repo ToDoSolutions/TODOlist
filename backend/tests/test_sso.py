@@ -22,11 +22,11 @@ class TestSsoProvidersEndpoint:
         assert response.status_code == 200
 
     def test_lists_all_providers(self, api_client):
-        """Devuelve github, google y oidc con el contrato esperado."""
+        """Devuelve github, google, oidc y saml con el contrato esperado."""
         response = api_client.get("/api/sso/providers/")
         assert response.status_code == 200
         providers = _providers_by_id(response.data)
-        assert set(providers) == {"github", "google", "oidc"}
+        assert set(providers) == {"github", "google", "oidc", "saml"}
         for provider in providers.values():
             assert set(provider) == {"id", "name", "login_url", "enabled"}
 

@@ -9,7 +9,7 @@ Cablea los triggers de AutomationRule a los eventos reales del modelo:
 - SPRINT_STARTED: al iniciar un sprint (cambio a active)
 - SPRINT_CLOSED: al cerrar un sprint (cambio a closed)
 """
-from django.db.models.signals import post_save, pre_save
+from django.db.models.signals import post_save
 from django.dispatch import receiver
 
 from apps.tasks.models import Comment, Sprint, Task
@@ -17,19 +17,12 @@ from apps.tasks.models import Comment, Sprint, Task
 from .engine import trigger_automation
 from .models import AutomationRule
 
-# --- Tarea ---
+# La captura pre_save de ``_old_state``/``_old_sprint_state`` la hace
+# ``apps.tasks.signals.snapshot_task_old_fields`` /
+# ``snapshot_sprint_old_fields`` — una sola consulta compartida por
+# todas las apps (antes cada una hacía su propio SELECT).
 
-@receiver(pre_save, sender=Task)
-def _capture_task_state(sender, instance, **kwargs):
-    """Guarda el estado previo de la tarea para comparar en post_save."""
-    if instance.pk:
-        instance._old_state = (
-            Task.objects.filter(pk=instance.pk)
-            .values_list("state", flat=True)
-            .first()
-        )
-    else:
-        instance._old_state = None
+# --- Tarea ---
 
 
 @receiver(post_save, sender=Task)
@@ -95,17 +88,7 @@ def comment_automation_signal(sender, instance, created, **kwargs):
 
 # --- Sprint ---
 
-@receiver(pre_save, sender=Sprint)
-def _capture_sprint_state(sender, instance, **kwargs):
-    """Guarda el estado previo del sprint para comparar en post_save."""
-    if instance.pk:
-        instance._old_sprint_state = (
-            Sprint.objects.filter(pk=instance.pk)
-            .values_list("state", flat=True)
-            .first()
-        )
-    else:
-        instance._old_sprint_state = None
+
 
 
 @receiver(post_save, sender=Sprint)

@@ -1,5 +1,8 @@
-import { lazy, Suspense, useState } from "react";
+﻿import { lazy, Suspense, useState } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
+import { TaskListSkeleton } from "../components/ui/skeletons";
+import PageHeader from "../components/ui/PageHeader";
+import { ErrorState } from "../components/ui/states";
 
 // Editor markdown con toolbar y preview en vivo (bundle pesado → lazy)
 const MDEditor = lazy(() => import("@uiw/react-md-editor"));
@@ -17,10 +20,9 @@ import {
   TextField,
   CircularProgress,
   IconButton,
-  Alert,
   MenuItem,
 } from "@mui/material";
-import { Plus, FileText, Pencil, Trash2 } from "lucide-react";
+import { Plus, FileText, Pencil, Trash2, History, RotateCcw } from "lucide-react";
 import { useTranslation } from "react-i18next";
 import ReactMarkdown from "react-markdown";
 import remarkGfm from "remark-gfm";
@@ -34,6 +36,7 @@ import {
   type WikiPageItem,
   type ApiPayload,
 } from "../api/resources";
+import { formatDateTime } from "../lib/dates";
 import type { Project } from "../types";
 import { notify } from "../notify";
 import { useConfirm } from "../components/ConfirmDialog";
@@ -47,6 +50,8 @@ export default function WikiPage() {
   const [dialogOpen, setDialogOpen] = useState(false);
   const [editing, setEditing] = useState<WikiPageItem | null>(null);
   const [viewing, setViewing] = useState<WikiPageItem | null>(null);
+  const [historyFor, setHistoryFor] = useState<WikiPageItem | null>(null);
+  const [previewRev, setPreviewRev] = useState<number | null>(null);
   const [form, setForm] = useState({
     title: "",
     content: "",
@@ -57,6 +62,7 @@ export default function WikiPage() {
     data: pages = [],
     isLoading,
     isError,
+    refetch,
   } = useQuery({
     queryKey: ["wiki"],
     queryFn: wikiApi.list,
@@ -95,6 +101,29 @@ export default function WikiPage() {
       notify.success(t("p.collab.wiki.deleted"));
       qc.invalidateQueries({ queryKey: ["wiki"] });
     },
+  });
+
+  const { data: revisions = [], isLoading: loadingRevs } = useQuery({
+    queryKey: ["wiki-revisions", historyFor?.id],
+    queryFn: () => wikiApi.revisions(historyFor!.id),
+    enabled: historyFor !== null,
+  });
+
+  const { data: revDetail } = useQuery({
+    queryKey: ["wiki-rev-detail", historyFor?.id, previewRev],
+    queryFn: () => wikiApi.revisionDetail(historyFor!.id, previewRev!),
+    enabled: historyFor !== null && previewRev !== null,
+  });
+
+  const restoreMut = useMutation({
+    mutationFn: (version: number) => wikiApi.restore(historyFor!.id, version),
+    onSuccess: () => {
+      notify.success(t("p.collab.wiki.restored"));
+      qc.invalidateQueries({ queryKey: ["wiki"] });
+      qc.invalidateQueries({ queryKey: ["wiki-revisions", historyFor?.id] });
+      setPreviewRev(null);
+    },
+    onError: () => notify.error(t("p.collab.wiki.restoreError")),
   });
 
   const openNew = () => {
@@ -148,12 +177,23 @@ export default function WikiPage() {
           v{p.version}
           {p.updated_by_email ? ` · ${p.updated_by_email}` : ""}
         </Typography>
-        <IconButton size="small" onClick={() => openEdit(p)}>
+        <IconButton
+          size="small"
+          title={t("p.collab.wiki.history")}
+          onClick={() => {
+            setHistoryFor(p);
+            setPreviewRev(null);
+          }}
+        >
+          <History size={14} />
+        </IconButton>
+        <IconButton size="small" onClick={() => openEdit(p)} aria-label={t("common.edit")}>
           <Pencil size={14} />
         </IconButton>
         <IconButton
           size="small"
           color="error"
+          aria-label={t("common.delete")}
           onClick={async () => {
             if (
               await confirm(
@@ -179,29 +219,24 @@ export default function WikiPage() {
 
   return (
     <Box maxWidth={800} mx="auto">
-      <Stack direction="row" justifyContent="space-between" alignItems="center" mb={3}>
-        <Box>
-          <Typography variant="h4" fontWeight={800}>
-            {t("p.collab.wiki.title")}
-          </Typography>
-          <Typography variant="body2" color="text.secondary" mt={0.5}>
-            {t("p.collab.wiki.subtitle")}
-          </Typography>
-        </Box>
-        <Button variant="contained" startIcon={<Plus size={18} />} onClick={openNew}>
-          {t("p.collab.wiki.newPage")}
-        </Button>
-      </Stack>
+      <PageHeader
+        title={t("p.collab.wiki.title")}
+        description={t("p.collab.wiki.subtitle")}
+        actions={
+          <Button variant="contained" startIcon={<Plus size={18} />} onClick={openNew}>
+            {t("p.collab.wiki.newPage")}
+          </Button>
+        }
+      />
 
       {isError && (
-        <Alert severity="error" sx={{ mb: 2 }}>
-          {t("p.collab.wiki.loadError")}
-        </Alert>
+        <ErrorState
+          title={t("p.collab.wiki.loadError")}
+          onRetry={() => void refetch()}
+        />
       )}
       {isLoading ? (
-        <Box display="flex" justifyContent="center" py={6}>
-          <CircularProgress />
-        </Box>
+        <TaskListSkeleton />
       ) : pages.length === 0 ? (
         <Paper variant="outlined" sx={{ p: 6, textAlign: "center" }}>
           <FileText size={36} style={{ color: theme.palette.divider }} />
@@ -283,6 +318,15 @@ export default function WikiPage() {
               </Box>
             </DialogContent>
             <DialogActions>
+              <Button
+                startIcon={<History size={14} />}
+                onClick={() => {
+                  setHistoryFor(viewing);
+                  setPreviewRev(null);
+                }}
+              >
+                {t("p.collab.wiki.history")}
+              </Button>
               <Button onClick={() => setViewing(null)}>{t("common.close")}</Button>
               <Button
                 variant="contained"
@@ -297,6 +341,97 @@ export default function WikiPage() {
             </DialogActions>
           </>
         )}
+      </Dialog>
+
+      {/* Historial de revisiones */}
+      <Dialog
+        open={!!historyFor}
+        onClose={() => setHistoryFor(null)}
+        fullWidth
+        maxWidth="md"
+      >
+        <DialogTitle>
+          <Stack direction="row" alignItems="center" spacing={1}>
+            <History size={18} />
+            {t("p.collab.wiki.historyTitle", { title: historyFor?.title })}
+          </Stack>
+        </DialogTitle>
+        <DialogContent dividers>
+          {loadingRevs ? (
+            <Box display="flex" justifyContent="center" py={4}>
+              <CircularProgress />
+            </Box>
+          ) : revisions.length === 0 ? (
+            <Typography color="text.secondary" py={2}>
+              {t("p.collab.wiki.historyEmpty")}
+            </Typography>
+          ) : (
+            <Stack spacing={0.5}>
+              {revisions.map((r) => (
+                <Stack
+                  key={r.version}
+                  direction="row"
+                  alignItems="center"
+                  spacing={1.5}
+                  sx={{
+                    py: 0.75,
+                    px: 1.5,
+                    borderRadius: 1.5,
+                    bgcolor:
+                      previewRev === r.version ? "action.selected" : undefined,
+                    "&:hover": { bgcolor: "action.hover" },
+                  }}
+                >
+                  <Chip label={`v${r.version}`} size="small" variant="outlined" />
+                  <Typography
+                    variant="body2"
+                    sx={{ flex: 1, cursor: "pointer" }}
+                    onClick={() =>
+                      setPreviewRev(previewRev === r.version ? null : r.version)
+                    }
+                  >
+                    {r.title}
+                  </Typography>
+                  <Typography variant="caption" color="text.secondary">
+                    {formatDateTime(r.created_at)}
+                  </Typography>
+                  <IconButton
+                    size="small"
+                    title={t("p.collab.wiki.restore")}
+                    disabled={restoreMut.isPending}
+                    onClick={async () => {
+                      if (
+                        await confirm(
+                          t("p.collab.wiki.confirmRestore", {
+                            version: r.version,
+                          }),
+                          { confirmLabel: t("p.collab.wiki.restore") },
+                        )
+                      ) {
+                        restoreMut.mutate(r.version);
+                      }
+                    }}
+                  >
+                    <RotateCcw size={14} />
+                  </IconButton>
+                </Stack>
+              ))}
+            </Stack>
+          )}
+          {revDetail && previewRev !== null && (
+            <Paper variant="outlined" sx={{ p: 2, mt: 2 }}>
+              <Typography variant="caption" color="text.secondary" display="block" mb={1}>
+                {t("p.collab.wiki.revisionPreview", { version: previewRev })}
+              </Typography>
+              <ReactMarkdown remarkPlugins={[remarkGfm]}>
+                {revDetail.content || t("p.collab.wiki.noContent")}
+              </ReactMarkdown>
+            </Paper>
+          )}
+        </DialogContent>
+        <DialogActions>
+          <Button onClick={() => setHistoryFor(null)}>{t("common.close")}</Button>
+        </DialogActions>
       </Dialog>
 
       <Dialog

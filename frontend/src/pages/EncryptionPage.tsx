@@ -26,9 +26,12 @@ import {
 } from "@mui/material";
 import { Key, Lock, Share2, Plus, Unlock, Upload } from "lucide-react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
-import { encryptionApi, tasksApi } from "../api/resources";
+import { encryptionApi } from "../api/resources";
 import type { EncryptedTaskItem } from "../types";
 import { notify } from "../notify";
+import PageHeader from "../components/ui/PageHeader";
+import { TaskListSkeleton } from "../components/ui/skeletons";
+import { createEncryptedTask } from "../lib/encryptedTask";
 import {
   generateRsaKeyPair,
   exportPublicKeyB64,
@@ -38,14 +41,11 @@ import {
   b64ToPem,
   loadPrivateKeyB64,
   storePrivateKey,
-  generateAesKey,
-  encryptJson,
   decryptJson,
   wrapAesKey,
   unwrapAesKey,
   importPublicKeyB64,
 } from "../lib/e2ee";
-import { authApi } from "../api/auth";
 import { useTranslation } from "react-i18next";
 
 interface SharedTaskItem extends Omit<EncryptedTaskItem, "shared_by"> {
@@ -200,28 +200,10 @@ export default function EncryptionPage() {
     setCreating(true);
     try {
       // La Task vinculada lleva un título genérico: el contenido real va cifrado
-      const task = await tasksApi.create({ title: "🔒" });
-      const aes = await generateAesKey();
-      const enc = await encryptJson(aes, {
-        title: taskForm.title.trim(),
-        description: taskForm.description,
-      });
-      const pubB64 = activeKey.public_key?.includes("BEGIN")
-        ? pemToB64(activeKey.public_key)
-        : activeKey.public_key;
-      const wrapped = await wrapAesKey(aes, await importPublicKeyB64(pubB64));
-      const created = await encryptionApi.createEncryptedTask({
-        task: task.id,
-        encrypted_data: enc.encrypted_data,
-        iv: enc.iv,
-        auth_tag: enc.auth_tag,
-        encryption_key_id: activeKey.key_id,
-        algorithm: "AES-256-GCM",
-      });
-      // Self-share: la clave AES envuelta con la propia pública es la única
-      // forma de recuperar el contenido después (el servidor no la tiene)
-      const me = await authApi.me();
-      await encryptionApi.shareTask(created.id, me.email, wrapped, activeKey.id);
+      await createEncryptedTask(
+        { title: taskForm.title.trim(), description: taskForm.description },
+        activeKey,
+      );
       notify.success(t("p.shell.encryption.taskCreated"));
       qc.invalidateQueries({ queryKey: ["encrypted-tasks"] });
       qc.invalidateQueries({ queryKey: ["shared-encrypted-tasks"] });
@@ -315,12 +297,14 @@ export default function EncryptionPage() {
 
   return (
     <Box maxWidth={900} mx="auto">
-      <Stack direction="row" alignItems="center" spacing={1} mb={3}>
-        <Lock size={24} style={{ color: theme.palette.primary.main }} />
-        <Typography variant="h5" fontWeight={700}>
-          {t("p.shell.encryption")}
-        </Typography>
-      </Stack>
+      <PageHeader
+        title={
+          <>
+            <Lock size={22} style={{ color: theme.palette.primary.main, verticalAlign: "text-bottom", marginRight: 8 }} />
+            {t("p.shell.encryption")}
+          </>
+        }
+      />
 
       <Alert severity="info" sx={{ mb: 3 }}>
         {t("p.shell.encryption.infoAlert")}
@@ -337,9 +321,7 @@ export default function EncryptionPage() {
           </Stack>
 
           {keyLoading ? (
-            <Box display="flex" justifyContent="center" py={2}>
-              <CircularProgress size={24} />
-            </Box>
+            <TaskListSkeleton rows={1} />
           ) : activeKey ? (
             <Stack direction="row" spacing={1} alignItems="center" mb={2} flexWrap="wrap">
               <Chip
@@ -463,9 +445,7 @@ export default function EncryptionPage() {
           </Stack>
 
           {tasksLoading ? (
-            <Box display="flex" justifyContent="center" py={3}>
-              <CircularProgress size={24} />
-            </Box>
+            <TaskListSkeleton rows={2} />
           ) : taskList.length === 0 ? (
             <Typography
               color="text.secondary"
@@ -558,9 +538,7 @@ export default function EncryptionPage() {
           </Stack>
 
           {sharedLoading ? (
-            <Box display="flex" justifyContent="center" py={3}>
-              <CircularProgress size={24} />
-            </Box>
+            <TaskListSkeleton rows={2} />
           ) : sharedList.length === 0 ? (
             <Typography
               color="text.secondary"

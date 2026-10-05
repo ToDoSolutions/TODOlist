@@ -56,6 +56,35 @@ describe("notify", () => {
   });
 });
 
+describe("refresh queue", () => {
+  it("rechaza las peticiones encoladas si el refresh falla", async () => {
+    const axios = (await import("axios")).default;
+    const { api } = await import("./client");
+    tokenStorage.set("a", "r");
+    const spy = vi
+      .spyOn(axios, "post")
+      .mockRejectedValue(new Error("refresh-fail"));
+    // El último response interceptor registrado es el de refresh/403/queue.
+    const rejected = ((api.interceptors.response as any).handlers || [])
+      .filter((h: any) => h?.rejected)
+      .at(-1)?.rejected;
+    const mkErr = () => ({
+      config: { method: "get", headers: {} },
+      response: { status: 401 },
+    });
+
+    const p1 = rejected(mkErr()); // dispara el refresh
+    const p2 = rejected(mkErr()); // se encola detrás del refresh
+
+    // Antes: p2 se descartaba con queue=[] y quedaba pending siempre.
+    const a1 = expect(p1).rejects.toThrow("refresh-fail");
+    const a2 = expect(p2).rejects.toThrow("refresh-fail");
+    await Promise.all([a1, a2]);
+    spy.mockRestore();
+    tokenStorage.clear();
+  });
+});
+
 describe("request interceptor CSRF", () => {
   it("añade X-CSRFToken en métodos no seguros", async () => {
     const { api } = await import("./client");

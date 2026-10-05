@@ -1,4 +1,4 @@
-import { useForm } from "react-hook-form";
+﻿import { useForm } from "react-hook-form";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useState } from "react";
 import {
@@ -59,6 +59,8 @@ import {
 } from "../push";
 import { useTranslation } from "react-i18next";
 import "../i18n";
+import { apiErrorText } from "../lib/apiError";
+import PageHeader from "../components/ui/PageHeader";
 
 interface FormValues {
   username: string;
@@ -134,7 +136,7 @@ export default function ProfilePage() {
       setPwError("");
     },
     onError: (e: ApiError) => {
-      const msg = e.response?.data?.error || t("p.misc.profile.passwordChangeError");
+      const msg = apiErrorText(e, t, "p.misc.profile.passwordChangeError");
       setPwError(msg);
       notify.error(msg);
     },
@@ -153,7 +155,7 @@ export default function ProfilePage() {
       setTimeout(() => (window.location.href = "/login"), 1500);
     },
     onError: (e: ApiError) =>
-      notify.error(e.response?.data?.error || t("p.misc.profile.deactivateError")),
+      notify.error(apiErrorText(e, t, "p.misc.profile.deactivateError")),
   });
 
   const deleteAccount = useMutation({
@@ -163,7 +165,7 @@ export default function ProfilePage() {
       setTimeout(() => (window.location.href = "/login"), 1500);
     },
     onError: (e: ApiError) =>
-      notify.error(e.response?.data?.error || t("p.misc.profile.deleteError")),
+      notify.error(apiErrorText(e, t, "p.misc.profile.deleteError")),
   });
 
   // --- Notificaciones push ---
@@ -216,11 +218,14 @@ export default function ProfilePage() {
     vapidQuery.data === null;
 
   // --- Email → tarea: dirección personal que crea tareas al recibir correo ---
+  // El token es una credencial: /me solo expone has_inbound_email; la
+  // dirección completa se muestra únicamente tras rotarla (emailTokenLocal).
   const [emailTokenLocal, setEmailTokenLocal] = useState<string | null | undefined>();
-  const inboundToken =
+  const inboundToken = emailTokenLocal ?? null;
+  const hasInbound =
     emailTokenLocal !== undefined
-      ? emailTokenLocal
-      : ((user as { inbound_email_token?: string | null })?.inbound_email_token ?? null);
+      ? emailTokenLocal !== null
+      : Boolean((user as { has_inbound_email?: boolean })?.has_inbound_email);
   const emailAddress = inboundToken ? `task-${inboundToken}@todolist.local` : "";
   const emailTokenMut = useMutation({
     mutationFn: (action: "rotate" | "revoke") =>
@@ -292,8 +297,7 @@ export default function ProfilePage() {
     queryKey: ["notification-preferences"],
     queryFn: notificationsApi.preferences,
   });
-  const emailPrefs: NotificationPreference[] =
-    emailPrefData?.results || emailPrefData || [];
+  const emailPrefs: NotificationPreference[] = emailPrefData ?? [];
   const emailPrefMut = useMutation({
     mutationFn: ({ id, data }: { id: number; data: ApiPayload }) =>
       notificationsApi.updatePreference(id, data),
@@ -323,9 +327,7 @@ export default function ProfilePage() {
 
   return (
     <Box sx={{ maxWidth: 600 }}>
-      <Typography variant="h5" fontWeight={700} mb={3}>
-        {t("nav.profile")}
-      </Typography>
+      <PageHeader title={t("nav.profile")} />
       <Card>
         <CardContent sx={{ p: 3 }}>
           <Stack direction="row" spacing={2} alignItems="center" mb={3}>
@@ -539,7 +541,11 @@ export default function ProfilePage() {
               InputProps={{
                 endAdornment: (
                   <InputAdornment position="end">
-                    <IconButton size="small" onClick={() => setShowCurrent(!showCurrent)}>
+                    <IconButton
+                      size="small"
+                      onClick={() => setShowCurrent(!showCurrent)}
+                      aria-label={t(showCurrent ? "p.auth.hidePassword" : "p.auth.showPassword")}
+                    >
                       {showCurrent ? <EyeOff size={18} /> : <Eye size={18} />}
                     </IconButton>
                   </InputAdornment>
@@ -557,7 +563,11 @@ export default function ProfilePage() {
               InputProps={{
                 endAdornment: (
                   <InputAdornment position="end">
-                    <IconButton size="small" onClick={() => setShowNew(!showNew)}>
+                    <IconButton
+                      size="small"
+                      onClick={() => setShowNew(!showNew)}
+                      aria-label={t(showNew ? "p.auth.hidePassword" : "p.auth.showPassword")}
+                    >
                       {showNew ? <EyeOff size={18} /> : <Eye size={18} />}
                     </IconButton>
                   </InputAdornment>
@@ -682,6 +692,27 @@ export default function ProfilePage() {
               <Tooltip title={t("p.public.email.rotate")}>
                 <IconButton onClick={() => emailTokenMut.mutate("rotate")}>
                   <RotateCw size={16} />
+                </IconButton>
+              </Tooltip>
+              <Tooltip title={t("p.public.email.revoke")}>
+                <IconButton onClick={() => emailTokenMut.mutate("revoke")}>
+                  <Trash2 size={16} />
+                </IconButton>
+              </Tooltip>
+            </Stack>
+          ) : hasInbound ? (
+            <Stack direction="row" spacing={1} alignItems="center">
+              <Typography variant="body2" color="text.secondary" sx={{ flex: 1 }}>
+                {t("p.public.email.masked")}
+              </Typography>
+              <Tooltip title={t("p.public.email.rotate")}>
+                <IconButton onClick={() => emailTokenMut.mutate("rotate")}>
+                  <RotateCw size={16} />
+                </IconButton>
+              </Tooltip>
+              <Tooltip title={t("p.public.email.revoke")}>
+                <IconButton onClick={() => emailTokenMut.mutate("revoke")}>
+                  <Trash2 size={16} />
                 </IconButton>
               </Tooltip>
             </Stack>

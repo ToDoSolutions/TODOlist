@@ -30,8 +30,8 @@ import {
   Activity as ActivityIcon,
   SlidersHorizontal,
 } from "lucide-react";
-import { format, isToday, parseISO } from "date-fns";
-import { es } from "date-fns/locale";
+import { isToday, parseISO } from "date-fns";
+import { formatDateTimeShort, formatShort } from "../lib/dates";
 import PageHeader from "../components/ui/PageHeader";
 import MetricCard from "../components/ui/MetricCard";
 import { EmptyState } from "../components/ui/states";
@@ -146,7 +146,7 @@ export default function HomePage() {
           <Typography variant="caption" color="text.secondary">
             {task.due_date
               ? t("p.work.home.dueOn", {
-                  date: format(parseISO(task.due_date), "d MMM", { locale: es }),
+                  date: formatShort(task.due_date),
                 })
               : t("p.work.home.noDate")}
             {task.project ? ` · ${task.project}` : ""}
@@ -277,9 +277,15 @@ export default function HomePage() {
                   />
                 ) : (
                   <Stack spacing={1}>
-                    {[...dueToday, ...inProgress].slice(0, 8).map((task) => (
-                      <TaskRow key={task.id} task={task} />
-                    ))}
+                    {[...dueToday, ...inProgress]
+                      .filter(
+                        (task, i, arr) =>
+                          arr.findIndex((x) => x.id === task.id) === i
+                      )
+                      .slice(0, 8)
+                      .map((task) => (
+                        <TaskRow key={task.id} task={task} />
+                      ))}
                   </Stack>
                 )}
               </Paper>
@@ -301,12 +307,15 @@ export default function HomePage() {
                   </Typography>
                 ) : (
                   <Stack spacing={1}>
-                    {overdue.slice(0, 4).map((task) => (
-                      <TaskRow key={task.id} task={task} />
-                    ))}
-                    {blocked.slice(0, 4).map((task) => (
-                      <TaskRow key={task.id} task={task} />
-                    ))}
+                    {[...overdue, ...blocked]
+                      .filter(
+                        (task, i, arr) =>
+                          arr.findIndex((x) => x.id === task.id) === i
+                      )
+                      .slice(0, 8)
+                      .map((task) => (
+                        <TaskRow key={task.id} task={task} />
+                      ))}
                   </Stack>
                 )}
               </Paper>
@@ -368,8 +377,8 @@ export default function HomePage() {
                   {activeSprint.name}
                 </Typography>
                 <Typography variant="caption" color="text.secondary">
-                  {format(parseISO(activeSprint.start_date), "d MMM", { locale: es })} –{" "}
-                  {format(parseISO(activeSprint.end_date), "d MMM", { locale: es })}
+                  {formatShort(activeSprint.start_date)} –{" "}
+                  {formatShort(activeSprint.end_date)}
                   {isToday(parseISO(activeSprint.end_date)) &&
                     ` · ${t("p.work.home.endsToday")}`}
                 </Typography>
@@ -392,7 +401,7 @@ export default function HomePage() {
                       <Box key={i}>
                         <Typography variant="caption" color="text.secondary">
                           {a.actor ?? t("p.work.home.system")} ·{" "}
-                          {format(parseISO(a.created_at), "d MMM HH:mm", { locale: es })}
+                          {formatDateTimeShort(a.created_at)}
                         </Typography>
                         <Typography variant="body2">{a.summary}</Typography>
                       </Box>

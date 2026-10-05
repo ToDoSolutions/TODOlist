@@ -1,4 +1,5 @@
-import { useState } from "react";
+﻿import { useState } from "react";
+import { CardGridSkeleton } from "../components/ui/skeletons";
 import {
   Box,
   Typography,
@@ -13,8 +14,6 @@ import {
   Chip,
   IconButton,
   Tooltip,
-  CircularProgress,
-  Alert,
   Autocomplete,
 } from "@mui/material";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
@@ -22,7 +21,7 @@ import { Plus, Pencil, Trash2, Briefcase } from "lucide-react";
 import { useNavigate } from "react-router-dom";
 import { useTranslation } from "react-i18next";
 import PageHeader from "../components/ui/PageHeader";
-import { EmptyState } from "../components/ui/states";
+import { EmptyState, ErrorState } from "../components/ui/states";
 import { useConfirm } from "../components/ConfirmDialog";
 import { projectsApi } from "../api/resources";
 import { portfoliosApi, type Portfolio } from "../api/featOrg";
@@ -60,6 +59,7 @@ export default function PortfoliosPage() {
     data: portfolios = [],
     isLoading,
     error,
+    refetch,
   } = useQuery({
     queryKey: ["portfolios"],
     queryFn: portfoliosApi.list,
@@ -122,6 +122,7 @@ export default function PortfoliosPage() {
     if (
       await confirm(t("p.org.portfolios.deleteConfirm", { name: p.name }), {
         danger: true,
+        confirmLabel: t("common.delete"),
       })
     ) {
       deleteMut.mutate(p.id);
@@ -147,16 +148,13 @@ export default function PortfoliosPage() {
         }
       />
 
-      {isLoading && (
-        <Stack alignItems="center" py={6}>
-          <CircularProgress />
-        </Stack>
-      )}
+      {isLoading && <CardGridSkeleton />}
 
       {error && !isLoading && (
-        <Alert severity="error" sx={{ mb: 2 }}>
-          {t("p.org.portfolios.loadError")}
-        </Alert>
+        <ErrorState
+          title={t("p.org.portfolios.loadError")}
+          onRetry={() => void refetch()}
+        />
       )}
 
       {!isLoading && portfolios.length === 0 && !error && (

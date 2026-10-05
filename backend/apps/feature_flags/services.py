@@ -14,8 +14,9 @@ def is_enabled(key: str, user=None) -> bool:
     """Comprueba si un feature flag está activo.
 
     Orden de evaluación:
-    1. Si el flag no existe o no está habilitado globalmente, se evalúa
-       por usuario y por porcentaje.
+    1. Si el flag no existe en BD, cae al default de
+       ``settings.FEATURE_FLAGS[key]`` (env ``FEATURE_*``) — un flag no
+       creado no apaga la feature; la BD solo gobierna cuando existe.
     2. Si está habilitado globalmente (is_enabled=True), retorna True.
     3. Si se pasa un usuario y está en enabled_users, retorna True.
     4. Si enabled_percentage > 0 y se pasa un usuario, evalúa por hash.
@@ -23,7 +24,8 @@ def is_enabled(key: str, user=None) -> bool:
     try:
         flag = FeatureFlag.objects.get(key=key)
     except FeatureFlag.DoesNotExist:
-        return False
+        from django.conf import settings
+        return bool(getattr(settings, "FEATURE_FLAGS", {}).get(key, False))
 
     if flag.is_enabled:
         return True

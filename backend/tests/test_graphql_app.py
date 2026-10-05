@@ -101,7 +101,10 @@ class TestGraphQLMutations:
         )
         assert not result.errors
         assert result.data["createTask"]["task"]["title"] == "New"
-        assert Task.objects.filter(title="New", owner=self.user).exists()
+        task = Task.objects.get(title="New", owner=self.user)
+        # Paridad REST: seq del proyecto y position asignados
+        assert task.seq == 1
+        assert task.position >= 1
 
     def test_create_task_invalid_project(self):
         info = Mock()

@@ -20,10 +20,10 @@ import {
   ShieldAlert,
   CheckCheck,
 } from "lucide-react";
-import { formatDistanceToNow, parseISO } from "date-fns";
-import { es } from "date-fns/locale";
+import { formatRelative } from "../lib/dates";
 import PageHeader from "../components/ui/PageHeader";
-import { EmptyState } from "../components/ui/states";
+import { EmptyState, ErrorState } from "../components/ui/states";
+import { TaskListSkeleton } from "../components/ui/skeletons";
 import {
   collaborationApi,
   invitationsApi,
@@ -58,35 +58,41 @@ export default function AttentionPage() {
   const navigate = useNavigate();
   const [tab, setTab] = useState<TabKey>("all");
 
-  const { data: mentionsData } = useQuery({
+  const mentionsQ = useQuery({
     queryKey: ["mentions"],
     queryFn: collaborationApi.mentions.list,
   });
-  const mentions: MentionItem[] = Array.isArray(mentionsData) ? mentionsData : [];
+  const mentions: MentionItem[] = mentionsQ.data ?? [];
 
-  const { data: invitationsData } = useQuery({
+  const invitationsQ = useQuery({
     queryKey: ["invitations"],
     queryFn: invitationsApi.list,
   });
-  const invitations: Invitation[] = (
-    Array.isArray(invitationsData) ? invitationsData : []
-  ).filter((i) => (i as Invitation).status === "pending");
+  const invitations: Invitation[] = (invitationsQ.data ?? []).filter(
+    (i) => (i as Invitation).status === "pending",
+  );
 
-  const { data: syncData } = useQuery({
+  const syncQ = useQuery({
     queryKey: ["sync-operations"],
     queryFn: syncOperationsApi.list,
   });
-  const conflicts: SyncOperationItem[] = (Array.isArray(syncData) ? syncData : []).filter(
+  const conflicts: SyncOperationItem[] = (syncQ.data ?? []).filter(
     (o) => o.status === "conflict",
   );
 
-  const { data: notifData } = useQuery({
+  const notifQ = useQuery({
     queryKey: ["notifications"],
     queryFn: notificationsApi.list,
   });
-  const alerts: AppNotification[] = (Array.isArray(notifData) ? notifData : []).filter(
-    (n) => !n.read,
-  );
+  const alerts: AppNotification[] = (notifQ.data ?? []).filter((n) => !n.read);
+
+  const isLoading =
+    mentionsQ.isLoading ||
+    invitationsQ.isLoading ||
+    syncQ.isLoading ||
+    notifQ.isLoading;
+  const isError =
+    mentionsQ.isError || invitationsQ.isError || syncQ.isError || notifQ.isError;
 
   const respondInvitation = useMutation({
     mutationFn: ({ id, accept }: { id: number; accept: boolean }) =>
@@ -129,8 +135,7 @@ export default function AttentionPage() {
     [tab],
   );
 
-  const ago = (iso?: string) =>
-    iso ? formatDistanceToNow(parseISO(iso), { addSuffix: true, locale: es }) : "";
+  const ago = (iso?: string) => (iso ? formatRelative(iso) : "");
 
   return (
     <Box>
@@ -175,7 +180,19 @@ export default function AttentionPage() {
         ))}
       </Tabs>
 
-      {total === 0 ? (
+      {isLoading ? (
+        <TaskListSkeleton rows={5} />
+      ) : isError ? (
+        <ErrorState
+          title={t("p.work.attention.loadError")}
+          onRetry={() => {
+            void mentionsQ.refetch();
+            void invitationsQ.refetch();
+            void syncQ.refetch();
+            void notifQ.refetch();
+          }}
+        />
+      ) : total === 0 ? (
         <EmptyState
           title={t("p.work.attention.emptyTitle")}
           description={t("p.work.attention.emptyDesc")}
@@ -213,7 +230,7 @@ export default function AttentionPage() {
                   <Button
                     size="small"
                     variant="outlined"
-                    onClick={() => navigate(`/app?open=${m.task}`)}
+                    onClick={() => navigate(`/app/tasks/${m.task}`)}
                   >
                     {t("p.work.attention.openTask")}
                   </Button>
@@ -228,13 +245,26 @@ export default function AttentionPage() {
                   <MailWarning size={18} color="#ed6c02" />
                   <Box flex={1} minWidth={0}>
                     <Typography variant="body2">
-                      {t("p.work.attention.pendingInvitation")}
+                      {inv.target_name
+                        ? t("p.work.attention.pendingInvitationTo", {
+                            name: inv.target_name,
+                          })
+                        : t("p.work.attention.pendingInvitation")}
                       {inv.role
-                        ? t("p.work.attention.roleSuffix", { role: inv.role })
+                        ? t("p.work.attention.roleSuffix", {
+                            role: t(`p.work.attention.role.${inv.role}`, {
+                              defaultValue: inv.role,
+                            }),
+                          })
                         : ""}
                     </Typography>
                     <Typography variant="caption" color="text.secondary">
-                      {ago(inv.created_at)}
+                      {inv.invited_by_email
+                        ? t("p.work.attention.invitedBy", {
+                            email: inv.invited_by_email,
+                            ago: ago(inv.created_at),
+                          })
+                        : ago(inv.created_at)}
                     </Typography>
                   </Box>
                   <Button
@@ -308,7 +338,9 @@ export default function AttentionPage() {
                   {n.type && (
                     <Chip
                       size="small"
-                      label={n.type.replace(/_/g, " ")}
+                      label={t(`p.misc.notifications.type.${n.type}`, {
+                        defaultValue: n.type.replace(/_/g, " "),
+                      })}
                       variant="outlined"
                     />
                   )}
@@ -319,6 +351,9 @@ export default function AttentionPage() {
                         .markRead(n.id)
                         .then(() =>
                           qc.invalidateQueries({ queryKey: ["notifications"] }),
+                        )
+                        .catch(() =>
+                          notify.error(t("p.work.attention.respondError")),
                         );
                       if (n.action_url) navigate(n.action_url);
                     }}

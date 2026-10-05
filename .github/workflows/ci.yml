@@ -69,11 +69,13 @@ jobs:
       DJANGO_SETTINGS_MODULE: config.settings
       DJANGO_SECRET_KEY: ci-secret-key
       DJANGO_DEBUG: "1"
-      DATABASE_URL: postgres://todolist:testpass@localhost:5432/todolist_test
-      DB_HOST: localhost
-      DB_NAME: todolist_test
-      DB_USER: todolist
-      DB_PASSWORD: testpass
+      # settings.py solo lee POSTGRES_* — DATABASE_URL/DB_* se ignoraban
+      # y el migrate de CI apuntaba al host "db" (inexistente en Actions).
+      POSTGRES_DB: todolist_test
+      POSTGRES_USER: todolist
+      POSTGRES_PASSWORD: testpass
+      POSTGRES_HOST: localhost
+      POSTGRES_PORT: "5432"
       REDIS_HOST: localhost
 
     steps:
@@ -128,6 +130,44 @@ jobs:
 
       - name: Build
         run: npx vite build
+
+  dependency-audit:
+    name: Dependency & Secret Audit
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: pip-audit (vulnerabilidades Python)
+        run: |
+          pip install pip-audit
+          pip-audit -r backend/requirements.txt --progress-spinner off \
+            || echo "pip-audit reportó hallazgos — revisar antes de mergear"
+
+      - name: npm audit (vulnerabilidades frontend)
+        working-directory: frontend
+        run: npm audit --audit-level=high
+
+      - name: gitleaks (secretos en el repo)
+        uses: gitleaks/gitleaks-action@v2
+        env:
+          GITLEAKS_ENABLE_SUMMARY: "true"
+
+  docs-check:
+    name: Docs (markdownlint + enlaces)
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: markdownlint
+        run: npx -y markdownlint-cli2 "**/*.md" "!frontend/node_modules/**" "!backend/.venv/**"
+
+      - name: enlaces rotos (lychee)
+        uses: lycheeverse/lychee-action@v2
+        with:
+          args: --no-progress --exclude-mail --exclude "localhost|127\.0\.0\.1" "**/*.md"
+          fail: true
 
   docker-build:
     name: Docker Build

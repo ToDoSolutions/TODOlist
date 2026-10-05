@@ -8,8 +8,8 @@ export interface Crumb {
 }
 
 interface Props {
-  title: string;
-  description?: string;
+  title: ReactNode;
+  description?: ReactNode;
   breadcrumbs?: Crumb[];
   /** Acción primaria (botón contained) y secundarias a la derecha. */
   actions?: ReactNode;

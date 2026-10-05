@@ -13,7 +13,7 @@ import {
   Button,
 } from "@mui/material";
 import { Search, Scale } from "lucide-react";
-import { format } from "date-fns";
+import { formatDate } from "../lib/dates";
 import PageHeader from "../components/ui/PageHeader";
 import { EmptyState } from "../components/ui/states";
 import { meetingsApi, projectsApi, type MeetingItem } from "../api/resources";
@@ -79,6 +79,7 @@ export default function DecisionsPage() {
         size="small"
         fullWidth
         placeholder={t("p.plan.decisions.searchPlaceholder")}
+        inputProps={{ "aria-label": t("p.plan.decisions.searchPlaceholder") }}
         value={q}
         onChange={(e) => setQ(e.target.value)}
         sx={{ mb: 3, maxWidth: 480 }}
@@ -127,9 +128,7 @@ export default function DecisionsPage() {
                       />
                     )}
                     <Typography variant="caption" color="text.secondary">
-                      {m.scheduled_at
-                        ? format(new Date(m.scheduled_at), "dd/MM/yyyy")
-                        : ""}
+                      {formatDate(m.scheduled_at)}
                     </Typography>
                   </Stack>
                   <Typography

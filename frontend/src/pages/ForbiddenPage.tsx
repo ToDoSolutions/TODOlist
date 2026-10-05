@@ -1,6 +1,6 @@
 import { useNavigate } from "react-router-dom";
 import { Box, Typography, Button, Stack } from "@mui/material";
-import { ShieldOff } from "lucide-react";
+import { ShieldOff, ArrowLeft, Home } from "lucide-react";
 import { useTranslation } from "react-i18next";
 import "../i18n";
 
@@ -26,11 +26,19 @@ export default function ForbiddenPage() {
         {t("p.auth.forbidden.body")}
       </Typography>
       <Stack direction="row" spacing={1.5} mt={3}>
-        <Button variant="contained" onClick={() => navigate("/app")}>
-          {t("p.auth.goHome")}
-        </Button>
-        <Button variant="outlined" onClick={() => navigate(-1)}>
+        <Button
+          variant="outlined"
+          startIcon={<ArrowLeft size={15} />}
+          onClick={() => navigate(-1)}
+        >
           {t("p.auth.forbidden.goBack")}
+        </Button>
+        <Button
+          variant="contained"
+          startIcon={<Home size={15} />}
+          onClick={() => navigate("/app")}
+        >
+          {t("p.auth.goHome")}
         </Button>
       </Stack>
     </Box>

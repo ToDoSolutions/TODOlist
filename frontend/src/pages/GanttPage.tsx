@@ -2,10 +2,12 @@ import { useQuery } from "@tanstack/react-query";
 import { useTranslation } from "react-i18next";
 import { advancedMetricsApi, type Sprint } from "../api/resources";
 import type { Task } from "../types";
+import PageHeader from "../components/ui/PageHeader";
+import { PageSkeleton } from "../components/ui/skeletons";
+import { ErrorState } from "../components/ui/states";
 import {
   Box,
   Typography,
-  CircularProgress,
   Paper,
   Chip,
   Alert,
@@ -35,7 +37,13 @@ const BAR_HEIGHT = 24;
 
 function parseDate(s: string | null | undefined): number | null {
   if (!s) return null;
-  const d = new Date(s);
+  // "YYYY-MM-DD" del backend = fecha calendario, no instante:
+  // new Date() la parsea como UTC y en husos detrás de UTC cae un
+  // día antes — construirla en hora local.
+  const m = /^(\d{4})-(\d{2})-(\d{2})$/.exec(s);
+  const d = m
+    ? new Date(Number(m[1]), Number(m[2]) - 1, Number(m[3]))
+    : new Date(s);
   return isNaN(d.getTime()) ? null : d.getTime();
 }
 
@@ -91,17 +99,17 @@ export default function GanttPage() {
   const implicitLabel = t("p.plan.gantt.implicit");
   const pointsLabel = (n: number) => t("p.plan.gantt.pointsShort", { count: n });
 
-  const { data, isLoading, isError } = useQuery({
+  const { data, isLoading, isError, refetch } = useQuery({
     queryKey: ["gantt"],
     queryFn: advancedMetricsApi.gantt,
   });
 
-  if (isLoading) return <CircularProgress />;
+  if (isLoading) return <PageSkeleton kind="table" />;
 
   if (isError) {
     return (
       <Box maxWidth={1200} mx="auto" mt={4}>
-        <Alert severity="error">{t("p.plan.gantt.loadError")}</Alert>
+        <ErrorState title={t("p.plan.gantt.loadError")} onRetry={() => void refetch()} />
       </Box>
     );
   }
@@ -183,9 +191,7 @@ export default function GanttPage() {
     );
     return (
       <Box>
-        <Typography variant="h5" fontWeight={700} mb={2}>
-          {t("p.plan.gantt.mobileTitle")}
-        </Typography>
+        <PageHeader title={t("p.plan.gantt.mobileTitle")} />
         <Alert severity="info" sx={{ mb: 2 }}>
           {t("p.plan.gantt.mobileHint")}
         </Alert>
@@ -217,9 +223,7 @@ export default function GanttPage() {
 
   return (
     <Box maxWidth={1280} mx="auto">
-      <Typography variant="h5" fontWeight={700} mb={2}>
-        {t("p.plan.gantt.title")}
-      </Typography>
+      <PageHeader title={t("p.plan.gantt.title")} />
 
       {/* Legend */}
       <Paper sx={{ p: 1.5, mb: 2 }}>

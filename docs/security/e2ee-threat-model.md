@@ -62,7 +62,8 @@ cliente genera también un self-share (EncryptedKeyShare hacia el propio
 usuario) — es la única forma de recuperar la clave AES después.
 
 ### Crear tarea cifrada
-```
+
+```text
 cliente: genera AES-256 key K
 cliente: encrypted_data = AES-GCM(K, {title, description, ...})
 cliente: para cada participante → EncryptedKeyShare(user, RSA_OAEP(pk_user, K))
@@ -70,14 +71,16 @@ servidor: almacena ciphertext + shares (nunca K ni plaintext)
 ```
 
 ### Rotación de clave de usuario
-```
+
+```text
 UserPublicKey.is_active=False + rotated_at=now para la anterior
 nueva clave pública registrada; shares antiguos NO se recifran
 automáticamente (limitación: el owner de la tarea debe re-emitir shares)
 ```
 
 ### Revocación de dispositivo
-```
+
+```text
 SyncDevice.is_active=False → el dispositivo pierde acceso API;
 los key shares existentes en ese dispositivo no se borran remotamente
 (limitación inherente a cifrado cliente)

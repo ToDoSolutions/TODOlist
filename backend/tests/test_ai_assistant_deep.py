@@ -200,6 +200,20 @@ class TestDetectBlockers:
         assert dep[0]["severity"] == "high"
         assert dep[0]["blocking_task_id"] == b.id
 
+    def test_blocks_direccion_correcta(self, user):
+        # "A blocks B": la bloqueada es B (target), no A (source).
+        a = Task.objects.create(owner=user, title="a", state="pending")
+        b = Task.objects.create(owner=user, title="b", state="pending")
+        TaskRelation.objects.create(
+            source=a, target=b, relation_type="blocks"
+        )
+        dep = [x for x in detect_blockers(user)
+               if x["blocker_type"] == "dependency_unresolved"]
+        assert len(dep) == 1
+        assert dep[0]["task_id"] == b.id
+        assert dep[0]["blocking_task_id"] == a.id
+        assert dep[0]["detail"].startswith("Bloqueada por")
+
     def test_dependencia_resuelta_no_bloquea(self, user):
         a = Task.objects.create(owner=user, title="a", state="pending")
         b = Task.objects.create(owner=user, title="b", state="completed")

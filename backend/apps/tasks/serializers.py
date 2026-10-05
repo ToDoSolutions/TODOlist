@@ -309,11 +309,17 @@ class EpicSerializer(serializers.ModelSerializer):
 
 
 class SavedSearchSerializer(serializers.ModelSerializer):
+    is_owner = serializers.SerializerMethodField()
+
     class Meta:
         model = SavedSearch
-        fields = ["id", "name", "filters", "is_shared",
+        fields = ["id", "name", "filters", "is_shared", "is_owner",
                   "created_at", "updated_at"]
-        read_only_fields = ["id", "created_at", "updated_at"]
+        read_only_fields = ["id", "is_owner", "created_at", "updated_at"]
+
+    def get_is_owner(self, obj):
+        request = self.context.get("request")
+        return request is not None and obj.owner_id == request.user.id
 
 
 class TaskApprovalSerializer(serializers.ModelSerializer):
@@ -380,7 +386,7 @@ class TaskSerializer(serializers.ModelSerializer):
             "due_date", "start_date", "completed_at",
             "reminder_at", "reminder_sent",
             "story_points", "estimate_hours", "size",
-            "project", "tags", "tags_ids",
+            "project", "extra_projects", "tags", "tags_ids",
             "recurrence",
             "parent", "parent_title",
             "sprint", "sprint_name",
@@ -399,6 +405,7 @@ class TaskSerializer(serializers.ModelSerializer):
         read_only_fields = [
             "id", "ref", "seq", "completed_at", "reminder_sent",
             "assignees", "assignees_detail", "watchers", "is_watching",
+            "extra_projects",
             "approvals", "pending_approval_for_me", "logged_seconds",
             "position", "is_favorite",
             "created_at", "updated_at",
@@ -481,6 +488,10 @@ class TaskCreateUpdateSerializer(serializers.ModelSerializer):
         required=False,
     )
     recurrence_data = RecurrenceRuleSerializer(write_only=True, required=False)
+    # Multi-homing: hogares adicionales (project sigue siendo el canónico)
+    extra_projects = serializers.PrimaryKeyRelatedField(
+        many=True, queryset=Project.objects.none(), required=False
+    )
 
     class Meta:
         model = Task
@@ -488,7 +499,7 @@ class TaskCreateUpdateSerializer(serializers.ModelSerializer):
             "id", "title", "description", "state", "priority", "task_type",
             "due_date", "start_date", "reminder_at",
             "story_points", "estimate_hours", "size",
-            "project", "tags", "recurrence_data",
+            "project", "extra_projects", "tags", "recurrence_data",
             "parent", "sprint", "epic", "section",
             "assignee", "assignees",
             "created_at", "updated_at",
@@ -501,6 +512,11 @@ class TaskCreateUpdateSerializer(serializers.ModelSerializer):
         if request and request.user.is_authenticated:
             self.fields["tags"].child_relation.queryset = Tag.objects.filter(
                 owner=request.user
+            )
+            # Solo hogares extra con permiso de escritura
+            from apps.projects.models import accessible_projects
+            self.fields["extra_projects"].child_relation.queryset = (
+                accessible_projects(request.user, write=True)
             )
 
     def validate_project(self, value):
@@ -638,6 +654,12 @@ class TaskCreateUpdateSerializer(serializers.ModelSerializer):
             raise serializers.ValidationError(
                 "La sección debe pertenecer al mismo proyecto que la tarea."
             )
+        # El proyecto canónico no puede ser a la vez un hogar extra
+        extras = data.get("extra_projects")
+        if extras and project and any(p.id == project.id for p in extras):
+            raise serializers.ValidationError(
+                {"extra_projects": "El proyecto principal no puede ser también un hogar extra."}
+            )
         # No permitir due_date en el pasado para tareas nuevas
         due_date = data.get("due_date")
         if due_date and not self.instance:
@@ -652,6 +674,7 @@ class TaskCreateUpdateSerializer(serializers.ModelSerializer):
     def create(self, validated_data):
         tags = validated_data.pop("tags", [])
         assignees = validated_data.pop("assignees", [])
+        extra_projects = validated_data.pop("extra_projects", [])
         recurrence_data = validated_data.pop("recurrence_data", None)
         if recurrence_data:
             recurrence = RecurrenceRule.objects.create(**recurrence_data)
@@ -661,6 +684,8 @@ class TaskCreateUpdateSerializer(serializers.ModelSerializer):
             task.tags.set(tags)
         if assignees:
             task.assignees.set(assignees)
+        if extra_projects:
+            task.extra_projects.set(extra_projects)
         # Registrar actividad
         TaskActivity.objects.create(
             task=task,
@@ -672,6 +697,7 @@ class TaskCreateUpdateSerializer(serializers.ModelSerializer):
     def update(self, instance, validated_data):
         tags = validated_data.pop("tags", None)
         assignees = validated_data.pop("assignees", None)
+        extra_projects = validated_data.pop("extra_projects", None)
         # Si cambia reminder_at, el recordatorio vuelve a estar pendiente
         if (
             "reminder_at" in validated_data
@@ -716,6 +742,8 @@ class TaskCreateUpdateSerializer(serializers.ModelSerializer):
             instance.tags.set(tags)
         if assignees is not None:
             instance.assignees.set(assignees)
+        if extra_projects is not None:
+            instance.extra_projects.set(extra_projects)
         return instance
 
 

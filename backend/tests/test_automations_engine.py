@@ -118,6 +118,30 @@ class TestExecuteAction:
         assert sub.state == "in_progress"
         assert result["moved_subtasks"] == 1
 
+    def test_subtasks_in_progress_respects_workflow(self):
+        """Hijas cuyo proyecto prohíbe pending→in_progress se saltan."""
+        from apps.projects.models import Project, WorkflowTransition
+
+        project = Project.objects.create(owner=self.user, name="WF")
+        WorkflowTransition.objects.create(
+            project=project, from_state="pending", to_state="review"
+        )
+        free = Task.objects.create(
+            owner=self.user, title="Libre", state="pending", parent=self.task
+        )
+        locked = Task.objects.create(
+            owner=self.user, title="WF", state="pending",
+            parent=self.task, project=project,
+        )
+        rule = AutomationRule.objects.create(owner=self.user, name="r5b", trigger="task_created", action=AutomationRule.Action.SUBTASKS_IN_PROGRESS)
+        result = execute_action(rule, {"task": self.task})
+        free.refresh_from_db()
+        locked.refresh_from_db()
+        assert free.state == "in_progress"
+        assert locked.state == "pending"
+        assert result["moved_subtasks"] == 1
+        assert result["skipped_by_workflow"] == 1
+
     def test_create_notification(self):
         rule = AutomationRule.objects.create(owner=self.user, name="r6", trigger="task_created", action=AutomationRule.Action.CREATE_NOTIFICATION, action_params={"title": "Auto"})
         result = execute_action(rule, {"task": self.task})
@@ -153,6 +177,106 @@ class TestExecuteAction:
         assert result["tag_added"] == "bug"
         assert result["tag_created"] is True
         assert self.task.tags.filter(name="bug").exists()
+
+    def test_set_state_completed_applies_effects(self):
+        """Paridad canales: SET_STATE=completed debe sellar completed_at."""
+        rule = AutomationRule.objects.create(owner=self.user, name="rS", trigger="task_created", action=AutomationRule.Action.SET_STATE, action_params={"state": "completed"})
+        result = execute_action(rule, {"task": self.task})
+        self.task.refresh_from_db()
+        assert self.task.state == "completed"
+        assert self.task.completed_at is not None
+        assert result["new_state"] == "completed"
+
+    def test_set_state_respects_workflow(self):
+        """Una transición prohibida por el workflow del proyecto → error."""
+        from apps.projects.models import Project, WorkflowTransition
+
+        project = Project.objects.create(owner=self.user, name="WF")
+        WorkflowTransition.objects.create(
+            project=project, from_state="pending", to_state="in_progress"
+        )
+        task = Task.objects.create(
+            owner=self.user, title="WF", state="pending", project=project
+        )
+        rule = AutomationRule.objects.create(owner=self.user, name="rW", trigger="task_created", action=AutomationRule.Action.SET_STATE, action_params={"state": "completed"})
+        result = execute_action(rule, {"task": task})
+        assert "error" in result
+        task.refresh_from_db()
+        assert task.state == "pending"
+
+    def test_move_to_sprint_shared_project(self):
+        """Sprints de proyectos compartidos editables también valen."""
+        from apps.collaboration.models import ProjectMember
+        from apps.projects.models import Project
+
+        other = User.objects.create_user(username="sp", email="sp@x.com", password="pass")
+        project = Project.objects.create(owner=other, name="Shared")
+        ProjectMember.objects.create(project=project, user=self.user, role="editor")
+        sprint = Sprint.objects.create(
+            owner=other, project=project, name="S-shared",
+            start_date=timezone.now().date(),
+            end_date=timezone.now().date() + timedelta(days=14),
+        )
+        task = Task.objects.create(owner=self.user, title="T", project=project)
+        rule = AutomationRule.objects.create(owner=self.user, name="rM", trigger="task_created", action=AutomationRule.Action.MOVE_TO_SPRINT, action_params={"sprint_id": sprint.id})
+        result = execute_action(rule, {"task": task})
+        task.refresh_from_db()
+        assert task.sprint_id == sprint.id
+        assert result["new_sprint"] == "S-shared"
+
+    def test_move_to_project_drops_stale_links(self):
+        """Mover de proyecto suelta sprint/epic/section del origen y el
+        destino deja de ser hogar extra."""
+        import datetime
+
+        from apps.projects.models import Project, ProjectSection
+        from apps.tasks.models import Epic
+
+        a = Project.objects.create(owner=self.user, name="A")
+        b = Project.objects.create(owner=self.user, name="B")
+        sprint = Sprint.objects.create(
+            owner=self.user, project=a, name="S1",
+            start_date=datetime.date(2026, 1, 1),
+            end_date=datetime.date(2026, 1, 14),
+        )
+        epic = Epic.objects.create(owner=self.user, project=a, title="E1")
+        section = ProjectSection.objects.create(project=a, name="Sec")
+        task = Task.objects.create(
+            owner=self.user, title="T", project=a,
+            sprint=sprint, epic=epic, section=section,
+        )
+        task.extra_projects.add(b)
+        rule = AutomationRule.objects.create(owner=self.user, name="rP", trigger="task_created", action=AutomationRule.Action.MOVE_TO_PROJECT, action_params={"project_id": b.id})
+        result = execute_action(rule, {"task": task})
+        assert result["new_project"] == "B"
+        task.refresh_from_db()
+        assert task.project_id == b.id
+        assert task.sprint_id is None
+        assert task.epic_id is None
+        assert task.section_id is None
+        assert not task.extra_projects.exists()
+
+    def test_create_task_with_project(self):
+        """project_id editable → la tarea nace en el proyecto con seq."""
+        from apps.projects.models import Project
+
+        p = Project.objects.create(owner=self.user, name="P1")
+        rule = AutomationRule.objects.create(owner=self.user, name="rC", trigger="task_created", action=AutomationRule.Action.CREATE_TASK, action_params={"title": "Auto", "project_id": p.id})
+        result = execute_action(rule, {"task": self.task})
+        task = Task.objects.get(id=result["created_task_id"])
+        assert task.project_id == p.id
+        assert task.seq == 1
+        assert task.position >= 1
+
+    def test_create_task_project_not_editable(self):
+        other = User.objects.create_user(username="np", email="np@x.com", password="pass")
+        from apps.projects.models import Project
+
+        p = Project.objects.create(owner=other, name="Ajeno")
+        rule = AutomationRule.objects.create(owner=self.user, name="rC2", trigger="task_created", action=AutomationRule.Action.CREATE_TASK, action_params={"title": "Auto", "project_id": p.id})
+        result = execute_action(rule, {"task": self.task})
+        assert "error" in result
+        assert not Task.objects.filter(title="Auto").exists()
 
     def test_invalid_action(self):
         rule = AutomationRule.objects.create(owner=self.user, name="r11", trigger="task_created", action="invalid")

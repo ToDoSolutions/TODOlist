@@ -1,5 +1,6 @@
-import { useState } from "react";
+﻿import { useState } from "react";
 import { QRCodeSVG } from "qrcode.react";
+import { TaskListSkeleton } from "../components/ui/skeletons";
 import {
   Box,
   Typography,
@@ -38,6 +39,7 @@ import { formatRelative } from "../lib/dates";
 import { useConfirm } from "../components/ConfirmDialog";
 import { notify } from "../notify";
 import { useTranslation } from "react-i18next";
+import PageHeader from "../components/ui/PageHeader";
 
 export default function SecurityPage() {
   const { t } = useTranslation();
@@ -133,9 +135,7 @@ export default function SecurityPage() {
 
   if (isLoading) {
     return (
-      <Box display="flex" justifyContent="center" py={5}>
-        <CircularProgress />
-      </Box>
+      <TaskListSkeleton />
     );
   }
 
@@ -143,12 +143,14 @@ export default function SecurityPage() {
 
   return (
     <Box maxWidth={700} mx="auto">
-      <Stack direction="row" alignItems="center" spacing={1} mb={3}>
-        <Shield size={24} style={{ color: theme.palette.primary.main }} />
-        <Typography variant="h5" fontWeight={700}>
-          {t("nav.security")}
-        </Typography>
-      </Stack>
+      <PageHeader
+        title={
+          <>
+            <Shield size={22} style={{ color: theme.palette.primary.main, verticalAlign: "text-bottom", marginRight: 8 }} />
+            {t("nav.security")}
+          </>
+        }
+      />
 
       {/* 2FA Status */}
       <Paper variant="outlined" sx={{ p: 3, mb: 2 }}>
@@ -333,7 +335,11 @@ export default function SecurityPage() {
               variant="outlined"
               disabled={revokeAllMut.isPending}
               onClick={async () => {
-                if (await confirm(t("p.admin.security.confirmRevokeAll")))
+                if (
+            await confirm(t("p.admin.security.confirmRevokeAll"), {
+              confirmLabel: t("p.admin.security.revokeAll"),
+            })
+          )
                   revokeAllMut.mutate();
               }}
             >
@@ -377,6 +383,7 @@ export default function SecurityPage() {
                               t("p.admin.security.confirmRemoveDevice", {
                                 name: d.device_name || d.device_id,
                               }),
+                              { confirmLabel: t("common.delete") },
                             )
                           )
                             removeMut.mutate(d.device_id);

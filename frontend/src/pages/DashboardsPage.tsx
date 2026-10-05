@@ -1,7 +1,8 @@
-import { useState } from "react";
+﻿import { useState } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { useNavigate } from "react-router-dom";
 import { useTranslation } from "react-i18next";
+import { CardGridSkeleton } from "../components/ui/skeletons";
 import {
   Box,
   Typography,
@@ -16,7 +17,6 @@ import {
   DialogActions,
   TextField,
   MenuItem,
-  CircularProgress,
   Alert,
   Grid,
   Divider,
@@ -62,6 +62,7 @@ import {
 } from "../types";
 import { notify } from "../notify";
 import { useConfirm } from "../components/ConfirmDialog";
+import { formatRelative, formatDate } from "../lib/dates";
 
 const WIDGET_ICONS: Record<string, React.ReactNode> = {
   kpis: <Gauge size={16} />,
@@ -168,13 +169,20 @@ export default function DashboardsPage() {
       />
 
       {isLoading ? (
-        <Box display="flex" justifyContent="center" py={6}>
-          <CircularProgress />
-        </Box>
+        <CardGridSkeleton />
       ) : list.length === 0 ? (
         <EmptyState
           title={t("p.collab.dashboards.emptyTitle")}
           description={t("p.collab.dashboards.emptyDesc")}
+          action={
+            <Button
+              variant="contained"
+              startIcon={<Plus size={15} />}
+              onClick={() => setCreateOpen(true)}
+            >
+              {t("p.collab.dashboards.new")}
+            </Button>
+          }
         />
       ) : (
         <Grid container spacing={2}>
@@ -304,6 +312,7 @@ export default function DashboardsPage() {
                                 t("p.collab.dashboards.confirmDelete", {
                                   name: selected.name,
                                 }),
+                                { confirmLabel: t("common.delete") },
                               )
                             )
                               deleteMut.mutate(selected.id);
@@ -324,9 +333,7 @@ export default function DashboardsPage() {
                 </Stack>
 
                 {loadingData ? (
-                  <Box display="flex" justifyContent="center" py={6}>
-                    <CircularProgress />
-                  </Box>
+                  <CardGridSkeleton cards={4} />
                 ) : !resolved || resolved.widgets.length === 0 ? (
                   <EmptyState
                     title={t("p.collab.dashboards.emptyDashTitle")}
@@ -690,15 +697,17 @@ function WidgetCard({
 function TaskRows({
   tasks,
   onOpenTask,
+  emptyLabel,
 }: {
   tasks: TaskBrief[];
   onOpenTask: (id: number) => void;
+  emptyLabel?: string;
 }) {
   const { t } = useTranslation();
   if (tasks.length === 0) {
     return (
       <Typography variant="body2" color="text.secondary">
-        {t("p.collab.dashboards.nothingHere")}
+        {emptyLabel ?? t("p.collab.dashboards.nothingHere")}
       </Typography>
     );
   }
@@ -729,7 +738,7 @@ function TaskRows({
             />
             {t.due_date && (
               <Typography variant="caption" color="text.secondary">
-                {t.due_date.slice(0, 10)}
+                {formatDate(t.due_date)}
               </Typography>
             )}
           </Stack>
@@ -783,7 +792,13 @@ function WidgetBody({
     case "my_tasks":
     case "overdue":
     case "upcoming_deadlines":
-      return <TaskRows tasks={(d.tasks as TaskBrief[]) ?? []} onOpenTask={onOpenTask} />;
+      return (
+        <TaskRows
+          tasks={(d.tasks as TaskBrief[]) ?? []}
+          onOpenTask={onOpenTask}
+          emptyLabel={t(`p.collab.dashboards.empty.${widget.type}`)}
+        />
+      );
     case "blocked": {
       const blocked = (d.blocked as { task: TaskBrief; blocked_by: TaskBrief }[]) ?? [];
       if (blocked.length === 0)
@@ -870,38 +885,62 @@ function WidgetBody({
           </Typography>
         );
       const max = Math.max(...sprints.map((s) => s.completed_points), 1);
+      const estActual =
+        (d.estimated_vs_actual as {
+          sprint: string;
+          estimated_hours: number;
+          actual_hours: number;
+        }[]) ?? [];
+      const bySprint = new Map(estActual.map((e) => [e.sprint, e]));
+      const totEst = estActual.reduce((a, e) => a + (e.estimated_hours || 0), 0);
+      const totAct = estActual.reduce((a, e) => a + (e.actual_hours || 0), 0);
       return (
-        <Stack direction="row" spacing={1} alignItems="flex-end" sx={{ height: 90 }}>
-          {sprints.map((s) => (
-            <Tooltip
-              key={s.sprint}
-              title={t("p.collab.dashboards.velocityTip", {
-                sprint: s.sprint,
-                points: s.completed_points,
-                tasks: s.completed_tasks,
-              })}
-            >
-              <Box sx={{ textAlign: "center", flex: 1, minWidth: 36 }}>
-                <Box
-                  sx={{
-                    height: `${(s.completed_points / max) * 70}px`,
-                    minHeight: 4,
-                    bgcolor: "primary.main",
-                    borderRadius: "4px 4px 0 0",
-                    mb: 0.5,
-                  }}
-                />
-                <Typography
-                  variant="caption"
-                  color="text.secondary"
-                  noWrap
-                  display="block"
+        <Stack spacing={0.5}>
+          <Stack direction="row" spacing={1} alignItems="flex-end" sx={{ height: 90 }}>
+            {sprints.map((s) => {
+              const ea = bySprint.get(s.sprint);
+              return (
+                <Tooltip
+                  key={s.sprint}
+                  title={t("p.collab.dashboards.velocityTip", {
+                    sprint: s.sprint,
+                    points: s.completed_points,
+                    tasks: s.completed_tasks,
+                    est: ea?.estimated_hours ?? 0,
+                    act: ea?.actual_hours ?? 0,
+                  })}
                 >
-                  {s.sprint}
-                </Typography>
-              </Box>
-            </Tooltip>
-          ))}
+                  <Box sx={{ textAlign: "center", flex: 1, minWidth: 36 }}>
+                    <Box
+                      sx={{
+                        height: `${(s.completed_points / max) * 70}px`,
+                        minHeight: 4,
+                        bgcolor: "primary.main",
+                        borderRadius: "4px 4px 0 0",
+                        mb: 0.5,
+                      }}
+                    />
+                    <Typography
+                      variant="caption"
+                      color="text.secondary"
+                      noWrap
+                      display="block"
+                    >
+                      {s.sprint.split(" - ")[0]}
+                    </Typography>
+                  </Box>
+                </Tooltip>
+              );
+            })}
+          </Stack>
+          {estActual.length > 0 && (
+            <Typography variant="caption" color="text.secondary">
+              {t("p.collab.dashboards.estVsActual", {
+                est: Math.round(totEst * 10) / 10,
+                act: Math.round(totAct * 10) / 10,
+              })}
+            </Typography>
+          )}
         </Stack>
       );
     }
@@ -954,7 +993,9 @@ function WidgetBody({
         <Stack spacing={0.5}>
           {activity.map((a, i) => (
             <Typography key={i} variant="body2" color="text.secondary">
-              {a.action} · {a.resource} · {a.at.slice(0, 10)}
+              {t(`p.admin.audit.actions.${a.action}`, { defaultValue: a.action })}{" "}
+              · {t(`p.admin.audit.res.${a.resource}`, { defaultValue: a.resource })}{" "}
+              · {formatRelative(a.at)}
             </Typography>
           ))}
         </Stack>

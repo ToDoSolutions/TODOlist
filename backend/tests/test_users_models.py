@@ -57,12 +57,12 @@ class TestTwoFactorSecret:
     def test_generate_backup_codes(self):
         codes = self.totp.generate_backup_codes(5)
         assert len(codes) == 5
-        assert all(len(c) == 10 for c in codes)
+        assert all(len(c) == 16 for c in codes)
         assert all(c.isupper() or c.isdigit() for c in codes)
         self.totp.refresh_from_db()
-        # En BD se guardan los hashes, no los códigos en claro
+        # En BD se guardan los hashes (pbkdf2$<salt>$<digest>), no en claro
         assert self.totp.backup_codes != codes
-        assert all(len(h) == 64 for h in self.totp.backup_codes)
+        assert all(h.startswith("pbkdf2$") for h in self.totp.backup_codes)
 
     def test_use_backup_code(self):
         codes = self.totp.generate_backup_codes(2)

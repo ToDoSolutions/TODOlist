@@ -330,3 +330,96 @@ class TestWebhookPRAndRelease:
         )
         assert resp.status_code == 200
         assert "v1.0.0" in resp.data["message"]
+
+
+@pytest.mark.django_db
+class TestWebhookMultiTenant:
+    """Dos instalaciones sobre el mismo repo no deben contaminarse (AUD-01)."""
+
+    @pytest.fixture
+    def other_installation(self, other_user):
+        return GitHubInstallation.objects.create(
+            user=other_user,
+            installation_id=99999,
+            account_login="otherorg",
+            account_type="Organization",
+            github_user_id=11111,
+            github_username="otheruser",
+            access_token="gho_other_token",
+        )
+
+    @pytest.fixture
+    def other_repo(self, other_installation):
+        # Mismo repo_id y full_name, instalación distinta (app instalada por
+        # dos usuarios sobre un repo de org).
+        return GitHubRepo.objects.create(
+            installation=other_installation,
+            repo_id=100,
+            full_name="testuser/my-repo",
+            name="my-repo",
+            owner="testuser",
+        )
+
+    @patch("apps.integrations.views.GitHubAppClient.verify_webhook_signature", return_value=True)
+    def test_issue_import_scopeado_por_instalacion(
+        self, mock_verify, api_client, github_repo, github_installation, other_repo, other_user
+    ):
+        """Un issues.opened de la instalación de A no puede importar en la cuenta de B."""
+        payload = {
+            "action": "opened",
+            "issue": {"id": 3001, "number": 7, "title": "Issue tenant", "state": "open"},
+            "repository": {"id": 100, "full_name": "testuser/my-repo"},
+            "installation": {"id": 12345},  # instalación de `user`
+        }
+        resp = api_client.post(
+            "/api/webhooks/github/",
+            data=json.dumps(payload),
+            content_type="application/json",
+            HTTP_X_GITHUB_EVENT="issues",
+            HTTP_X_GITHUB_DELIVERY="delivery-mt-001",
+        )
+        assert resp.status_code == 200
+        task = Task.objects.get(title="Issue tenant")
+        assert task.owner == github_installation.user
+        assert task.owner != other_user
+
+    @patch("apps.integrations.views.GitHubAppClient.verify_webhook_signature", return_value=True)
+    def test_installation_removed_no_borra_repo_de_otro_tenant(
+        self, mock_verify, api_client, github_repo, other_installation, other_repo
+    ):
+        """`installation_repositories.removed` solo borra el repo de esa instalación."""
+        payload = {
+            "action": "removed",
+            "repositories_removed": [{"id": 100, "full_name": "testuser/my-repo", "name": "my-repo"}],
+            "installation": {"id": 99999},  # instalación de other_user
+        }
+        resp = api_client.post(
+            "/api/webhooks/github/",
+            data=json.dumps(payload),
+            content_type="application/json",
+            HTTP_X_GITHUB_EVENT="installation_repositories",
+            HTTP_X_GITHUB_DELIVERY="delivery-mt-002",
+        )
+        assert resp.status_code == 200
+        # El repo del otro tenant sigue existiendo; el de la instalación emisora se borra
+        assert not GitHubRepo.objects.filter(pk=other_repo.pk).exists()
+        assert GitHubRepo.objects.filter(pk=github_repo.pk).exists()
+
+    @patch("apps.integrations.views.GitHubAppClient.verify_webhook_signature", return_value=True)
+    def test_removed_sin_instalacion_conocida_no_borra_nada(
+        self, mock_verify, api_client, github_repo
+    ):
+        payload = {
+            "action": "removed",
+            "repositories_removed": [{"id": 100, "full_name": "testuser/my-repo", "name": "my-repo"}],
+            "installation": {"id": 424242},  # instalación desconocida
+        }
+        resp = api_client.post(
+            "/api/webhooks/github/",
+            data=json.dumps(payload),
+            content_type="application/json",
+            HTTP_X_GITHUB_EVENT="installation_repositories",
+            HTTP_X_GITHUB_DELIVERY="delivery-mt-003",
+        )
+        assert resp.status_code == 200
+        assert GitHubRepo.objects.filter(pk=github_repo.pk).exists()

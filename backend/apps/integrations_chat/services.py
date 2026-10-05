@@ -15,6 +15,13 @@ def _is_safe_url(url):
     Además de rechazar IPs literales privadas, resuelve el hostname por DNS
     y rechaza si TODAS sus IPs o cualquiera es privada/loopback/link-local/
     reservada (evita bypass por dominio que apunta a 127.0.0.1, etc.).
+
+    Limitación conocida (TOCTOU/DNS-rebinding): ``requests`` re-resuelve
+    el hostname al conectar — con TTL≈0 o rebinding la segunda resolución
+    podría devolver una IP privada ya validada como pública. La mitigación
+    completa exigiría conectar a la IP validada (resolve-and-pin); el
+    riesgo residual queda cubierto parcialmente por ``allow_redirects=False``
+    en todos los clientes que usan este guard.
     """
     try:
         parsed = urlparse(url)

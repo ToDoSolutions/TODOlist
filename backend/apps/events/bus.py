@@ -1,10 +1,17 @@
 """Bus de eventos de dominio sobre el OutboxEvent.
 
+
 `publish()` persiste el evento en la transacción del caller (atómico con el
 cambio de negocio) y lo despacha de inmediato a los handlers registrados —
 misma semántica temporal que los signals actuales. La diferencia: si un
 handler falla, el evento queda FAILED y `process_pending_events` lo
 reintenta (los handlers deben ser idempotentes).
+
+Limitación conocida (audit B-02): el despacho es síncrono — los handlers
+de efectos externos (webhook HTTP, WS push) corren dentro del request
+que provocó el evento, con los timeouts acotados de cada cliente
+(requests: 10 s). Moverlos tras commit (``on_commit``) o a Celery es
+deuda deliberada: los tests y el contrato asumen despacho inmediato.
 
 Los efectos internos (TaskActivity, AuditLog, Notification, AutomationLog)
 NO pasan por aquí: se escriben en la transacción del cambio vía signals.
@@ -13,6 +20,7 @@ import logging
 from collections.abc import Callable
 from typing import Any
 
+from django.db import transaction
 from django.utils import timezone
 
 from .models import OutboxEvent
@@ -78,15 +86,32 @@ def dispatch(event):
 
 
 def process_pending_events(limit=200):
-    """Reintenta eventos FAILED/PENDING (invocado por el beat de Celery)."""
-    pending = OutboxEvent.objects.filter(
-        status__in=[OutboxEvent.Status.PENDING, OutboxEvent.Status.FAILED],
-        attempts__lt=MAX_ATTEMPTS,
-    ).order_by("created_at")[:limit]
+    """Reintenta eventos FAILED/PENDING (invocado por el beat de Celery).
+
+    Cada evento se despacha bajo ``select_for_update(skip_locked)`` para
+    que dos workers no procesen el mismo evento a la vez (en SQLite el
+    lock es no-op, pero los handlers son idempotentes de todas formas).
+    """
+    pending_ids = list(
+        OutboxEvent.objects.filter(
+            status__in=[OutboxEvent.Status.PENDING, OutboxEvent.Status.FAILED],
+            attempts__lt=MAX_ATTEMPTS,
+        )
+        .order_by("created_at")
+        .values_list("id", flat=True)[:limit]
+    )
     ok = failed = 0
-    for event in pending:
-        if dispatch(event):
-            ok += 1
-        else:
-            failed += 1
+    for event_id in pending_ids:
+        with transaction.atomic():
+            event = (
+                OutboxEvent.objects.select_for_update(skip_locked=True)
+                .filter(pk=event_id)
+                .first()
+            )
+            if event is None:
+                continue  # lo tiene otro worker
+            if dispatch(event):
+                ok += 1
+            else:
+                failed += 1
     return {"processed": ok, "failed": failed}

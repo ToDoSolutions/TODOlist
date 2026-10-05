@@ -1,6 +1,7 @@
 import axios, { AxiosError, InternalAxiosRequestConfig } from "axios";
 import axiosRetry from "axios-retry";
 import { env } from "../env";
+import { isQueueable, offlineQueue } from "../lib/offlineQueue";
 
 const API_URL = env.VITE_API_URL;
 
@@ -60,7 +61,11 @@ api.interceptors.request.use((config: InternalAxiosRequestConfig) => {
 });
 
 let isRefreshing = false;
-let queue: Array<() => void> = [];
+// Cada entrada sabe reintentar tras un refresh OK o abortar la
+// promesa si el refresh falla — antes se descartaban y las
+// peticiones encoladas se quedaban pending para siempre.
+let queue: Array<{ retry: () => void; abort: (e: unknown) => void }> =
+  [];
 
 api.interceptors.response.use(
   (r) => r,
@@ -73,9 +78,12 @@ api.interceptors.response.use(
     if (error.response?.status === 401 && !original._retry && hasSession) {
       if (isRefreshing) {
         return new Promise((resolve, reject) => {
-          queue.push(() => {
-            original._retry = true;
-            api(original).then(resolve).catch(reject);
+          queue.push({
+            retry: () => {
+              original._retry = true;
+              api(original).then(resolve).catch(reject);
+            },
+            abort: reject,
           });
         });
       }
@@ -91,10 +99,13 @@ api.interceptors.response.use(
         if (data.access && data.refresh) {
           tokenStorage.set(data.access, data.refresh);
         }
-        queue.forEach((fn) => fn());
+        queue.forEach((fn) => fn.retry());
         queue = [];
         return api(original);
       } catch (e) {
+        // Rechazar las encoladas con el mismo error — si no, cada
+        // petición esperando el refresh quedaba colgada para siempre.
+        queue.forEach((fn) => fn.abort(e));
         queue = [];
         tokenStorage.clear();
         window.location.href = `/session-expired?next=${encodeURIComponent(
@@ -108,12 +119,22 @@ api.interceptors.response.use(
     // 403 en una lectura = el usuario no tiene acceso al recurso de la
     // página actual → ForbiddenPage. Las mutaciones devuelven el error
     // al caller para que la UI muestre el motivo en línea.
+    // Solo en rutas autenticadas /app/*: en páginas públicas (login,
+    // intake, share) un GET 403 no debe mandarte a ForbiddenPage.
     if (
       error.response?.status === 403 &&
       (original.method || "get").toLowerCase() === "get" &&
+      window.location.pathname.startsWith("/app") &&
       window.location.pathname !== "/app/403"
     ) {
       window.location.href = "/app/403";
+    }
+    // Error de red en una mutación (sin respuesta): encolar para
+    // replay al reconectar — un click offline no debe perderse.
+    if (!error.response && original && isQueueable(original)) {
+      offlineQueue.enqueue(original);
+      (error as AxiosError & { offlineQueued?: boolean }).offlineQueued =
+        true;
     }
     return Promise.reject(error);
   },

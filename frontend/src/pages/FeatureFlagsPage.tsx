@@ -1,5 +1,7 @@
-import { useState } from "react";
+﻿import { useState } from "react";
 import { useTranslation } from "react-i18next";
+import { TableSkeleton } from "../components/ui/skeletons";
+import PageHeader from "../components/ui/PageHeader";
 import {
   Box,
   Typography,
@@ -139,29 +141,29 @@ export default function FeatureFlagsPage() {
 
   return (
     <Box maxWidth={900} mx="auto">
-      <Stack direction="row" alignItems="center" justifyContent="space-between" mb={3}>
-        <Stack direction="row" alignItems="center" spacing={1}>
-          <Flag size={24} style={{ color: theme.palette.primary.main }} />
-          <Typography variant="h5" fontWeight={700}>
+      <PageHeader
+        title={
+          <>
+            <Flag size={22} style={{ color: theme.palette.primary.main, verticalAlign: "text-bottom", marginRight: 8 }} />
             {t("nav.featureFlags")}
-          </Typography>
-        </Stack>
-        <Button
-          variant="contained"
-          startIcon={<Plus size={18} />}
-          onClick={() => {
-            setForm(EMPTY_FORM);
-            setDialogOpen(true);
-          }}
-        >
-          {t("p.admin.flags.new")}
-        </Button>
-      </Stack>
+          </>
+        }
+        actions={
+          <Button
+            variant="contained"
+            startIcon={<Plus size={18} />}
+            onClick={() => {
+              setForm(EMPTY_FORM);
+              setDialogOpen(true);
+            }}
+          >
+            {t("p.admin.flags.new")}
+          </Button>
+        }
+      />
 
       {isLoading ? (
-        <Box display="flex" justifyContent="center" py={5}>
-          <CircularProgress />
-        </Box>
+        <TableSkeleton />
       ) : flagList.length === 0 ? (
         <Paper variant="outlined" sx={{ p: 6, textAlign: "center" }}>
           <Flag size={48} color="text.disabled" />

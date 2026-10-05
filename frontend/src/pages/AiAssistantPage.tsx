@@ -1,4 +1,4 @@
-import { formatDateTime } from "../lib/dates";
+﻿import { formatDateTime } from "../lib/dates";
 import { useState } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { aiApi, type ApiError } from "../api/resources";
@@ -31,6 +31,8 @@ import {
 } from "lucide-react";
 import { notify } from "../notify";
 import { useTranslation } from "react-i18next";
+import { apiErrorText } from "../lib/apiError";
+import PageHeader from "../components/ui/PageHeader";
 
 interface PriorityResult {
   task_id: number;
@@ -75,13 +77,13 @@ export default function AiAssistantPage() {
   });
 
   const blockers = blockersData?.blockers || [];
-  const suggestions = suggestionsData?.results || suggestionsData || [];
+  const suggestions = suggestionsData ?? [];
 
   const priorityMutation = useMutation({
     mutationFn: (id: number) => aiApi.estimatePriority(id),
     onSuccess: (data: PriorityResult) => setPriorityResult(data),
     onError: (err: ApiError) => {
-      notify.error(err?.response?.data?.detail || t("p.shell.ai.errorEstimatePriority"));
+      notify.error(apiErrorText(err, t, "p.shell.ai.errorEstimatePriority"));
     },
   });
 
@@ -89,7 +91,7 @@ export default function AiAssistantPage() {
     mutationFn: (id: number) => aiApi.estimateStoryPoints(id),
     onSuccess: (data: StoryPointsResult) => setStoryPointsResult(data),
     onError: (err: ApiError) => {
-      notify.error(err?.response?.data?.detail || t("p.shell.ai.errorEstimatePoints"));
+      notify.error(apiErrorText(err, t, "p.shell.ai.errorEstimatePoints"));
     },
   });
 
@@ -97,9 +99,7 @@ export default function AiAssistantPage() {
     mutationFn: (id: number) => aiApi.improveDescription(id),
     onSuccess: (data: DescriptionResult) => setDescriptionResult(data),
     onError: (err: ApiError) => {
-      notify.error(
-        err?.response?.data?.detail || t("p.shell.ai.errorImproveDescription"),
-      );
+      notify.error(apiErrorText(err, t, "p.shell.ai.errorImproveDescription"));
     },
   });
 
@@ -117,7 +117,7 @@ export default function AiAssistantPage() {
       qc.invalidateQueries({ queryKey: ["ai-suggestions"] });
     },
     onError: (err: ApiError) =>
-      notify.error(err?.response?.data?.error || t("p.shell.ai.errorProcessSuggestion")),
+      notify.error(apiErrorText(err, t, "p.shell.ai.errorProcessSuggestion")),
   });
 
   const handlePriority = () => {
@@ -152,10 +152,14 @@ export default function AiAssistantPage() {
 
   return (
     <Box>
-      <Typography variant="h5" gutterBottom>
-        <Lightbulb size={24} style={{ verticalAlign: "middle", marginRight: 8 }} />
-        {t("p.shell.aiAssistant")}
-      </Typography>
+      <PageHeader
+        title={
+          <>
+            <Lightbulb size={22} style={{ verticalAlign: "text-bottom", marginRight: 8 }} />
+            {t("p.shell.aiAssistant")}
+          </>
+        }
+      />
 
       {/* Task Analysis Section */}
       <Paper sx={{ p: 2, mb: 2 }}>
@@ -174,6 +178,7 @@ export default function AiAssistantPage() {
             size="small"
             type="number"
             sx={{ width: 150 }}
+            helperText={!taskId ? t("p.shell.ai.taskIdRequired") : undefined}
           />
           <Stack direction="row" spacing={1} flexWrap="wrap" useFlexGap>
             <Button
@@ -333,7 +338,9 @@ export default function AiAssistantPage() {
         {blockers.map((b: AiBlocker, i: number) => (
           <Box key={i} sx={{ mb: 1, display: "flex", gap: 1, alignItems: "center" }}>
             <Chip
-              label={b.severity}
+              label={t(`p.collab.risks.level.${b.severity}`, {
+                defaultValue: b.severity,
+              })}
               size="small"
               color={
                 b.severity === "high"
@@ -343,36 +350,16 @@ export default function AiAssistantPage() {
                     : "default"
               }
             />
-            <Typography variant="body2">{b.message}</Typography>
-          </Box>
-        ))}
-      </Paper>
-
-      {/* Recent Suggestions */}
-      <Paper sx={{ p: 2 }}>
-        <Typography variant="h6" gutterBottom>
-          <TrendingUp size={20} style={{ verticalAlign: "middle", marginRight: 8 }} />
-          {t("p.shell.ai.recentSuggestions")}
-        </Typography>
-        {suggestions.length === 0 && (
-          <Typography color="textSecondary">{t("p.shell.ai.noSuggestions")}</Typography>
-        )}
-        {suggestions.map((s: AiSuggestion) => (
-          <Box key={s.id} sx={{ mb: 1, pb: 1, borderBottom: "1px solid #eee" }}>
-            <Box sx={{ display: "flex", gap: 1, alignItems: "center" }}>
-              <Chip label={s.suggestion_type} size="small" color="primary" />
-              <Typography variant="caption">
-                {t("p.shell.ai.confidenceValue", {
-                  value: Math.round((s.confidence || 0) * 100),
-                })}
-              </Typography>
-            </Box>
+            <Typography variant="body2">
+              {b.task_title ? `${b.task_title} — ${b.detail}` : b.detail}
+            </Typography>
           </Box>
         ))}
       </Paper>
 
       {/* Previous Suggestions History */}
       <Typography variant="h6" sx={{ mt: 3, mb: 1 }}>
+        <TrendingUp size={20} style={{ verticalAlign: "middle", marginRight: 8 }} />
         {t("p.shell.ai.previousSuggestions")}
       </Typography>
       {suggestions.length === 0 && (
@@ -405,7 +392,13 @@ export default function AiAssistantPage() {
                   useFlexGap
                   sx={{ mb: 1, alignItems: "center", flexWrap: "wrap" }}
                 >
-                  <Chip label={s.suggestion_type} size="small" color="primary" />
+                  <Chip
+                    label={t(`p.shell.ai.sugType.${s.suggestion_type}`, {
+                      defaultValue: s.suggestion_type,
+                    })}
+                    size="small"
+                    color="primary"
+                  />
                   <Chip
                     label={t("p.shell.ai.confidenceValue", {
                       value: Math.round(confidence * 100),

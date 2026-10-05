@@ -39,6 +39,7 @@ class AutomationRule(models.Model):
         SET_DUE_OFFSET = "set_due_offset", "Fecha límite en N días"
         POST_COMMENT = "post_comment", "Publicar comentario"
         MOVE_TO_PROJECT = "move_to_project", "Mover a proyecto"
+        CALL_WEBHOOK = "call_webhook", "Llamar webhook (POST)"
 
     class ConditionOperator(models.TextChoices):
         EQUALS = "equals", "Igual a"

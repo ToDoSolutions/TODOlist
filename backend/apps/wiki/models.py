@@ -54,3 +54,46 @@ class WikiPage(models.Model):
         if self.pk:
             self.version = (self.version or 1) + 1
         super().save(*args, **kwargs)
+        # snapshot del estado nuevo (v1 incluida: es el origen de un
+        # restore)
+        WikiPageRevision.objects.create(
+            page=self,
+            version=self.version,
+            title=self.title,
+            content=self.content,
+            edited_by=self.updated_by,
+        )
+
+
+class WikiPageRevision(models.Model):
+    """Snapshot inmutable de una WikiPage tras cada save.
+
+    `version` coincide con el `version` de la página en ese momento —
+    sin esto el contador era cosmético (nada que restaurar ni difar).
+    """
+
+    page = models.ForeignKey(
+        WikiPage, on_delete=models.CASCADE, related_name="revisions"
+    )
+    version = models.IntegerField()
+    title = models.CharField(max_length=255)
+    content = models.TextField(blank=True, default="")
+    edited_by = models.ForeignKey(
+        settings.AUTH_USER_MODEL,
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="wiki_revisions",
+    )
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        ordering = ["-version"]
+        constraints = [
+            models.UniqueConstraint(
+                fields=["page", "version"], name="uniq_wiki_page_revision"
+            )
+        ]
+
+    def __str__(self) -> str:
+        return f"{self.page_id} v{self.version}"

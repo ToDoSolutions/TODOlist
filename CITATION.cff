@@ -1,0 +1,14 @@
+cff-version: 1.2.0
+message: "Si usas este software, cítalo así."
+type: software
+title: "TODOlist"
+abstract: "Gestión de trabajo autoalojable y open source: tareas,
+  proyectos, sprints, OKRs, wiki, automatizaciones con SLA,
+  cifrado extremo a extremo opcional y apps nativas. Django +
+  DRF + Channels + PostgreSQL en el backend; React + Vite + MUI
+  (PWA) en el frontend."
+authors:
+  - family-names: "alesanfe"
+    given-names: ""
+repository-code: "https://github.com/ToDoSolutions/TODOlist"
+license: AGPL-3.0-only

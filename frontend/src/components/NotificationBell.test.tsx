@@ -2,6 +2,7 @@ import { describe, it, expect, vi, beforeEach } from "vitest";
 import { render, screen, fireEvent, waitFor } from "@testing-library/react";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { ThemeProvider, createTheme } from "@mui/material";
+import { MemoryRouter } from "react-router-dom";
 import { createElement, type ReactNode } from "react";
 import NotificationBell from "./NotificationBell";
 
@@ -21,16 +22,18 @@ function wrapper({ children }: { children: ReactNode }) {
   return createElement(
     QueryClientProvider,
     { client: qc },
-    createElement(ThemeProvider, { theme: createTheme() }, children),
+    createElement(
+      ThemeProvider,
+      { theme: createTheme() },
+      createElement(MemoryRouter, null, children),
+    ),
   );
 }
 
 describe("NotificationBell", () => {
   beforeEach(() => {
     vi.clearAllMocks();
-    (notificationsApi.list as ReturnType<typeof vi.fn>).mockResolvedValue({
-      results: [],
-    });
+    (notificationsApi.list as ReturnType<typeof vi.fn>).mockResolvedValue([]);
   });
 
   it("muestra badge con el contador de no leídas", async () => {
@@ -53,18 +56,16 @@ describe("NotificationBell", () => {
     (notificationsApi.unreadCount as ReturnType<typeof vi.fn>).mockResolvedValue({
       count: 1,
     });
-    (notificationsApi.list as ReturnType<typeof vi.fn>).mockResolvedValue({
-      results: [
-        {
-          id: 1,
-          type: "task_assigned",
-          title: "Tarea asignada",
-          body: "Te asignaron X",
-          read: false,
-          created_at: new Date().toISOString(),
-        },
-      ],
-    });
+    (notificationsApi.list as ReturnType<typeof vi.fn>).mockResolvedValue([
+      {
+        id: 1,
+        type: "task_assigned",
+        title: "Tarea asignada",
+        body: "Te asignaron X",
+        read: false,
+        created_at: new Date().toISOString(),
+      },
+    ]);
     render(<NotificationBell />, { wrapper });
     // Abrir popover
     const bell = document.querySelector("button")!;
@@ -77,18 +78,16 @@ describe("NotificationBell", () => {
     (notificationsApi.unreadCount as ReturnType<typeof vi.fn>).mockResolvedValue({
       count: 2,
     });
-    (notificationsApi.list as ReturnType<typeof vi.fn>).mockResolvedValue({
-      results: [
-        {
-          id: 1,
-          type: "custom",
-          title: "N1",
-          body: "",
-          read: false,
-          created_at: new Date().toISOString(),
-        },
-      ],
-    });
+    (notificationsApi.list as ReturnType<typeof vi.fn>).mockResolvedValue([
+      {
+        id: 1,
+        type: "custom",
+        title: "N1",
+        body: "",
+        read: false,
+        created_at: new Date().toISOString(),
+      },
+    ]);
     (notificationsApi.markAllRead as ReturnType<typeof vi.fn>).mockResolvedValue({});
     render(<NotificationBell />, { wrapper });
     fireEvent.click(document.querySelector("button")!);

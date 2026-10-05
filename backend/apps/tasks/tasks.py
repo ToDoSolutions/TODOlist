@@ -90,6 +90,8 @@ def _generate_recurring_tasks():
                     )
                     continue
 
+                from .services import next_position_seq
+                pos, seq = next_position_seq(last_task.owner, last_task.project)
                 new_task = Task.objects.create(
                     owner=last_task.owner,
                     project=last_task.project,
@@ -99,9 +101,14 @@ def _generate_recurring_tasks():
                     priority=last_task.priority,
                     due_date=next_due,
                     recurrence=rule,
+                    position=pos,
+                    seq=seq,
                 )
                 if last_task.tags.exists():
                     new_task.tags.set(last_task.tags.all())
+                # Multi-homing: la ocurrencia hereda los hogares extra
+                # (misma regla que Task.generate_next_occurrence)
+                new_task.extra_projects.set(last_task.extra_projects.all())
 
                 rule.occurrences_generated += 1
                 rule.save(update_fields=["occurrences_generated"])
@@ -175,6 +182,14 @@ def send_due_reminders():
 
     sent = 0
     for task in due:
+        # Claim atómico ANTES de notificar: dos ejecuciones solapadas
+        # (worker duplicado, beat tras deploy) no pueden enviar el
+        # mismo recordatorio. update() evita bump de version y signals.
+        claimed = Task.objects.filter(
+            pk=task.pk, reminder_sent=False
+        ).update(reminder_sent=True)
+        if not claimed:
+            continue
         try:
             notify(
                 recipient=task.owner,
@@ -182,14 +197,20 @@ def send_due_reminders():
                 title=f"Recordatorio: {task.title}",
                 body=f"La tarea '{task.title}' tiene un recordatorio programado",
                 task=task,
-                action_url=f"/app/tasks?task={task.id}",
+                action_url=f"/app/tasks/{task.id}",
             )
-            # update() evita bump de version y signals post_save
-            Task.objects.filter(pk=task.pk).update(reminder_sent=True)
             sent += 1
         except Exception:
             logger.exception(
                 "Error enviando recordatorio de la tarea %s", task.id
             )
+            # Deshacer el claim para que el siguiente ciclo reintente —
+            # mejor un posible duplicado que un recordatorio perdido.
+            try:
+                Task.objects.filter(pk=task.pk).update(reminder_sent=False)
+            except Exception:
+                logger.exception(
+                    "No se pudo deshacer el claim de reminder %s", task.id
+                )
     logger.info("send_due_reminders: %s recordatorios enviados", sent)
     return {"reminders_sent": sent}

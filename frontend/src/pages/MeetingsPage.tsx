@@ -28,8 +28,8 @@ import {
   Copy,
 } from "lucide-react";
 import { useTranslation } from "react-i18next";
-import { format, parseISO, isFuture } from "date-fns";
-import { es } from "date-fns/locale";
+import { parseISO, isFuture } from "date-fns";
+import { formatDateTime } from "../lib/dates";
 import PageHeader from "../components/ui/PageHeader";
 import { EmptyState } from "../components/ui/states";
 import { meetingsApi, projectsApi, type MeetingItem } from "../api/resources";
@@ -161,7 +161,7 @@ export default function MeetingsPage() {
             {m.title}
           </Typography>
           <Typography variant="caption" color="text.secondary">
-            {format(parseISO(m.scheduled_at), "d MMM yyyy HH:mm", { locale: es })} ·{" "}
+            {formatDateTime(m.scheduled_at)} ·{" "}
             {m.duration_minutes} min
           </Typography>
         </Box>
@@ -231,6 +231,15 @@ export default function MeetingsPage() {
             <EmptyState
               title={t("p.collab.meetings.emptyTitle")}
               description={t("p.collab.meetings.emptyDesc")}
+              action={
+                <Button
+                  variant="outlined"
+                  startIcon={<Plus size={15} />}
+                  onClick={() => setDialog(true)}
+                >
+                  {t("p.collab.meetings.new")}
+                </Button>
+              }
             />
           ) : (
             <Stack spacing={1}>
@@ -336,7 +345,11 @@ export default function MeetingsPage() {
                   color="error"
                   aria-label={t("p.collab.meetings.deleteAria")}
                   onClick={async () => {
-                    if (await confirm(t("p.collab.meetings.confirmDelete")))
+                    if (
+                          await confirm(t("p.collab.meetings.confirmDelete"), {
+                            confirmLabel: t("common.delete"),
+                          })
+                        )
                       deleteMut.mutate(detail.id);
                   }}
                 >
@@ -344,9 +357,7 @@ export default function MeetingsPage() {
                 </IconButton>
               </Stack>
               <Typography variant="caption" color="text.secondary">
-                {format(parseISO(detail.scheduled_at), "d MMM yyyy HH:mm", {
-                  locale: es,
-                })}{" "}
+                {formatDateTime(detail.scheduled_at)}{" "}
                 ·{" "}
                 {detail.attendees_emails?.join(", ") ||
                   t("p.collab.meetings.noAttendees")}
@@ -458,6 +469,7 @@ export default function MeetingsPage() {
                       size="small"
                       fullWidth
                       placeholder={t("p.collab.meetings.newAction")}
+                      inputProps={{ "aria-label": t("p.collab.meetings.newAction") }}
                       value={actionItem}
                       onChange={(e) => setActionItem(e.target.value)}
                       onKeyDown={(e) => {

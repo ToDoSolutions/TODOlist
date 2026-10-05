@@ -28,8 +28,7 @@ import {
   ArrowRight,
 } from "lucide-react";
 import { useMediaQuery, useTheme, Select, FormControl } from "@mui/material";
-import { format } from "date-fns";
-import { es } from "date-fns/locale";
+import { formatShort } from "../lib/dates";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 import {
   DndContext,
@@ -164,7 +163,7 @@ function KanbanCard({ task, onEdit, onContextMenu }: KanbanCardProps) {
           <Chip
             size="small"
             icon={<Calendar size={11} />}
-            label={format(due, "dd MMM", { locale: es })}
+            label={formatShort(due)}
             sx={{
               height: 18,
               fontSize: 10,
@@ -499,6 +498,7 @@ export default function KanbanBoard({ tasks, onEdit, onQuickAdd, projectId }: Pr
         <TextField
           size="small"
           placeholder={t("p.board.searchBoard")}
+          inputProps={{ "aria-label": t("p.board.searchBoard") }}
           value={search}
           onChange={(e) => setSearch(e.target.value)}
           InputProps={{

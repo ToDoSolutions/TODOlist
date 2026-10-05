@@ -341,6 +341,9 @@ class TestOAuthFlow:
             "email": "ghuser@example.com",
             "avatar_url": "https://github.com/avatars/11111.png",
         }
+        # El email del perfil solo se usa como identidad si GitHub lo marca
+        # verificado — sin este mock la cuenta se crea con @github.local.
+        mock_oauth.get_verified_emails.return_value = {"ghuser@example.com"}
 
         resp = api_client.post(
             "/api/auth/github/callback/",

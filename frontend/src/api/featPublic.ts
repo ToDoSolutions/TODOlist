@@ -70,7 +70,7 @@ export interface SharedTaskItem {
   state: string;
   priority: number;
   due_date: string | null;
-  assignee_email: string | null;
+  assignee_name: string | null;
 }
 
 export interface PublicShareData {

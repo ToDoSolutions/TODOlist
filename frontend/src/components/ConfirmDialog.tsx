@@ -96,7 +96,8 @@ export function ConfirmProvider({ children }: { children: React.ReactNode }) {
             disabled={!canConfirm}
             onClick={() => close(true)}
           >
-            {opts.confirmLabel || t("common.confirm")}
+            {opts.confirmLabel ||
+              (opts.danger === false ? t("common.confirm") : t("common.delete"))}
           </Button>
         </DialogActions>
       </Dialog>

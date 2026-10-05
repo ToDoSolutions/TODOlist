@@ -32,12 +32,33 @@ class User(AbstractUser):
     # que los compañeros vean la disponibilidad.
     out_of_office = models.BooleanField(default=False)
     out_of_office_until = models.DateField(null=True, blank=True)
+    # SCIM 2.0 (provisión desde el IdP): id estable del recurso, id del
+    # cliente de provisión y userName reportado por SCIM. Se rellenan en
+    # save() a partir del pk para los usuarios preexistentes.
+    scim_id = models.CharField(max_length=254, null=True, blank=True, unique=True)
+    scim_external_id = models.CharField(max_length=254, null=True, blank=True, db_index=True)
+    scim_username = models.CharField(max_length=254, null=True, blank=True, db_index=True)
+
+    @property
+    def scim_groups(self):
+        """Organizaciones del usuario como SCIM Groups (vía membresía)."""
+        from apps.collaboration.models import Organization
+        return Organization.objects.filter(memberships__user=self)
 
     USERNAME_FIELD = "email"
     REQUIRED_FIELDS = ["username"]
 
     def __str__(self) -> str:
         return self.email
+
+    def save(self, *args, **kwargs):
+        super().save(*args, **kwargs)
+        # SCIM: el id del recurso es estable e igual al pk (string).
+        if not self.scim_id:
+            type(self).objects.filter(pk=self.pk).update(
+                scim_id=str(self.pk)
+            )
+            self.scim_id = str(self.pk)
 
 
 class APIKey(models.Model):
@@ -126,7 +147,9 @@ class TwoFactorSecret(models.Model):
         import secrets as _secrets
 
         from .security import hash_backup_code
-        codes = [_secrets.token_hex(5).upper() for _ in range(count)]
+        # 16 hex chars = 64 bits de entropía por código (antes: 10 = 40 bits,
+        # fuerza bruta offline factible con SHA-256 sin sal).
+        codes = [_secrets.token_hex(8).upper() for _ in range(count)]
         self.backup_codes = [hash_backup_code(c) for c in codes]
         self.save(update_fields=["backup_codes"])
         return codes
@@ -134,16 +157,16 @@ class TwoFactorSecret(models.Model):
     def use_backup_code(self, code):
         """Verifica y consume un código de backup. Retorna True si era válido.
 
-        Solo se aceptan hashes SHA-256 (la migración 0004 rehasa los
-        códigos legacy en claro).
+        Acepta hashes ``pbkdf2$...`` y los SHA-256 legacy sin sal (la
+        migración 0004 rehasó los códigos en claro originales).
         """
-        from .security import hash_backup_code
+        from .security import verify_backup_code
         normalized = (code or "").strip().upper()
-        hashed = hash_backup_code(normalized)
-        if hashed in self.backup_codes:
-            self.backup_codes.remove(hashed)
-            self.save(update_fields=["backup_codes"])
-            return True
+        for stored in self.backup_codes:
+            if verify_backup_code(normalized, stored):
+                self.backup_codes.remove(stored)
+                self.save(update_fields=["backup_codes"])
+                return True
         return False
 
     def verify_totp(self, code):

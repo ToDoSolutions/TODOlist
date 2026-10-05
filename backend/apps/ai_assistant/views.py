@@ -131,6 +131,14 @@ class SuggestionActionView(APIView):
             task = suggestion.task
             output = suggestion.output_data or {}
 
+            # La sugerencia se generó con scope de lectura; aplicarla exige
+            # permiso de escritura sobre la tarea.
+            if not Task.objects.for_user(request.user, write=True).filter(pk=task.pk).exists():
+                return Response(
+                    {"error": "No tienes permiso de escritura sobre esta tarea"},
+                    status=status.HTTP_403_FORBIDDEN,
+                )
+
             if suggestion.suggestion_type == AiSuggestion.SuggestionType.PRIORITY_ESTIMATE:
                 task.priority = output.get("suggested_priority", task.priority)
                 task.save(update_fields=["priority"])

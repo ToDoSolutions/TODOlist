@@ -19,7 +19,9 @@ class WikiPageSerializer(serializers.ModelSerializer):
         read_only_fields = ["id", "version", "created_at", "updated_at"]
 
     def get_children_count(self, obj):
-        return obj.children.count()
+        # Usa la anotación del queryset si existe (evita N+1 en list)
+        ann = getattr(obj, "children_count_ann", None)
+        return ann if ann is not None else obj.children.count()
 
     def validate_parent(self, value):
         """Evita ciclos triviales: la página no puede ser su propio padre."""

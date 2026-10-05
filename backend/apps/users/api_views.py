@@ -14,7 +14,7 @@ from rest_framework.decorators import (
 from rest_framework.permissions import AllowAny, IsAuthenticated
 from rest_framework.response import Response
 
-from .api_auth import InboundRateThrottle
+from .api_auth import InboundRateThrottle, SensitiveActionRateThrottle
 from .api_serializers import APIKeyCreateSerializer, APIKeySerializer
 from .models import APIKey
 
@@ -140,7 +140,9 @@ class UserMeView(viewsets.GenericViewSet):
             "username": u.username,
             "is_active": u.is_active,
             "date_joined": u.date_joined,
-            "inbound_email_token": u.inbound_email_token,
+            # El token es una credencial (crea tareas como el usuario):
+            # solo se muestra en el POST que lo rota, nunca en lecturas.
+            "has_inbound_email": bool(u.inbound_email_token),
             "weekly_capacity_hours": u.weekly_capacity_hours,
             "out_of_office": u.out_of_office,
             "out_of_office_until": (
@@ -165,7 +167,7 @@ class UserMeView(viewsets.GenericViewSet):
         serializer.save()
         return Response(serializer.data)
 
-    @action(detail=False, methods=["post"])
+    @action(detail=False, methods=["post"], throttle_classes=[SensitiveActionRateThrottle])
     def deactivate(self, request):
         """POST /api/users/me/deactivate/ — desactiva la propia cuenta.
         Requiere la contraseña actual para confirmar."""
@@ -182,7 +184,7 @@ class UserMeView(viewsets.GenericViewSet):
         user.save(update_fields=["is_active"])
         return Response({"message": "Cuenta desactivada"})
 
-    @action(detail=False, methods=["delete"])
+    @action(detail=False, methods=["delete"], throttle_classes=[SensitiveActionRateThrottle])
     def delete_account(self, request):
         """DELETE /api/users/me/delete_account/ — elimina la propia cuenta.
         Requiere confirmación: ?confirm=true y la contraseña actual."""
@@ -374,7 +376,9 @@ def inbound_email(request):
                 status=status.HTTP_403_FORBIDDEN,
             )
         from apps.tasks.models import Comment, Task
-        task = Task.objects.for_user(user).filter(
+        # Paridad con REST (POST comments exige escritura en la tarea):
+        # un viewer del proyecto no puede comentar ni vía email.
+        task = Task.objects.for_user(user, write=True).filter(
             pk=int(task_ref.group(1))
         ).first()
         if task is None:
@@ -394,11 +398,15 @@ def inbound_email(request):
     from apps.projects.models import Project
     from apps.tasks.models import Task
     project = Project.objects.filter(owner=user).first()
+    from apps.tasks.services import next_position_seq
+    pos, seq = next_position_seq(user, project)
     task = Task.objects.create(
         owner=user,
         project=project,
         title=(subject.strip() or "(sin asunto)")[:255],
         description=text,
+        position=pos,
+        seq=seq,
     )
     return Response(
         {"created": "task", "id": task.id},

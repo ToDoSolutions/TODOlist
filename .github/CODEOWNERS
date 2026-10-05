@@ -1,0 +1,16 @@
+# Propietarios por área — una persona puede cubrir varias.
+# Sustituir @owner por el mantenedor real al publicar.
+
+# Por defecto todo es del mantenedor
+*                                    @owner
+
+# Áreas críticas: revisión obligatoria de quien toque
+/backend/apps/users/                 @owner
+/backend/apps/encryption/            @owner
+/backend/apps/integrations/          @owner
+/backend/apps/offline_sync/          @owner
+/backend/apps/collaboration/         @owner
+/backend/config/settings.py          @owner
+/backend/apps/tasks/services.py      @owner   # frontera única de autorización (ADR-001/004)
+/.github/workflows/                  @owner
+/docker-compose.yml                  @owner

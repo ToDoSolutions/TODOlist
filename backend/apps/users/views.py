@@ -49,6 +49,27 @@ class TwoFactorTokenObtainPairSerializer(TokenObtainPairSerializer):
                 self.error_messages["no_active_account"], "no_active_account"
             )
 
+        # SSO enforcement por dominio: si la org reclamó el dominio del
+        # email con sso_required, la contraseña no vale aunque sea
+        # correcta — hay que entrar por el IdP (OIDC/SAML). Se chequea
+        # tras autenticar para no revelar la política sin credenciales.
+        domain = (user.email or "").split("@")[-1].lower()
+        if domain:
+            from apps.collaboration.models import Organization
+            if Organization.objects.filter(
+                sso_domain__iexact=domain, sso_required=True
+            ).exists():
+                from rest_framework import serializers
+                raise serializers.ValidationError(
+                    {
+                        "email": (
+                            "Tu organización exige inicio de sesión con "
+                            "SSO. Usa el botón del proveedor."
+                        ),
+                        "sso_required": True,
+                    }
+                )
+
         tf = getattr(user, "twofactor", None)
         if tf and tf.is_enabled:
             if is_2fa_locked(user):
@@ -178,11 +199,22 @@ def _revoke_all_tokens(user):
             BlacklistedToken,
             OutstandingToken,
         )
+    except ImportError:
+        # blacklist app no instalada — nada que revocar
+        logging.getLogger(__name__).debug("revoke tokens: blacklist no disponible")
+        return
+    try:
         for token in OutstandingToken.objects.filter(user=user):
             BlacklistedToken.objects.get_or_create(token=token)
-    except Exception:  # noqa: BLE001  # boundary intencional: fallo externo no rompe el flujo
-        # blacklist app no disponible
-        logging.getLogger(__name__).debug("revoke tokens: blacklist no disponible")
+    except Exception:  # noqa: BLE001  # boundary intencional: no romper el flujo
+        # Fallo real (BD, etc.): los refresh tokens antiguos siguen
+        # válidos — visible en warning, no debug, para que el
+        # operador pueda reaccionar.
+        logging.getLogger(__name__).warning(
+            "revoke tokens: fallo blacklisteando refresh tokens de user %s",
+            user.pk,
+            exc_info=True,
+        )
 
 
 @api_view(["POST"])

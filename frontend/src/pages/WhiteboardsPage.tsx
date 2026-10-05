@@ -1,6 +1,7 @@
-import { useEffect, useRef, useState } from "react";
+﻿import { useEffect, useRef, useState } from "react";
 import { useNavigate, useParams } from "react-router-dom";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
+import { CardGridSkeleton } from "../components/ui/skeletons";
 import {
   Box,
   Typography,
@@ -29,8 +30,7 @@ import {
   Presentation,
 } from "lucide-react";
 import { useTranslation } from "react-i18next";
-import { format, parseISO } from "date-fns";
-import { es, enUS } from "date-fns/locale";
+import { formatDateTime } from "../lib/dates";
 import PageHeader from "../components/ui/PageHeader";
 import { EmptyState, ErrorState } from "../components/ui/states";
 import { projectsApi } from "../api/resources";
@@ -69,8 +69,7 @@ export default function WhiteboardsPage() {
 /* ------------------------------- Lista ---------------------------------- */
 
 function WhiteboardList() {
-  const { t, i18n } = useTranslation();
-  const dateLocale = i18n.language === "en" ? enUS : es;
+  const { t } = useTranslation();
   const navigate = useNavigate();
   const qc = useQueryClient();
   const confirm = useConfirm();
@@ -118,7 +117,10 @@ function WhiteboardList() {
       <PageHeader
         title={t("p.extras.wb.title")}
         description={t("p.extras.wb.desc")}
-        breadcrumbs={[{ label: t("p.extras.wb.title") }]}
+        breadcrumbs={[
+          { label: t("nav.projects") },
+          { label: t("p.extras.wb.title") },
+        ]}
         actions={
           <Button
             variant="contained"
@@ -166,9 +168,7 @@ function WhiteboardList() {
                   </Typography>
                   <Typography variant="caption" color="text.secondary">
                     {t("p.extras.wb.updated", {
-                      date: format(parseISO(wb.updated_at), "d MMM yyyy HH:mm", {
-                        locale: dateLocale,
-                      }),
+                      date: formatDateTime(wb.updated_at),
                     })}
                   </Typography>
                 </Box>
@@ -179,7 +179,11 @@ function WhiteboardList() {
                   aria-label={t("p.extras.wb.deleteAria")}
                   onClick={async (e) => {
                     e.stopPropagation();
-                    if (await confirm(t("p.extras.wb.confirmDelete")))
+                    if (
+          await confirm(t("p.extras.wb.confirmDelete"), {
+            confirmLabel: t("common.delete"),
+          })
+        )
                       deleteMut.mutate(wb.id);
                   }}
                 >
@@ -434,9 +438,7 @@ function WhiteboardDetail({ id }: { id: number }) {
 
   if (isLoading)
     return (
-      <Box display="flex" justifyContent="center" py={8}>
-        <CircularProgress />
-      </Box>
+      <CardGridSkeleton />
     );
   if (isError || !wb)
     return (

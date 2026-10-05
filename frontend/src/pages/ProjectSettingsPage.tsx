@@ -28,8 +28,11 @@ import PageHeader from "../components/ui/PageHeader";
 import DangerZone from "../components/ui/DangerZone";
 import { EmptyState } from "../components/ui/states";
 import { projectsApi } from "../api/resources";
+import { stateLabelsApi } from "../api/featOrg";
 import { notify } from "../notify";
 import { useConfirm } from "../components/ConfirmDialog";
+import type { TaskState } from "../types";
+import { TASK_STATE_I18N_KEYS } from "../i18n/batchTaskUi";
 
 const SECTIONS = [
   {
@@ -81,6 +84,91 @@ const SECTIONS = [
     path: "/app/import-export",
   },
 ];
+
+/** Editor de etiquetas personalizadas de estado (columnas del kanban
+ * y chips de estado). upsert por (project, state); vacío = quitar el
+ * override si existía. */
+function StateLabelsSection({ projectId }: { projectId: number }) {
+  const { t } = useTranslation();
+  const qc = useQueryClient();
+  const states = Object.keys(TASK_STATE_I18N_KEYS) as TaskState[];
+
+  const { data: labels } = useQuery({
+    queryKey: ["state-labels", projectId],
+    queryFn: () => stateLabelsApi.list(projectId),
+  });
+  const byState = new Map((labels ?? []).map((l) => [l.state, l]));
+  // Borradores locales por estado (empiezan = etiqueta custom o vacío)
+  const [drafts, setDrafts] = useState<Record<string, string>>({});
+
+  const invalidate = () =>
+    qc.invalidateQueries({ queryKey: ["state-labels", projectId] });
+
+  const commit = useMutation({
+    mutationFn: async ({ state, label }: { state: TaskState; label: string }) => {
+      const existing = byState.get(state);
+      if (!label.trim()) {
+        if (existing) await stateLabelsApi.remove(existing.id);
+        return;
+      }
+      await stateLabelsApi.upsert({ project: projectId, state, label: label.trim() });
+    },
+    onSuccess: invalidate,
+    onError: () => notify.error(t("p.misc.projectSettings.saveError")),
+  });
+
+  return (
+    <Paper variant="outlined" sx={{ p: 2.5, mb: 3 }}>
+      <Typography variant="subtitle1" fontWeight={700} mb={1}>
+        {t("p.misc.projectSettings.stateLabels")}
+      </Typography>
+      <Typography variant="body2" color="text.secondary" mb={2}>
+        {t("p.misc.projectSettings.stateLabelsDesc")}
+      </Typography>
+      <Stack spacing={1}>
+        {states.map((s) => {
+          const custom = byState.get(s);
+          const draft = drafts[s] ?? custom?.label ?? "";
+          return (
+            <Stack key={s} direction="row" spacing={1.5} alignItems="center">
+              <Typography
+                variant="body2"
+                color="text.secondary"
+                sx={{ width: 110 }}
+              >
+                {t(TASK_STATE_I18N_KEYS[s])}
+              </Typography>
+              <TextField
+                size="small"
+                fullWidth
+                placeholder={t(TASK_STATE_I18N_KEYS[s])}
+                value={draft}
+                onChange={(e) => setDrafts({ ...drafts, [s]: e.target.value })}
+                onBlur={() => {
+                  if (draft !== (custom?.label ?? ""))
+                    commit.mutate({ state: s, label: draft });
+                }}
+                inputProps={{ maxLength: 50 }}
+              />
+              {custom && draft !== "" && (
+                <Button
+                  size="small"
+                  variant="text"
+                  onClick={() => {
+                    setDrafts({ ...drafts, [s]: "" });
+                    commit.mutate({ state: s, label: "" });
+                  }}
+                >
+                  {t("p.misc.projectSettings.resetLabel")}
+                </Button>
+              )}
+            </Stack>
+          );
+        })}
+      </Stack>
+    </Paper>
+  );
+}
 
 /**
  * Configuración contextual del proyecto: todo lo que afecta a ESTE proyecto,
@@ -169,6 +257,11 @@ export default function ProjectSettingsPage() {
           { label: t("p.misc.projectSettings.breadcrumb") },
         ]}
       />
+
+      {/* Nombres de columnas: las etiquetas custom se veían en kanban
+          (labelFor) pero no había editor — stateLabelsApi.upsert/remove
+          estaba huérfana. */}
+      <StateLabelsSection projectId={id} />
 
       {/* General: edición inline */}
       <Paper variant="outlined" sx={{ p: 2.5, mb: 3 }}>
@@ -295,6 +388,7 @@ export default function ProjectSettingsPage() {
                   t("p.misc.projectSettings.confirmDelete", {
                     name: project.name,
                   }),
+                  { confirmLabel: t("common.delete") },
                 )
               )
                 deleteMut.mutate();

@@ -408,6 +408,8 @@ class TestOAuthCallbackUserCreationKills:
             "id": 11111, "login": "newuser", "email": "new@test.com",
             "avatar_url": "http://avatar",
         }
+        # Email verificado → la cuenta se crea con el email real
+        mock_oauth.get_verified_emails.return_value = {"new@test.com"}
         resp = api_client.post(
             "/api/auth/github/callback/",
             {"code": "c", "state": "s"},

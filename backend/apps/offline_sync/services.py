@@ -14,19 +14,28 @@ def register_device(user, device_id, device_name=""):
     """Registra o actualiza un dispositivo.
 
     Un device_id ya registrado por OTRO usuario no puede reasignarse
-    (evita hijacking de dispositivos ajenos).
+    (evita hijacking de dispositivos ajenos). get_or_create + retry en
+    IntegrityError cubre la carrera entre el check y el create
+    (device_id es unique).
     """
-    existing = SyncDevice.objects.filter(device_id=device_id).first()
-    if existing and existing.user_id != user.id:
+    from django.db import IntegrityError
+
+    try:
+        existing, created = SyncDevice.objects.get_or_create(
+            device_id=device_id,
+            defaults={"user": user, "device_name": device_name},
+        )
+    except IntegrityError:
+        # Perdedor de la carrera: la fila ya existe, releerla.
+        existing = SyncDevice.objects.get(device_id=device_id)
+        created = False
+    if existing.user_id != user.id:
         raise PermissionDenied("device_id ya registrado por otro usuario")
-    if existing:
+    if not created:
         existing.device_name = device_name or existing.device_name
         existing.is_active = True
         existing.save(update_fields=["device_name", "is_active"])
-        return existing
-    return SyncDevice.objects.create(
-        user=user, device_id=device_id, device_name=device_name
-    )
+    return existing
 
 
 MAX_SYNC_OPERATIONS = 500
@@ -116,11 +125,69 @@ def _apply_single_operation(user, op_data):
         return {"entity_id": entity_id, "status": "rejected", "error": "Unknown entity type"}
 
 
+def _validate_task_changes(task, changes):
+    """Paridad con REST/GraphQL sobre el campo ``state``.
+
+    - ``validate_state``: el valor debe ser un Task.State conocido (el
+      whitelist de campos acepta cualquier string sin ella).
+    - ``assert_state_transition``: si el proyecto define workflow, la
+      arista origen→destino debe existir (antes un cliente offline
+      podía saltarse el workflow entero).
+
+    Devuelve mensaje de error para rechazar la op, o None.
+    """
+    if "state" not in changes:
+        return None
+    from apps.tasks.services import assert_state_transition, validate_state
+    try:
+        validate_state(changes["state"])
+        if task is not None:  # create: no hay estado origen que validar
+            assert_state_transition(task, changes["state"])
+    except ValueError as e:
+        return str(e)
+    return None
+
+
 def _apply_task_operation(user, sync_op, op_type, entity_id, payload, client_ts, base_version=None, base_fields=None):
     from apps.tasks.models import Task
 
     if op_type == "create":
-        task = Task.objects.create(owner=user, **_filter_task_fields(payload))
+        # El proyecto y los hogares extra exigen write-access validado
+        extra_ids = _validated_extra_projects(user, payload)
+        if extra_ids is None:
+            sync_op.status = SyncOperation.Status.REJECTED
+            sync_op.save()
+            return {"entity_id": entity_id, "status": "rejected",
+                    "error": "extra_projects not editable"}
+        fields = _filter_task_fields(payload)
+        error = _validate_task_changes(None, fields)
+        if error:
+            sync_op.status = SyncOperation.Status.REJECTED
+            sync_op.save()
+            return {"entity_id": entity_id, "status": "rejected",
+                    "error": error}
+        project_id = payload.get("project") or payload.get("project_id")
+        if project_id is not None:
+            from apps.projects.models import accessible_projects
+            if not accessible_projects(user, write=True).filter(
+                pk=project_id
+            ).exists():
+                return {"entity_id": entity_id, "status": "rejected",
+                        "error": "project not editable"}
+            fields["project_id"] = project_id
+        # Paridad de canales: position/seq asignados en servidor (el
+        # whitelist de campos no los admite desde el cliente).
+        from apps.tasks.services import next_position_seq
+        project = None
+        if fields.get("project_id"):
+            from apps.projects.models import Project
+            project = Project.objects.filter(pk=fields["project_id"]).first()
+        pos, seq = next_position_seq(user, project)
+        fields.setdefault("position", pos)
+        fields.setdefault("seq", seq)
+        task = Task.objects.create(owner=user, **fields)
+        if extra_ids:
+            task.extra_projects.set(extra_ids)
         sync_op.server_entity_id = task.id
         sync_op.status = SyncOperation.Status.APPLIED
         sync_op.applied_at = timezone.now()
@@ -136,7 +203,13 @@ def _apply_task_operation(user, sync_op, op_type, entity_id, payload, client_ts,
             return {"entity_id": entity_id, "status": "rejected", "error": "base_version required"}
         try:
             with transaction.atomic():
-                task = Task.objects.select_for_update().get(id=server_id, owner=user)
+                # Paridad con REST/GraphQL: basta write-access, no
+                # ownership (proyectos compartidos, multi-homing)
+                task = Task.objects.for_user(user, write=True).filter(
+                    pk=server_id
+                ).select_for_update().first()
+                if task is None:
+                    raise Task.DoesNotExist
 
                 # Conflict detection by version: si base_version < current_version
                 # hay conflicto (el recurso fue modificado en el servidor después
@@ -147,6 +220,12 @@ def _apply_task_operation(user, sync_op, op_type, entity_id, payload, client_ts,
                     # el servidor cambió Y el cliente también modifica.
                     if base_fields:
                         changes = _filter_task_fields(payload)
+                        error = _validate_task_changes(task, changes)
+                        if error:
+                            sync_op.status = SyncOperation.Status.REJECTED
+                            sync_op.save()
+                            return {"entity_id": entity_id,
+                                    "status": "rejected", "error": error}
                         conflicts = _field_conflicts(task, base_fields, changes)
                         if not conflicts:
                             # El servidor tocó otros campos: merge seguro
@@ -196,8 +275,41 @@ def _apply_task_operation(user, sync_op, op_type, entity_id, payload, client_ts,
 
                 # Sin conflicto por versión: aplicar el cambio e incrementar versión
                 from apps.tasks.services import apply_completion_effects
-                for k, v in _filter_task_fields(payload).items():
+                changes = _filter_task_fields(payload)
+                error = _validate_task_changes(task, changes)
+                if error:
+                    sync_op.status = SyncOperation.Status.REJECTED
+                    sync_op.save()
+                    return {"entity_id": entity_id, "status": "rejected",
+                            "error": error}
+                for k, v in changes.items():
                     setattr(task, k, v)
+                # Hogares extra y proyecto canónico (M2M/FK no cubiertos
+                # por el merge por campo)
+                if "extra_projects" in payload:
+                    extra = _validated_extra_projects(
+                        user, payload,
+                        canonical=payload.get("project")
+                        or payload.get("project_id")
+                        or task.project_id,
+                    )
+                    if extra is None:
+                        sync_op.status = SyncOperation.Status.REJECTED
+                        sync_op.save()
+                        return {"entity_id": entity_id, "status": "rejected",
+                                "error": "extra_projects not editable"}
+                    task.extra_projects.set(extra)
+                if "project" in payload or "project_id" in payload:
+                    from apps.projects.models import accessible_projects
+                    new_pid = payload.get("project") or payload.get("project_id")
+                    if new_pid is not None and not accessible_projects(
+                        user, write=True
+                    ).filter(pk=new_pid).exists():
+                        sync_op.status = SyncOperation.Status.REJECTED
+                        sync_op.save()
+                        return {"entity_id": entity_id, "status": "rejected",
+                                "error": "project not editable"}
+                    task.project_id = new_pid
                 # Efectos de completado (completed_at/recurrencia) antes del
                 # save para no hacer un segundo bump de versión.
                 apply_completion_effects(task, save=False)
@@ -220,7 +332,11 @@ def _apply_task_operation(user, sync_op, op_type, entity_id, payload, client_ts,
             return {"entity_id": entity_id, "status": "rejected", "error": "base_version required"}
         try:
             with transaction.atomic():
-                task = Task.objects.select_for_update().get(id=server_id, owner=user)
+                task = Task.objects.for_user(user, write=True).filter(
+                    pk=server_id
+                ).select_for_update().first()
+                if task is None:
+                    raise Task.DoesNotExist
 
                 # Conflict detection by version para delete
                 if task.version is not None and base_version < task.version:
@@ -293,6 +409,32 @@ def _apply_project_operation(user, sync_op, op_type, entity_id, payload, client_
             return {"entity_id": entity_id, "status": "rejected"}
 
 
+def _validated_extra_projects(user, payload, canonical=None):
+    """IDs válidos para `extra_projects`: write-access sobre cada uno y
+    distintos del proyecto canónico (del payload o el ya persistido).
+
+    None si `extra_projects` está presente pero algún id no es editable
+    ni válido — el caller rechaza la operación. [] si la clave no viene.
+    """
+    ids = payload.get("extra_projects")
+    if ids is None:
+        return []
+    if not isinstance(ids, list):
+        return None
+    canonical = (
+        canonical
+        if canonical is not None
+        else (payload.get("project") or payload.get("project_id"))
+    )
+    from apps.projects.models import accessible_projects
+    allowed = set(
+        accessible_projects(user, write=True).values_list("pk", flat=True)
+    )
+    if any(i not in allowed or i == canonical for i in ids):
+        return None
+    return ids
+
+
 def _filter_task_fields(payload):
     allowed = {"title", "description", "state", "priority", "due_date", "start_date", "story_points"}
     return {k: v for k, v in payload.items() if k in allowed}
@@ -333,19 +475,58 @@ def _task_to_dict(task):
         "description": task.description,
         "state": task.state,
         "priority": task.priority,
+        "project": task.project_id,
+        "extra_projects": [
+            ep.pk if hasattr(ep, "pk") else ep
+            for ep in task.extra_projects.all()
+        ],
         "due_date": task.due_date.isoformat() if task.due_date else None,
         "updated_at": task.updated_at.isoformat() if task.updated_at else None,
         "version": task.version,
     }
 
 
+MAX_PULL_TASKS = 2000
+MAX_PULL_PROJECTS = 500
+MAX_PULL_TOMBSTONES = 2000
+
+
 def get_changes_since(user, last_sync):
-    """Retorna cambios en el servidor desde el último sync."""
-    from apps.projects.models import Project
+    """Retorna cambios en el servidor desde el último sync.
+
+    Incluye ``deleted_task_ids`` (tombstones a partir de los eventos
+    ``task.deleted`` del outbox — sin ellos las tareas borradas
+    desaparecían del pull y el cliente conservaba copias zombies) y
+    ``truncated`` cuando el pull llega al cap de tareas (el cliente
+    debe pedir una ventana más estrecha o rehidratarse).
+    """
+    from apps.events.models import OutboxEvent
+    from apps.projects.models import accessible_projects
     from apps.tasks.models import Task
 
-    tasks = Task.objects.for_user(user).filter(updated_at__gt=last_sync)
-    projects = Project.objects.filter(owner=user, updated_at__gt=last_sync)
+    # Un "since" ISO sin offset llega naive — compararlo con campos
+    # aware lanzaba error o silencio según el backend de BD.
+    if timezone.is_naive(last_sync):
+        last_sync = timezone.make_aware(last_sync)
+
+    tasks = list(
+        Task.objects.for_user(user)
+        .filter(updated_at__gt=last_sync)
+        .prefetch_related("extra_projects")
+        .order_by("updated_at", "id")[:MAX_PULL_TASKS]
+    )
+    # Proyectos accesibles (miembros incluidos), no solo propios — un
+    # proyecto compartido editado por otro miembro nunca llegaba al pull.
+    projects = accessible_projects(user).filter(
+        updated_at__gt=last_sync
+    ).order_by("updated_at", "id")[:MAX_PULL_PROJECTS]
+    tombstones = list(
+        OutboxEvent.objects.filter(
+            event_type="task.deleted",
+            created_at__gt=last_sync,
+            payload__owner_id=user.id,
+        ).values_list("payload__task__id", flat=True)[:MAX_PULL_TOMBSTONES]
+    )
 
     return {
         "tasks": [_task_to_dict(t) for t in tasks],
@@ -360,4 +541,6 @@ def get_changes_since(user, last_sync):
             }
             for p in projects
         ],
+        "deleted_task_ids": [tid for tid in tombstones if tid is not None],
+        "truncated": len(tasks) == MAX_PULL_TASKS,
     }

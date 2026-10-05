@@ -1,3 +1,4 @@
+import contextlib
 import secrets
 
 from django.utils.dateparse import parse_datetime
@@ -38,9 +39,12 @@ class IntakeFormViewSet(viewsets.ModelViewSet):
         )
         if write:
             return IntakeForm.objects.filter(owner=self.request.user)
+        from django.db.models import Count
         return IntakeForm.objects.filter(
             project__in=accessible_projects(self.request.user)
-        ).select_related("project", "owner")
+        ).select_related("project", "owner").annotate(
+            submissions_count_ann=Count("submissions", distinct=True)
+        )
 
     def perform_create(self, serializer):
         # El proyecto destino del formulario debe ser editable
@@ -57,12 +61,24 @@ class IntakeFormViewSet(viewsets.ModelViewSet):
 
     @action(detail=True, methods=["post"])
     def submit(self, request, pk=None):
-        """Envía una submission: valida schema y crea la tarea."""
+        """Envía una submission: valida schema y crea la tarea.
+
+        Requiere permiso de escritura sobre el proyecto destino — el canal
+        para no-miembros es el submit público por token.
+        """
         form = self.get_object()
         if not form.enabled:
             return Response(
                 {"error": "El formulario está deshabilitado"},
                 status=status.HTTP_400_BAD_REQUEST,
+            )
+        from apps.projects.models import accessible_projects
+        if form.project_id and not accessible_projects(
+            request.user, write=True
+        ).filter(pk=form.project_id).exists():
+            return Response(
+                {"error": "Necesitas permiso de escritura en el proyecto"},
+                status=status.HTTP_403_FORBIDDEN,
             )
         data = request.data.get("data", {})
         errors = validate_form_data(form, data)
@@ -70,10 +86,12 @@ class IntakeFormViewSet(viewsets.ModelViewSet):
             return Response({"errors": errors},
                             status=status.HTTP_400_BAD_REQUEST)
 
-        task = create_task_from_form(form, data, request.user)
-        submission = IntakeSubmission.objects.create(
-            form=form, submitted_by=request.user, data=data, task=task,
-        )
+        from django.db import transaction
+        with transaction.atomic():
+            task = create_task_from_form(form, data, request.user)
+            submission = IntakeSubmission.objects.create(
+                form=form, submitted_by=request.user, data=data, task=task,
+            )
         return Response({
             "submission_id": submission.id,
             "task_id": task.id,
@@ -137,14 +155,14 @@ def create_task_from_form(form, data, user):
         if value is None or value == "":
             continue
         if name == "title":
-            task_kwargs["title"] = str(value)
+            task_kwargs["title"] = str(value)[:255]
         elif name == "description":
             task_kwargs["description"] = str(value)
         elif name == "priority":
-            try:
-                task_kwargs["priority"] = int(value)
-            except (TypeError, ValueError):
-                pass
+            with contextlib.suppress(TypeError, ValueError):
+                p = int(value)
+                if p in [c[0] for c in Task.Priority.choices]:
+                    task_kwargs["priority"] = p
         elif name == "due_date":
             dt = parse_datetime(str(value))
             if dt:
@@ -178,7 +196,22 @@ def create_task_from_form(form, data, user):
     if defaults.get("task_type"):
         task_kwargs.setdefault("task_type", defaults["task_type"])
 
+    # Paridad con TaskViewSet.perform_create: position al final de la
+    # lista del usuario y seq por proyecto canónico (ref "MP-12").
+    from apps.tasks.services import next_position_seq
+
+    pos, seq = next_position_seq(user, form.project)
+    task_kwargs.setdefault("position", pos)
+    task_kwargs.setdefault("seq", seq)
+
     task = Task.objects.create(**task_kwargs)
+    # Multi-homing desde task_defaults: solo proyectos con permiso de
+    # escritura para el owner del formulario (y nunca el canónico).
+    extra_ids = defaults.get("extra_projects") or []
+    if extra_ids:
+        from apps.projects.models import accessible_projects
+        allowed = accessible_projects(user, write=True).exclude(pk=task.project_id)
+        task.extra_projects.set(allowed.filter(pk__in=extra_ids))
     for tag_name in defaults.get("tags", []):
         from apps.tags.models import Tag
         tag, _ = Tag.objects.get_or_create(owner=user, name=tag_name)
@@ -298,8 +331,10 @@ def public_intake_submit(request, token):
             {"errors": errors}, status=status.HTTP_400_BAD_REQUEST
         )
 
-    task = create_task_from_form(form, data, form.owner)
-    IntakeSubmission.objects.create(
-        form=form, submitted_by=form.owner, data=data, task=task,
-    )
+    from django.db import transaction
+    with transaction.atomic():
+        task = create_task_from_form(form, data, form.owner)
+        IntakeSubmission.objects.create(
+            form=form, submitted_by=form.owner, data=data, task=task,
+        )
     return Response({"id": task.id}, status=status.HTTP_201_CREATED)
