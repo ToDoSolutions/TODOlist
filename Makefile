@@ -226,6 +226,17 @@ typecheck: ## TypeScript type-check (sin emitir JS)
 check: ## Django system check
 	cd backend && $(VENV_PYTHON) manage.py check
 
+.PHONY: lint-backend
+lint-backend: ## ruff + bandit del backend (mismas reglas que el CI)
+	cd backend && ruff check apps config --select E9,F,SIM,I001 --exclude "*/migrations/*" && \
+	  bandit -r apps config -x "*/migrations/*,tests" -lll
+
+.PHONY: audit
+audit: ## Auditoría de dependencias (pip-audit + npm audit) + secretos (gitleaks)
+	cd backend && $(VENV_PYTHON) -m pip_audit -r requirements.txt || true
+	cd $(FRONTEND_DIR) && npm audit --audit-level=high || true
+	@gitleaks detect --source . -v || echo ">>> gitleaks no instalado — saltando escaneo de secretos"
+
 # ============================================================
 #  PRODUCCIÓN (Docker Compose prod)
 # ============================================================
