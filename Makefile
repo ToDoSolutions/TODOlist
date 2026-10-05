@@ -139,6 +139,10 @@ makemigrations-dry: ## Muestra qué migraciones se generarían (sin aplicar)
 seed: ## Carga datos de ejemplo (seed_dev)
 	cd backend && $(VENV_PYTHON) manage.py seed_dev
 
+.PHONY: seed-demo
+seed-demo: ## Carga datos demo realistas — uso: make seed-demo ARGS=--clean
+	cd backend && $(VENV_PYTHON) manage.py seed_demo $(ARGS)
+
 .PHONY: shell
 shell: ## Abre Django shell
 	cd backend && $(VENV_PYTHON) manage.py shell
@@ -217,6 +221,18 @@ lint: lint-frontend typecheck ## Lint + typecheck del frontend
 .PHONY: lint-frontend
 lint-frontend: ## ESLint del frontend
 	cd $(FRONTEND_DIR) && npx eslint . --ext ts,tsx
+
+.PHONY: format
+format: ## Prettier sobre el frontend (reescribe)
+	cd $(FRONTEND_DIR) && npm run format
+
+.PHONY: format-check
+format-check: ## Prettier check del frontend (solo verifica)
+	cd $(FRONTEND_DIR) && npm run format:check
+
+.PHONY: test-coverage-frontend
+test-coverage-frontend: ## Vitest con cobertura
+	cd $(FRONTEND_DIR) && npm run test:coverage
 
 .PHONY: typecheck
 typecheck: ## TypeScript type-check (sin emitir JS)
