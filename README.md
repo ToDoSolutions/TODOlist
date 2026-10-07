@@ -288,7 +288,7 @@ Datos de demo (opt-in): `SEED_DEV=1 docker compose up --build`.
 - **Seguridad** — 2FA TOTP + backup codes, SSO SAML/SCIM por
   organización, audit log exportable, rate limiting por scope.
 
-El detalle por feature y su nivel de madurez: [docs/maturity.md](./docs/maturity.md).
+El detalle por feature y su nivel de madurez: [docs/MATURITY.md](./docs/MATURITY.md).
 
 ## Arquitectura
 

@@ -146,6 +146,11 @@ jobs:
 
     steps:
       - uses: actions/checkout@v4
+        with:
+          # gitleaks git necesita la historia completa: con el checkout
+          # superficial (1 commit) todos los hallazgos se atribuyen al
+          # HEAD y las fingerprints de .gitleaksignore no casan.
+          fetch-depth: 0
 
       - name: pip-audit (vulnerabilidades Python)
         run: |
