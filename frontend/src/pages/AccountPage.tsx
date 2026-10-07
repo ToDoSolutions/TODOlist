@@ -1,7 +1,7 @@
 import { useNavigate } from "react-router-dom";
 import {
   Box,
-  Grid,
+  GridLegacy as Grid,
   Paper,
   Typography,
   Stack,

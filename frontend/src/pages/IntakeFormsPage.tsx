@@ -17,7 +17,7 @@ import {
   Switch,
   FormControlLabel,
   Divider,
-  Grid,
+  GridLegacy as Grid,
   Checkbox,
 } from "@mui/material";
 import {

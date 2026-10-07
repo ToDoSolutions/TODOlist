@@ -13,7 +13,7 @@ import {
   Chip,
   IconButton,
   Tooltip,
-  Grid,
+  GridLegacy as Grid,
   MenuItem,
   CircularProgress,
   Checkbox,

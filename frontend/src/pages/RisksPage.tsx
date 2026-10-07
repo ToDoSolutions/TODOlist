@@ -20,7 +20,7 @@ import {
   TableRow,
   TableCell,
   TableBody,
-  Grid,
+  GridLegacy as Grid,
 } from "@mui/material";
 import { Plus, Trash2 } from "lucide-react";
 import { useTranslation } from "react-i18next";

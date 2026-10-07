@@ -19,7 +19,7 @@ import {
   Alert,
   Chip,
   Divider,
-  Grid,
+  GridLegacy as Grid,
   LinearProgress,
 } from "@mui/material";
 import { Upload, Download, FileText, Copy, Link2, Trash2 } from "lucide-react";

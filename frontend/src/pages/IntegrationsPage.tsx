@@ -32,7 +32,7 @@ import {
   TableRow,
   Stack,
   useTheme,
-  Grid,
+  GridLegacy as Grid,
   Card,
   CardContent,
   CardActions,

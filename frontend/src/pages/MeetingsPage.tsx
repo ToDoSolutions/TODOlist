@@ -15,7 +15,7 @@ import {
   DialogActions,
   IconButton,
   Divider,
-  Grid,
+  GridLegacy as Grid,
 } from "@mui/material";
 import {
   Plus,
