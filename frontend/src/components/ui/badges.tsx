@@ -1,4 +1,5 @@
 import { Chip, ChipProps, Avatar, AvatarProps, Tooltip } from "@mui/material";
+import type { JSX } from "react";
 import {
   AlertCircle,
   Archive,
