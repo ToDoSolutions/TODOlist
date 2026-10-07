@@ -14,7 +14,7 @@ import {
   DialogContent,
   DialogActions,
   MenuItem,
-  Grid,
+  GridLegacy as Grid,
   Switch,
   FormControlLabel,
   Tooltip,

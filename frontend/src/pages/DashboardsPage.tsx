@@ -18,7 +18,7 @@ import {
   TextField,
   MenuItem,
   Alert,
-  Grid,
+  GridLegacy as Grid,
   Divider,
   Tooltip,
   List,

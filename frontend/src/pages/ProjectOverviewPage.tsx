@@ -4,7 +4,7 @@ import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import {
   Box,
   Typography,
-  Grid,
+  GridLegacy as Grid,
   Stack,
   Paper,
   Chip,

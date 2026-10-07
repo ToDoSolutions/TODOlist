@@ -1,6 +1,6 @@
 import { useNavigate } from "react-router-dom";
 import { useTranslation } from "react-i18next";
-import { Box, Grid, Paper, Typography, Stack, Chip } from "@mui/material";
+import { Box, GridLegacy as Grid, Paper, Typography, Stack, Chip } from "@mui/material";
 import {
   Users,
   Shield,

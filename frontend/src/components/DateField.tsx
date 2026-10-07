@@ -25,7 +25,7 @@ export function DateField({ label, value, onChange, required }: DateFieldProps) 
           size: "small",
           fullWidth: true,
           required,
-          InputLabelProps: { shrink: true },
+          slotProps: { inputLabel: { shrink: true } },
         },
       }}
     />

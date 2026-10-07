@@ -4,7 +4,7 @@ import { useTranslation } from "react-i18next";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import {
   Box,
-  Grid,
+  GridLegacy as Grid,
   Paper,
   Typography,
   Stack,
