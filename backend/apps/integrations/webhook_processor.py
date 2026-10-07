@@ -210,7 +210,7 @@ def _handle_installation_event(action, payload):
 def _handle_pr_event(action, payload):
     """Maneja eventos de pull requests: crea/actualiza el PR en la BD."""
 
-    from .models import GitHubPullRequest, GitHubRepo
+    from .models import GitHubPullRequest
 
     pr_data = payload.get("pull_request", {})
     repo_info = payload.get("repository", {})
@@ -266,7 +266,7 @@ def _handle_pr_event(action, payload):
 
 def _handle_release_event(action, payload):
     """Maneja eventos de releases: crea/actualiza el release en la BD."""
-    from .models import GitHubRelease, GitHubRepo
+    from .models import GitHubRelease
 
     release_data = payload.get("release", {})
     repo_info = payload.get("repository", {})
@@ -303,7 +303,7 @@ def _handle_release_event(action, payload):
 
 def _handle_check_run_event(action, payload):
     """Maneja eventos de check_run (CI/CD)."""
-    from .models import GitHubCheckRun, GitHubPullRequest, GitHubRepo
+    from .models import GitHubCheckRun, GitHubPullRequest
 
     check_data = payload.get("check_run", {})
     repo_info = payload.get("repository", {})

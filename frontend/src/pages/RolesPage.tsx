@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useState } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { useTranslation } from "react-i18next";
 import {
@@ -168,14 +168,17 @@ export default function RolesPage() {
   });
   const projects = Array.isArray(projectsData) ? projectsData : [];
 
-  // Preselecciona el primer proyecto — evita la pantalla vacía de
-  // "Selecciona un proyecto" que obliga a un clic extra siempre.
-  useEffect(() => {
-    if (selectedProject === "" && projects.length > 0) {
-      const first = projects[0] as { id?: number };
-      if (first?.id != null) setSelectedProject(first.id);
-    }
-  }, [projects, selectedProject]);
+  // Preselecciona el primer proyecto cuando la lista carga — evita la
+  // pantalla vacía de "Selecciona un proyecto" que obliga a un clic
+  // extra siempre. Ajuste de estado en render (patrón recomendado):
+  // solo corre cuando cambia el primer proyecto, así que el usuario
+  // sí puede volver a "" después.
+  const firstProjectId = (projects[0] as { id?: number } | undefined)?.id ?? null;
+  const [autoSelectedFor, setAutoSelectedFor] = useState<number | null>(firstProjectId);
+  if (firstProjectId !== autoSelectedFor) {
+    setAutoSelectedFor(firstProjectId);
+    if (selectedProject === "" && firstProjectId != null) setSelectedProject(firstProjectId);
+  }
 
   const { data: membersData, isLoading: membersLoading } = useQuery({
     queryKey: ["project-members", selectedProject],

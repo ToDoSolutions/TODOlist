@@ -86,17 +86,26 @@ jobs:
         with:
           python-version: "3.11"
           cache: pip
-          cache-dependency-path: backend/requirements.txt
+          cache-dependency-path: |
+            backend/requirements.txt
+            backend/requirements-test.txt
 
       - name: Install dependencies
         run: |
           python -m pip install --upgrade pip
-          pip install -r requirements.txt
+          pip install -r requirements.txt -r requirements-test.txt
 
       - name: Run migrations
+        # config.settings + Postgres real: valida migraciones sobre PG
         run: python manage.py migrate --noinput
 
       - name: Run tests
+        # La suite está diseñada para config.settings_test (su propio
+        # default en pytest.ini): SQLite en memoria, sin paginación ni
+        # Redis. Correrla con config.settings rompe los tests de listas
+        # (envelope paginado) y schemathesis (conexión PG cerrada).
+        env:
+          DJANGO_SETTINGS_MODULE: config.settings_test
         run: python -m pytest tests/ -v --tb=short
 
   frontend-tests:
@@ -112,7 +121,7 @@ jobs:
       - name: Set up Node
         uses: actions/setup-node@v4
         with:
-          node-version: "20"
+          node-version: "24"
           cache: npm
           cache-dependency-path: frontend/package-lock.json
 
@@ -148,10 +157,14 @@ jobs:
         working-directory: frontend
         run: npm audit --audit-level=high
 
+      # Binario OSS fijado — gitleaks-action@v2 exige licencia de pago.
       - name: gitleaks (secretos en el repo)
-        uses: gitleaks/gitleaks-action@v2
-        env:
-          GITLEAKS_ENABLE_SUMMARY: "true"
+        run: |
+          curl -sSfL -o gitleaks.tar.gz \
+            https://github.com/gitleaks/gitleaks/releases/download/v8.30.1/gitleaks_8.30.1_linux_x64.tar.gz
+          tar -xzf gitleaks.tar.gz gitleaks
+          chmod +x gitleaks
+          ./gitleaks git --verbose --redact .
 
   docs-check:
     name: Docs (markdownlint + enlaces)

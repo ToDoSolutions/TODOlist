@@ -19,9 +19,7 @@ labels: bug
 
 ## Resultado actual
 
-
 ## Resultado esperado
-
 
 ## Evidencia
 

@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useState } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import {
   Box,
@@ -74,14 +74,17 @@ export default function RisksPage() {
   });
   const projects = Array.isArray(projectsData) ? projectsData : [];
 
-  // Preselecciona el primer proyecto — evita la vista sin proyecto
-  // elegido (botón "Registrar riesgo" deshabilitado, tabla vacía).
-  useEffect(() => {
-    if (projectId === "" && projects.length > 0) {
-      const first = projects[0] as { id?: number };
-      if (first?.id != null) setProjectId(first.id);
-    }
-  }, [projects, projectId]);
+  // Preselecciona el primer proyecto cuando la lista carga — evita la
+  // vista sin proyecto elegido (botón "Registrar riesgo" deshabilitado,
+  // tabla vacía). Ajuste de estado en render (patrón recomendado): solo
+  // corre cuando cambia el primer proyecto, así que "Todos" sí se puede
+  // volver a elegir después.
+  const firstProjectId = (projects[0] as { id?: number } | undefined)?.id ?? null;
+  const [autoSelectedFor, setAutoSelectedFor] = useState<number | null>(firstProjectId);
+  if (firstProjectId !== autoSelectedFor) {
+    setAutoSelectedFor(firstProjectId);
+    if (projectId === "" && firstProjectId != null) setProjectId(firstProjectId);
+  }
 
   const { data: risksData } = useQuery({
     queryKey: ["project-risks", projectId],

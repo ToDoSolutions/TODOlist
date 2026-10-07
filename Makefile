@@ -8,7 +8,8 @@ PYTHON        := python
 PIP           := pip
 MANAGE        := cd backend && $(PYTHON) manage.py
 VENV          := backend/.venv
-VENV_PYTHON   := $(VENV)/Scripts/python.exe
+# VENV_PYTHON se usa siempre tras `cd backend` → ruta relativa a backend/
+VENV_PYTHON   := .venv/Scripts/python.exe
 VENV_PIP      := $(VENV)/Scripts/pip.exe
 FRONTEND_DIR  := frontend
 DOCKER_COMPOSE := docker compose
@@ -50,7 +51,7 @@ setup-backend: ## Crea venv e instala dependencias del backend
 	@echo ">>> Configurando backend..."
 	$(PYTHON) -m venv $(VENV)
 	$(VENV_PIP) install --upgrade pip
-	$(VENV_PIP) install -r backend/requirements.txt
+	$(VENV_PIP) install -r backend/requirements.txt -r backend/requirements-test.txt
 	@echo ">>> Backend listo."
 
 .PHONY: setup-frontend
@@ -61,7 +62,7 @@ setup-frontend: ## Instala dependencias del frontend
 
 .PHONY: env
 env: ## Copia .env.example a .env (ajustar valores antes de producción)
-	@if [ ! -f backend/.env ]; then cp .env.example backend/.env; echo ">>> backend/.env creado desde .env.example"; \
+	@if [ ! -f backend/.env ]; then cp backend/.env.example backend/.env; echo ">>> backend/.env creado desde backend/.env.example"; \
 	else echo ">>> backend/.env ya existe (no se sobrescribe)"; fi
 
 # ============================================================

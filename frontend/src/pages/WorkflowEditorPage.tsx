@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useState } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import {
   Box,
@@ -49,14 +49,17 @@ export default function WorkflowEditorPage() {
   });
   const projects = Array.isArray(projectsData) ? projectsData : [];
 
-  // Preselecciona el primer proyecto — evita la pantalla "Selecciona
-  // un proyecto" que obliga a un clic extra siempre.
-  useEffect(() => {
-    if (projectId === "" && projects.length > 0) {
-      const first = projects[0] as { id?: number };
-      if (first?.id != null) setProjectId(first.id);
-    }
-  }, [projects, projectId]);
+  // Preselecciona el primer proyecto cuando la lista carga — evita la
+  // pantalla "Selecciona un proyecto" que obliga a un clic extra
+  // siempre. Ajuste de estado en render (patrón recomendado): solo
+  // corre cuando cambia el primer proyecto, así que el usuario sí
+  // puede volver a "" después.
+  const firstProjectId = (projects[0] as { id?: number } | undefined)?.id ?? null;
+  const [autoSelectedFor, setAutoSelectedFor] = useState<number | null>(firstProjectId);
+  if (firstProjectId !== autoSelectedFor) {
+    setAutoSelectedFor(firstProjectId);
+    if (projectId === "" && firstProjectId != null) setProjectId(firstProjectId);
+  }
 
   const { data: transitions } = useQuery({
     queryKey: ["workflow-transitions", projectId],

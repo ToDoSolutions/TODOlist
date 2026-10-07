@@ -184,6 +184,7 @@ class Query(graphene.ObjectType):
     @login_required
     def resolve_all_projects(self, info, limit=None):
         from django.db.models import Count
+
         from apps.projects.models import accessible_projects
         # annotate: resolve_task_count haría un COUNT() por proyecto (N+1)
         return accessible_projects(info.context.user).filter(

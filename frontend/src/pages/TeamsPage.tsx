@@ -1,5 +1,5 @@
 import { formatDate } from "../lib/dates";
-import { useEffect, useState } from "react";
+import { useState } from "react";
 import {
   Box,
   Typography,
@@ -155,13 +155,18 @@ export default function TeamsPage() {
     queryFn: projectsApi.list,
   });
 
-  // Preselecciona el primer proyecto — evita la pestaña de miembros vacía.
-  useEffect(() => {
-    if (selectedProjectId === "" && Array.isArray(projects) && projects.length > 0) {
-      const first = projects[0] as { id?: number };
-      if (first?.id != null) setSelectedProjectId(first.id);
-    }
-  }, [projects, selectedProjectId]);
+  // Preselecciona el primer proyecto cuando la lista carga — evita la
+  // pestaña de miembros vacía. Ajuste de estado en render (patrón
+  // recomendado): solo corre cuando cambia el primer proyecto, así
+  // que el usuario sí puede volver a "" después.
+  const firstProjectId = Array.isArray(projects)
+    ? ((projects[0] as { id?: number } | undefined)?.id ?? null)
+    : null;
+  const [autoSelectedFor, setAutoSelectedFor] = useState<number | null>(firstProjectId);
+  if (firstProjectId !== autoSelectedFor) {
+    setAutoSelectedFor(firstProjectId);
+    if (selectedProjectId === "" && firstProjectId != null) setSelectedProjectId(firstProjectId);
+  }
 
   const projectMembersQuery = useQuery({
     queryKey: ["project-members", selectedProjectId],

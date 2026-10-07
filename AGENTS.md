@@ -52,7 +52,7 @@ npx playwright test                 # E2E (requiere backend en :8000 y vite)
 - **Organization (tenant raíz opcional)**: `Organization` + `OrganizationMembership` (roles owner/admin/member/guest) en collaboration; `Project.organization` opcional — owner/admin de org → escritura en todos sus proyectos, member → lectura, guest → nada implícito. Propagado a `accessible_projects` y `Task.objects.for_user`. CRUD en `/api/organizations/` con auditoría.
 - **Workflows configurables**: `WorkflowTransition` por proyecto (`/api/workflow-transitions/`); si el proyecto define transiciones, solo esas aristas son válidas — enforcement en `task_service.update_task`, serializer REST y bulk_update. Sin transiciones → comportamiento libre (backward compat).
 - **Offline sync merge por campo**: con `base_fields` en la operación, el conflicto se evalúa por campo (solo conflicta lo que ambos lados tocaron); sin `base_fields` sigue conflicto a nivel objeto.
-- **Docs**: `docs/maturity.md` (matriz de madurez por feature), `docs/security/e2ee-threat-model.md` (cifrado cliente: qué protege y qué no).
+- **Docs**: `docs/MATURITY.md` (matriz de madurez por feature), `docs/security/e2ee-threat-model.md` (cifrado cliente: qué protege y qué no).
 
 ## Operaciones limitadas por diseño
 

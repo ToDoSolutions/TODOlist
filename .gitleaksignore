@@ -1,0 +1,7 @@
+a05514d0c3b876e5ee256c01413a8bd180758385:backend/tests/test_caldav.py:generic-api-key:19
+a05514d0c3b876e5ee256c01413a8bd180758385:backend/tests/test_caldav.py:generic-api-key:41
+a05514d0c3b876e5ee256c01413a8bd180758385:backend/tests/test_users_2fa_extended.py:generic-api-key:54
+93e3e4bc6ded8a88c71355a05b6b40bef439f449:backend/tests/test_github_client_deep.py:private-key:110
+443d0232a4f2d5204333333421f1be8facebcbb0:backend/apps/users/management/commands/seed_demo.py:slack-webhook-url:600
+443d0232a4f2d5204333333421f1be8facebcbb0:backend/apps/users/management/commands/seed_demo.py:slack-webhook-url:974
+f86444c7db3b31799fd54b87f7e43b32dfddf0ea:backend/tests/test_offline_encryption.py:generic-api-key:115

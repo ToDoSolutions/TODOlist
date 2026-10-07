@@ -16,7 +16,6 @@ labels: enhancement
 
 ## Alternativas consideradas
 
-
 ## Fuera de alcance
 
 <!-- Qué NO cubre esta propuesta, explícitamente -->

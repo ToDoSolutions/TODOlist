@@ -14,3 +14,8 @@ target-version = "py311"
 # RUF012: los atributos de clase mutables (permission_classes, filterset_fields,
 # serializer_class...) son el idiom canónico de DRF, no un bug real.
 ignore = ["RUF012"]
+
+[tool.ruff.lint.per-file-ignores]
+# settings_test.py usa `from config.settings import *` + overrides —
+# el idiom canónico de settings de Django; F403/F405 son inherentes.
+"config/settings_test.py" = ["F403", "F405"]

@@ -5,6 +5,7 @@ DAVx5+jtx…) hablan VTODO, no VEVENT. Aquí va el mapeo de campos.
 """
 from __future__ import annotations
 
+import contextlib
 from datetime import UTC
 
 from django.utils import timezone
@@ -143,10 +144,8 @@ def vtodo_to_fields(ical_text: str) -> dict:
             if state:
                 fields["state"] = state
         elif prop == "PRIORITY":
-            try:
+            with contextlib.suppress(ValueError):
                 fields["priority"] = _V_TO_P.get(int(value), 3)
-            except ValueError:
-                pass
     return fields
 
 

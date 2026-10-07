@@ -45,6 +45,15 @@ CACHES = {
     }
 }
 
+# Channel layer en memoria: si queda el RedisChannelLayer heredado de
+# settings.py, cada señal WS (task_saved_ws → group_send) hace DNS a
+# `redis:6379` y cuelga el suite en máquinas sin esa entrada en hosts.
+CHANNEL_LAYERS = {
+    "default": {
+        "BACKEND": "channels.layers.InMemoryChannelLayer",
+    }
+}
+
 # Email backend en memoria
 EMAIL_BACKEND = "django.core.mail.backends.locmem.EmailBackend"
 

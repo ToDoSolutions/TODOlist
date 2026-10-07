@@ -28,14 +28,14 @@ from apps.collaboration.models import (
     TeamMembership,
     Whiteboard,
 )
-from apps.dashboards.models import ShareLink
-from apps.intake.models import IntakeForm
+from apps.dashboards.models import Dashboard, ShareLink
 from apps.encryption.models import (
     EncryptedKeyShare,
     EncryptedTask,
     UserPublicKey,
 )
 from apps.feature_flags.models import FeatureFlag
+from apps.intake.models import IntakeForm
 from apps.integrations.models import (
     GitHubCheckRun,
     GitHubCommit,
@@ -50,7 +50,6 @@ from apps.integrations_chat.models import ChatIntegration, ChatMessageLog
 from apps.notifications.models import Notification
 from apps.offline_sync.models import SyncDevice, SyncOperation
 from apps.okrs.models import KeyResult, KeyResultUpdate, Objective
-from apps.dashboards.models import Dashboard
 from apps.projects.models import Portfolio, Project, ProjectRisk
 from apps.tags.models import Tag
 from apps.tasks.models import (

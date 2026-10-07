@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useState } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { useTranslation } from "react-i18next";
 import { advancedMetricsApi, sprintsApi, type Sprint } from "../api/resources";
@@ -43,22 +43,20 @@ export default function BurndownPage() {
   const sprints: Sprint[] = sprintsData || [];
 
   // Preselecciona el sprint activo (o el último) — la página vacía con
-  // "Selecciona un sprint" obligaba a un clic extra siempre.
-  useEffect(() => {
-    if (sprintId || sprints.length === 0) return;
-    const active = sprints.find((s) => s.state === "active");
-    const fallback = sprints[sprints.length - 1];
-    const chosen = active ?? fallback;
-    if (chosen) setSprintId(chosen.id);
-  }, [sprints, sprintId]);
+  // "Selecciona un sprint" obligaba a un clic extra siempre. Derivado
+  // en render: el estado solo guarda la elección explícita del usuario.
+  const chosenSprint = sprintId
+    ? sprints.find((s) => s.id === sprintId) ?? null
+    : sprints.find((s) => s.state === "active") ?? sprints[sprints.length - 1] ?? null;
+  const effectiveSprintId: number | "" = sprintId || chosenSprint?.id || "";
 
   const { data, isLoading, isError, refetch } = useQuery({
-    queryKey: ["burndown", mode, sprintId],
+    queryKey: ["burndown", mode, effectiveSprintId],
     queryFn: () =>
       mode === "burnup"
-        ? advancedMetricsApi.burnup(Number(sprintId))
-        : advancedMetricsApi.burndown(Number(sprintId)),
-    enabled: !!sprintId,
+        ? advancedMetricsApi.burnup(Number(effectiveSprintId))
+        : advancedMetricsApi.burndown(Number(effectiveSprintId)),
+    enabled: !!effectiveSprintId,
   });
 
   return (
@@ -82,7 +80,7 @@ export default function BurndownPage() {
         <FormControl sx={{ minWidth: 200 }} size="small">
           <InputLabel>{t("p.plan.burndown.sprintLabel")}</InputLabel>
           <Select
-            value={sprintId}
+            value={effectiveSprintId}
             onChange={(e) => setSprintId(e.target.value as number)}
             label={t("p.plan.burndown.sprintLabel")}
           >
@@ -106,19 +104,19 @@ export default function BurndownPage() {
         </ToggleButtonGroup>
       </Stack>
 
-      {!sprintId && (
+      {!effectiveSprintId && (
         <Typography color="text.secondary">
           {t("p.plan.burndown.selectSprint")}
         </Typography>
       )}
-      {sprintId && isLoading && <TableSkeleton rows={6} cols={3} />}
-      {sprintId && isError && (
+      {effectiveSprintId && isLoading && <TableSkeleton rows={6} cols={3} />}
+      {effectiveSprintId && isError && (
         <ErrorState
           title={t("p.plan.burndown.loadError")}
           onRetry={() => void refetch()}
         />
       )}
-      {sprintId &&
+      {effectiveSprintId &&
         data &&
         (mode === "burnup" ? <BurnupChart data={data} /> : <BurndownChart data={data} />)}
     </Box>

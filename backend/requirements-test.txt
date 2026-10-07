@@ -1,0 +1,14 @@
+# Dependencias solo para tests — instalar junto a requirements.txt
+# (`pip install -r requirements.txt -r requirements-test.txt`).
+# No se incluyen en la imagen Docker de producción.
+pytest==8.4.2
+pytest-django==4.14.0
+pytest-cov==7.1.0
+pytest-xdist==3.8.0
+factory-boy==3.3.1
+responses==0.25.3
+hypothesis==6.136.4
+# schemathesis 3.x pinnea pytest<9 y starlette<1 — los CVEs de ambos no
+# tienen fix compatible en esta línea y solo afectan al entorno de tests,
+# no a producción (la imagen Docker solo instala requirements.txt).
+schemathesis==3.39.16
