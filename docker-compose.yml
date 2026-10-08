@@ -83,7 +83,7 @@ services:
     volumes:
       - ./backend:/app
     ports:
-      - "8001:8000"
+      - "127.0.0.1:8001:8000"
     depends_on:
       db:
         condition: service_healthy
@@ -147,7 +147,7 @@ services:
       - ./frontend:/app
       - /app/node_modules
     ports:
-      - "5175:5173"
+      - "127.0.0.1:5175:5173"
     depends_on:
       - backend
 
