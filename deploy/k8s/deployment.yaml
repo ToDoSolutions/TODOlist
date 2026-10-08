@@ -18,6 +18,9 @@ spec:
         app: todolist
         component: backend
     spec:
+      securityContext:
+        seccompProfile:
+          type: RuntimeDefault
       containers:
         - name: backend
           image: todolist-backend:latest
@@ -28,6 +31,16 @@ spec:
                 name: todolist-config
             - secretRef:
                 name: todolist-secrets
+          securityContext:
+            runAsNonRoot: true
+            runAsUser: 1000
+            allowPrivilegeEscalation: false
+            readOnlyRootFilesystem: true
+            capabilities:
+              drop: ["ALL"]
+          volumeMounts:
+            - name: tmp
+              mountPath: /tmp
           readinessProbe:
             httpGet:
               path: /api/health/
@@ -47,11 +60,15 @@ spec:
             limits:
               memory: "512Mi"
               cpu: "500m"
+      volumes:
+        - name: tmp
+          emptyDir: {}
 ---
 apiVersion: v1
 kind: Service
 metadata:
   name: todolist-backend
+
   namespace: todolist
 spec:
   selector:
@@ -77,6 +94,9 @@ spec:
   template:
     spec:
       restartPolicy: Never
+      securityContext:
+        seccompProfile:
+          type: RuntimeDefault
       containers:
         - name: migrate
           image: todolist-backend:latest
@@ -86,6 +106,19 @@ spec:
                 name: todolist-config
             - secretRef:
                 name: todolist-secrets
+          securityContext:
+            runAsNonRoot: true
+            runAsUser: 1000
+            allowPrivilegeEscalation: false
+            readOnlyRootFilesystem: true
+            capabilities:
+              drop: ["ALL"]
+          volumeMounts:
+            - name: tmp
+              mountPath: /tmp
+      volumes:
+        - name: tmp
+          emptyDir: {}
 ---
 # Celery worker: tareas async (sync GitHub, webhooks, digests, outbox).
 apiVersion: apps/v1
@@ -108,6 +141,9 @@ spec:
         app: todolist
         component: celery-worker
     spec:
+      securityContext:
+        seccompProfile:
+          type: RuntimeDefault
       containers:
         - name: celery
           image: todolist-backend:latest
@@ -117,6 +153,16 @@ spec:
                 name: todolist-config
             - secretRef:
                 name: todolist-secrets
+          securityContext:
+            runAsNonRoot: true
+            runAsUser: 1000
+            allowPrivilegeEscalation: false
+            readOnlyRootFilesystem: true
+            capabilities:
+              drop: ["ALL"]
+          volumeMounts:
+            - name: tmp
+              mountPath: /tmp
           resources:
             requests:
               memory: "256Mi"
@@ -124,6 +170,9 @@ spec:
             limits:
               memory: "512Mi"
               cpu: "500m"
+      volumes:
+        - name: tmp
+          emptyDir: {}
 ---
 # Celery beat: scheduler de tareas periódicas (solo 1 réplica).
 apiVersion: apps/v1
@@ -146,6 +195,9 @@ spec:
         app: todolist
         component: celery-beat
     spec:
+      securityContext:
+        seccompProfile:
+          type: RuntimeDefault
       containers:
         - name: celery-beat
           image: todolist-backend:latest
@@ -155,6 +207,19 @@ spec:
                 name: todolist-config
             - secretRef:
                 name: todolist-secrets
+          env:
+            - name: CELERY_BEAT_SCHEDULE_FILENAME
+              value: /tmp/celerybeat-schedule
+          securityContext:
+            runAsNonRoot: true
+            runAsUser: 1000
+            allowPrivilegeEscalation: false
+            readOnlyRootFilesystem: true
+            capabilities:
+              drop: ["ALL"]
+          volumeMounts:
+            - name: tmp
+              mountPath: /tmp
           resources:
             requests:
               memory: "128Mi"
@@ -162,6 +227,9 @@ spec:
             limits:
               memory: "256Mi"
               cpu: "200m"
+      volumes:
+        - name: tmp
+          emptyDir: {}
 ---
 apiVersion: apps/v1
 kind: Deployment
@@ -183,15 +251,32 @@ spec:
         app: todolist
         component: frontend
     spec:
+      securityContext:
+        seccompProfile:
+          type: RuntimeDefault
       containers:
         - name: frontend
           image: todolist-frontend:latest
           ports:
-            - containerPort: 80
+            - containerPort: 8080
+          securityContext:
+            runAsNonRoot: true
+            runAsUser: 101
+            allowPrivilegeEscalation: false
+            readOnlyRootFilesystem: true
+            capabilities:
+              drop: ["ALL"]
+          volumeMounts:
+            - name: nginx-cache
+              mountPath: /var/cache/nginx
+            - name: nginx-run
+              mountPath: /var/run
+            - name: tmp
+              mountPath: /tmp
           readinessProbe:
             httpGet:
               path: /
-              port: 80
+              port: 8080
             initialDelaySeconds: 5
             periodSeconds: 5
           resources:
@@ -201,6 +286,13 @@ spec:
             limits:
               memory: "256Mi"
               cpu: "200m"
+      volumes:
+        - name: nginx-cache
+          emptyDir: {}
+        - name: nginx-run
+          emptyDir: {}
+        - name: tmp
+          emptyDir: {}
 ---
 apiVersion: v1
 kind: Service
@@ -213,7 +305,7 @@ spec:
     component: frontend
   ports:
     - port: 80
-      targetPort: 80
+      targetPort: 8080
   type: ClusterIP
 ---
 apiVersion: apps/v1
@@ -236,11 +328,26 @@ spec:
         app: todolist
         component: redis
     spec:
+      securityContext:
+        seccompProfile:
+          type: RuntimeDefault
       containers:
         - name: redis
           image: redis:7-alpine
           ports:
             - containerPort: 6379
+          securityContext:
+            runAsNonRoot: true
+            runAsUser: 999
+            allowPrivilegeEscalation: false
+            readOnlyRootFilesystem: true
+            capabilities:
+              drop: ["ALL"]
+          volumeMounts:
+            - name: redis-data
+              mountPath: /data
+            - name: tmp
+              mountPath: /tmp
           resources:
             requests:
               memory: "128Mi"
@@ -248,6 +355,11 @@ spec:
             limits:
               memory: "256Mi"
               cpu: "200m"
+      volumes:
+        - name: redis-data
+          emptyDir: {}
+        - name: tmp
+          emptyDir: {}
 ---
 apiVersion: v1
 kind: Service

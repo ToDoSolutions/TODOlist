@@ -110,6 +110,8 @@ resource "aws_security_group" "rds" {
     cidr_blocks = module.vpc.private_subnets
   }
 
+  # trivy:ignore:AWS-0104 los nodos necesitan salida abierta para
+  # pulls de imágenes, updates y APIs AWS — requisito funcional
   egress {
     from_port   = 0
     to_port     = 0

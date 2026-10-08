@@ -13,3 +13,8 @@ COPY . /app/
 EXPOSE 5173
 
 CMD ["npm", "run", "dev", "--", "--host", "0.0.0.0"]
+
+# Runtime sin root (DS-0002): vite solo necesita escribir en /app,
+# que es bind-mount del host (uid 1000 = node) + volumen node_modules.
+RUN chown -R node:node /app
+USER node

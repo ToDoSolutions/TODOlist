@@ -1,0 +1,6 @@
+# AWS-0104 (x2): egress 0.0.0.0/0 en security groups.
+# - deploy/terraform/main.tf: los nodos EKS necesitan salida abierta para
+#   pulls de imágenes, updates y APIs AWS (requisito funcional).
+# - terraform-aws-modules/eks: hallazgo en el módulo upstream
+#   (terraform-aws-modules), no editable localmente.
+AWS-0104
