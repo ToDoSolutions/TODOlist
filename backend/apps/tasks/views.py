@@ -767,11 +767,18 @@ class TaskViewSet(TaskCreateUpdateViewSetMixin, viewsets.ModelViewSet):
         if "state" in updates:
             from apps.projects.models import WorkflowTransition
             new_state = updates["state"]
-            for task in qs.filter(project__isnull=False).only("id", "state", "project"):
-                trans = WorkflowTransition.objects.filter(project_id=task.project_id)
-                if trans.exists() and task.state != new_state and not trans.filter(
-                    from_state=task.state, to_state=new_state
-                ).exists():
+            tasks = list(qs.filter(project__isnull=False).only("id", "state", "project"))
+            edges_by_proj: dict[int, set] = {}
+            for tr in WorkflowTransition.objects.filter(
+                project_id__in={t.project_id for t in tasks}
+            ).only("project_id", "from_state", "to_state"):
+                edges_by_proj.setdefault(tr.project_id, set()).add(
+                    (tr.from_state, tr.to_state))
+            for task in tasks:
+                edges = edges_by_proj.get(task.project_id)
+                if edges is not None and task.state != new_state and (
+                    task.state, new_state
+                ) not in edges:
                     return Response(
                         {"error": f"La tarea #{task.id} no permite {task.state} → {new_state} por el workflow del proyecto"},
                         status=status.HTTP_400_BAD_REQUEST,
