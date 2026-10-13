@@ -313,7 +313,8 @@ function WhiteboardDetail({ id }: { id: number }) {
       const pending = pendingSave.current;
       if (pending) {
         pendingSave.current = null;
-        void whiteboardsApi.update(id, { content: pending }).catch(() => {});
+        void whiteboardsApi.update(id, { content: pending })
+          .catch(() => notify.error(t("p.extras.wb.saveError")));
       }
     };
   }, [id]);
