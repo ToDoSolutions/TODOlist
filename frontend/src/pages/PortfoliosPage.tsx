@@ -25,6 +25,7 @@ import { EmptyState, ErrorState } from "../components/ui/states";
 import { useConfirm } from "../components/ConfirmDialog";
 import { projectsApi } from "../api/resources";
 import { portfoliosApi, type Portfolio } from "../api/featOrg";
+import { DEFAULT_PORTFOLIO_COLOR } from "../types";
 import type { Project } from "../types";
 import { notify } from "../notify";
 import "../i18n";
@@ -37,7 +38,7 @@ interface PortfolioForm {
 
 const emptyForm: PortfolioForm = {
   name: "",
-  color: "#1976d2",
+  color: DEFAULT_PORTFOLIO_COLOR,
   project_ids: [],
 };
 

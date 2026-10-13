@@ -18,7 +18,7 @@ import {
 import { Plus, Trash2, Tag as TagIcon } from "lucide-react";
 import { useTranslation } from "react-i18next";
 import { tagsApi } from "../api/resources";
-import { Tag } from "../types";
+import { DEFAULT_TAG_COLOR, Tag } from "../types";
 import { notify } from "../notify";
 import { useConfirm } from "../components/ConfirmDialog";
 import PageHeader from "../components/ui/PageHeader";
@@ -32,7 +32,7 @@ export default function TagsPage() {
   const [open, setOpen] = useState(false);
   const [editing, setEditing] = useState<Tag | null>(null);
   const [name, setName] = useState("");
-  const [color, setColor] = useState("#1976d2");
+  const [color, setColor] = useState(DEFAULT_TAG_COLOR);
 
   const {
     data: tagsData,
@@ -77,7 +77,7 @@ export default function TagsPage() {
   const openNew = () => {
     setEditing(null);
     setName("");
-    setColor("#1976d2");
+    setColor(DEFAULT_TAG_COLOR);
     setOpen(true);
   };
 

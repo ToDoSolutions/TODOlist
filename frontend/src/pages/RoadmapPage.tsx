@@ -1,6 +1,7 @@
 import { useQuery } from "@tanstack/react-query";
 import { useTranslation } from "react-i18next";
 import { advancedMetricsApi } from "../api/resources";
+import { DEFAULT_EPIC_COLOR } from "../types";
 import {
   Box,
   Typography,
@@ -211,7 +212,7 @@ export default function RoadmapPage() {
                           width: Math.max(((e - s) / span) * 800, 8),
                           height: 22,
                           borderRadius: 1,
-                          bgcolor: epic.color || "#9c27b0",
+                          bgcolor: epic.color || DEFAULT_EPIC_COLOR,
                           opacity: 0.85,
                         }}
                       />

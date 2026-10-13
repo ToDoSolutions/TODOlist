@@ -1,5 +1,6 @@
 import { useState } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
+import { DEFAULT_CALENDAR_COLOR } from "../types";
 import {
   Box,
   Typography,
@@ -36,7 +37,7 @@ export default function ExternalCalendarsPage() {
   const qc = useQueryClient();
   const confirm = useConfirm();
   const [dialog, setDialog] = useState(false);
-  const [form, setForm] = useState({ name: "", url: "", color: "#607d8b" });
+  const [form, setForm] = useState({ name: "", url: "", color: DEFAULT_CALENDAR_COLOR });
 
   const { data: calendars = [] } = useQuery({
     queryKey: ["external-calendars"],
@@ -55,7 +56,7 @@ export default function ExternalCalendarsPage() {
     onSuccess: () => {
       invalidate();
       setDialog(false);
-      setForm({ name: "", url: "", color: "#607d8b" });
+      setForm({ name: "", url: "", color: DEFAULT_CALENDAR_COLOR });
       notify.success(t("p.extras.cal.created"));
     },
     onError: () => notify.error(t("p.extras.cal.createError")),
@@ -133,7 +134,7 @@ export default function ExternalCalendarsPage() {
                     width: 12,
                     height: 12,
                     borderRadius: "50%",
-                    bgcolor: cal.color || "#607d8b",
+                    bgcolor: cal.color || DEFAULT_CALENDAR_COLOR,
                     flexShrink: 0,
                   }}
                 />

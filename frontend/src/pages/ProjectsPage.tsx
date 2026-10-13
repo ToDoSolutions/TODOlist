@@ -38,6 +38,7 @@ import { formatDate } from "../lib/dates";
 import PageHeader from "../components/ui/PageHeader";
 import { EmptyState, ErrorState } from "../components/ui/states";
 import { CardGridSkeleton } from "../components/ui/skeletons";
+import { DEFAULT_PROJECT_COLOR } from "../types";
 import type { Project } from "../types";
 import { notify } from "../notify";
 import "../i18n";
@@ -51,7 +52,7 @@ interface ProjectForm {
 const emptyForm: ProjectForm = {
   name: "",
   description: "",
-  color: "#1976d2",
+  color: DEFAULT_PROJECT_COLOR,
 };
 
 export default function ProjectsPage() {

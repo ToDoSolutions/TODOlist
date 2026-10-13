@@ -1,7 +1,8 @@
 import { useQuery } from "@tanstack/react-query";
 import { useTranslation } from "react-i18next";
 import { advancedMetricsApi, type Sprint } from "../api/resources";
-import type { Task } from "../types";
+import { DEFAULT_PROJECT_COLOR, STATE_COLORS,
+         type Task, type TaskState } from "../types";
 import PageHeader from "../components/ui/PageHeader";
 import { PageSkeleton } from "../components/ui/skeletons";
 import { ErrorState } from "../components/ui/states";
@@ -17,17 +18,6 @@ import {
   useMediaQuery,
   useTheme,
 } from "@mui/material";
-
-const STATE_COLORS: Record<string, string> = {
-  backlog: "#9e9e9e",
-  pending: "#7986cb",
-  in_progress: "#1976d2",
-  review: "#fbc02d",
-  completed: "#43a047",
-  blocked: "#d32f2f",
-  cancelled: "#757575",
-  archived: "#bdbdbd",
-};
 
 const DAY_MS = 24 * 3600 * 1000;
 const LABEL_WIDTH = 180;
@@ -228,7 +218,7 @@ export default function GanttPage() {
       {/* Legend */}
       <Paper sx={{ p: 1.5, mb: 2 }}>
         <Stack direction="row" spacing={1} flexWrap="wrap" useFlexGap>
-          {Object.keys(STATE_COLORS).map((k) => (
+          {(Object.keys(STATE_COLORS) as TaskState[]).map((k) => (
             <Stack key={k} direction="row" spacing={0.5} alignItems="center">
               <Box
                 sx={{
@@ -462,7 +452,7 @@ export default function GanttPage() {
               <Stack spacing={0}>
                 {projects.map((proj, projIdx) => {
                   const projTasks = byProject[proj] ?? [];
-                  const projColor = projTasks[0]?.project_color || "#1976d2";
+                  const projColor = projTasks[0]?.project_color || DEFAULT_PROJECT_COLOR;
                   return (
                     <Box key={proj}>
                       {/* Project group header */}
@@ -494,7 +484,7 @@ export default function GanttPage() {
                       {projTasks.map((t) => {
                         const range = taskRanges[t.id];
                         const barColor =
-                          STATE_COLORS[t.state] || t.project_color || "#1976d2";
+                          STATE_COLORS[t.state] || t.project_color || DEFAULT_PROJECT_COLOR;
                         return (
                           <Box
                             key={t.id}

@@ -32,6 +32,7 @@ import { epicsApi, projectsApi, type Epic } from "../api/resources";
 import { DateField } from "../components/DateField";
 import { EmptyState } from "../components/ui/states";
 import PageHeader from "../components/ui/PageHeader";
+import { DEFAULT_EPIC_COLOR } from "../types";
 import type { Task, Project } from "../types";
 import { notify } from "../notify";
 import { useConfirm } from "../components/ConfirmDialog";
@@ -52,7 +53,7 @@ interface EpicForm {
 const emptyForm: EpicForm = {
   title: "",
   description: "",
-  color: "#9c27b0",
+  color: DEFAULT_EPIC_COLOR,
   state: "planned",
   start_date: "",
   end_date: "",

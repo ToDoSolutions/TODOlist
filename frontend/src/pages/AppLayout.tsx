@@ -1,6 +1,7 @@
 import { useEffect, useState } from "react";
 import { Outlet, useNavigate, useLocation } from "react-router-dom";
 import { useProject } from "../auth/ProjectContext";
+import { DEFAULT_PROJECT_COLOR } from "../types";
 import {
   Box,
   Drawer,
@@ -148,7 +149,7 @@ export default function AppLayout() {
   }, [palette.open, markPaletteUsed]);
   const [projectDialog, setProjectDialog] = useState(false);
   const [projectName, setProjectName] = useState("");
-  const [projectColor, setProjectColor] = useState("#1976d2");
+  const [projectColor, setProjectColor] = useState(DEFAULT_PROJECT_COLOR);
 
   // --- Estado de navegación móvil / menús ---
   const [mobileNav, setMobileNav] = useState(false);
@@ -251,7 +252,7 @@ export default function AppLayout() {
       navigate(`/app/project/${p.id}`);
       setProjectDialog(false);
       setProjectName("");
-      setProjectColor("#1976d2");
+      setProjectColor(DEFAULT_PROJECT_COLOR);
     },
     onError: () => notify.error(t("p.shell.projectCreateError")),
   });

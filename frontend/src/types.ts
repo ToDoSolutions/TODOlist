@@ -228,6 +228,15 @@ export const PRIORITY_COLORS: Record<TaskPriority, string> = {
   5: "#9e9e9e",
 };
 
+/** Colores por defecto de entidades con color elegible por el
+    usuario (proyecto, épica, calendario externo, tag). Antes
+    estaban hardcodeados en cada formulario y fallback. */
+export const DEFAULT_PROJECT_COLOR = "#1976d2";
+export const DEFAULT_EPIC_COLOR = "#9c27b0";
+export const DEFAULT_CALENDAR_COLOR = "#607d8b";
+export const DEFAULT_TAG_COLOR = "#1976d2";
+export const DEFAULT_PORTFOLIO_COLOR = "#1976d2";
+
 export const KANBAN_COLUMNS: TaskState[] = [
   "backlog",
   "pending",
