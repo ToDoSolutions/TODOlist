@@ -11,7 +11,7 @@ opentelemetry-sdk==1.34.1
 opentelemetry-exporter-otlp-proto-grpc==1.34.1
 opentelemetry-instrumentation-django==0.55b1
 opentelemetry-instrumentation-celery==0.55b1
-opentelemetry-instrumentation-requests==0.55b1
+opentelemetry-instrumentation-requests==0.66b1
 
 # Property-based testing (tests/test_*.py con hypothesis)
 hypothesis==6.136.4
