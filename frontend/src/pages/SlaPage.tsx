@@ -28,6 +28,7 @@ import {
   Tooltip,
   FormControlLabel,
   Checkbox,
+  useTheme,
 } from "@mui/material";
 import { Timer, Plus, Pencil, Trash2, AlertTriangle } from "lucide-react";
 import PageHeader from "../components/ui/PageHeader";
@@ -40,6 +41,7 @@ import { useConfirm } from "../components/ConfirmDialog";
 /** Gestión de políticas SLA y tareas que han incumplido su objetivo. */
 export default function SlaPage() {
   const { t } = useTranslation();
+  const theme = useTheme();
   const qc = useQueryClient();
   const confirm = useConfirm();
   const navigate = useNavigate();
@@ -225,7 +227,7 @@ export default function SlaPage() {
       {/* Tareas que han incumplido el SLA */}
       <Paper variant="outlined" sx={{ p: 2, mt: 3 }}>
         <Stack direction="row" spacing={1} alignItems="center" mb={1.5}>
-          <AlertTriangle size={18} color="#d32f2f" />
+          <AlertTriangle size={18} color={theme.palette.error.main} />
           <Typography variant="subtitle1" fontWeight={700}>
             {t("p.admin.sla.breachedTitle")}
           </Typography>

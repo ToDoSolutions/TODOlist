@@ -1,5 +1,5 @@
 import { ReactNode } from "react";
-import { Box, Card, CardActionArea, Typography } from "@mui/material";
+import { Box, Card, CardActionArea, Typography, useTheme } from "@mui/material";
 import { TrendingDown, TrendingUp } from "lucide-react";
 
 interface Props {
@@ -28,6 +28,7 @@ export default function MetricCard({
   onClick,
   color = "primary.main",
 }: Props) {
+  const theme = useTheme();
   const deltaNum = typeof delta === "string" ? parseFloat(delta) : delta;
   const deltaBad =
     deltaNum !== undefined && !isNaN(deltaNum)
@@ -57,9 +58,9 @@ export default function MetricCard({
             !isNaN(deltaNum) &&
             deltaNum !== 0 &&
             (deltaNum > 0 ? (
-              <TrendingUp size={14} color={deltaBad ? "#F44336" : "#66BB6A"} />
+              <TrendingUp size={14} color={deltaBad ? theme.palette.error.main : theme.palette.success.main} />
             ) : (
-              <TrendingDown size={14} color={deltaBad ? "#F44336" : "#66BB6A"} />
+              <TrendingDown size={14} color={deltaBad ? theme.palette.error.main : theme.palette.success.main} />
             ))}
           <Typography
             variant="caption"

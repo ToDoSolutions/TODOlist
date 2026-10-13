@@ -26,6 +26,7 @@ import {
   ListItemText,
   FormControlLabel,
   Checkbox,
+  useTheme,
 } from "@mui/material";
 import {
   LayoutDashboard,
@@ -57,6 +58,7 @@ import {
 import {
   STATE_LABELS,
   PRIORITY_LABELS,
+  FAVORITE_COLOR,
   type TaskPriority,
   type TaskState,
 } from "../types";
@@ -208,7 +210,7 @@ export default function DashboardsPage() {
                             {d.name}
                           </Typography>
                           {d.is_default && (
-                            <Star size={12} fill="#f9a825" color="#f9a825" />
+                            <Star size={12} fill={FAVORITE_COLOR} color={FAVORITE_COLOR} />
                           )}
                           {!d.is_owner && (
                             <Chip
@@ -278,7 +280,7 @@ export default function DashboardsPage() {
                         >
                           <Star
                             size={15}
-                            fill={selected.is_default ? "#f9a825" : "none"}
+                            fill={selected.is_default ? FAVORITE_COLOR : "none"}
                           />
                         </IconButton>
                       </Tooltip>
@@ -756,6 +758,7 @@ function WidgetBody({
   onOpenTask: (id: number) => void;
 }) {
   const { t } = useTranslation();
+  const theme = useTheme();
   const d = widget.data;
   if (d.error) {
     return (
@@ -767,13 +770,13 @@ function WidgetBody({
   switch (widget.type) {
     case "kpis": {
       const items: [string, number, string][] = [
-        [t("p.collab.dashboards.kpi.open"), Number(d.open ?? 0), "#1976d2"],
-        [t("p.collab.dashboards.kpi.overdue"), Number(d.overdue ?? 0), "#d32f2f"],
-        [t("p.collab.dashboards.kpi.inProgress"), Number(d.in_progress ?? 0), "#ed6c02"],
+        [t("p.collab.dashboards.kpi.open"), Number(d.open ?? 0), theme.palette.primary.main],
+        [t("p.collab.dashboards.kpi.overdue"), Number(d.overdue ?? 0), theme.palette.error.main],
+        [t("p.collab.dashboards.kpi.inProgress"), Number(d.in_progress ?? 0), theme.palette.warning.main],
         [
           t("p.collab.dashboards.kpi.completed30d"),
           Number(d.completed_30d ?? 0),
-          "#2e7d32",
+          theme.palette.success.main,
         ],
       ];
       return (

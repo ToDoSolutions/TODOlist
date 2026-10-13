@@ -1,5 +1,7 @@
-import { useNavigate } from "react-router-dom";
-import { Box, Typography, Button, Stack } from "@mui/material";
+﻿import { useNavigate } from "react-router-dom";
+import { Box, Typography, Button, Stack,
+  useTheme,
+} from "@mui/material";
 import { OctagonPause, Building2, Home } from "lucide-react";
 import { useTranslation } from "react-i18next";
 import "../i18n";
@@ -10,6 +12,7 @@ import "../i18n";
  */
 export default function SuspendedPage() {
   const { t } = useTranslation();
+  const theme = useTheme();
   const navigate = useNavigate();
   return (
     <Box
@@ -21,7 +24,7 @@ export default function SuspendedPage() {
       textAlign="center"
       px={3}
     >
-      <OctagonPause size={56} color="#9c27b0" />
+      <OctagonPause size={56} color={theme.palette.secondary.main} />
       <Typography variant="h4" fontWeight={700} mt={2}>
         {t("p.auth.suspended.title")}
       </Typography>

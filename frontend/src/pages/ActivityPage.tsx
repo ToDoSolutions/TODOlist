@@ -1,4 +1,4 @@
-import { useState, useMemo } from "react";
+﻿import { useState, useMemo } from "react";
 import { useQuery } from "@tanstack/react-query";
 import {
   Box,
@@ -10,6 +10,7 @@ import {
   Chip,
   Divider,
   InputAdornment,
+  useTheme,
 } from "@mui/material";
 import { Search, Activity as ActivityIcon } from "lucide-react";
 import { useTranslation } from "react-i18next";
@@ -25,6 +26,7 @@ import { activityFeedApi, type ActivityItem } from "../api/resources";
  */
 export default function ActivityPage() {
   const { t } = useTranslation();
+  const theme = useTheme();
   const [search, setSearch] = useState("");
   const [kind, setKind] = useState<"all" | "task_activity" | "audit">("all");
   const [limit, setLimit] = useState(100);
@@ -141,7 +143,7 @@ export default function ActivityPage() {
                   >
                     <ActivityIcon
                       size={14}
-                      color={a.kind === "audit" ? "#9c27b0" : "#1976d2"}
+                      color={a.kind === "audit" ? theme.palette.secondary.main : theme.palette.primary.main}
                     />
                     <Box flex={1} minWidth={0}>
                       <Typography variant="body2">{a.summary}</Typography>

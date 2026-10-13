@@ -51,7 +51,7 @@ import { DateField } from "../components/DateField";
 import { EmptyState, ErrorState } from "../components/ui/states";
 import { formatDate as fmtDate } from "../lib/dates";
 import type { Task, Project } from "../types";
-import { PRIORITY_LABELS, TaskState } from "../types";
+import { DEFAULT_PROJECT_COLOR, PRIORITY_LABELS, TaskState } from "../types";
 import { TASK_STATE_I18N_KEYS } from "../i18n/batchTaskUi";
 import { notify } from "../notify";
 import { useConfirm } from "../components/ConfirmDialog";
@@ -584,7 +584,7 @@ export default function SprintsPage() {
                 projectCtx.setProject({
                   id: viewTasksSprint.project,
                   name: String(projectMap.get(viewTasksSprint.project) || ""),
-                  color: "#1976d2",
+                  color: DEFAULT_PROJECT_COLOR,
                 });
                 navigate(`/app/project/${viewTasksSprint.project}`);
               } else {

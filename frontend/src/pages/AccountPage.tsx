@@ -1,4 +1,4 @@
-import { useNavigate } from "react-router-dom";
+﻿import { useNavigate } from "react-router-dom";
 import {
   Box,
   GridLegacy as Grid,
@@ -249,7 +249,7 @@ export default function AccountPage() {
         tabIndex={0}
       >
         <Stack direction="row" spacing={1.5} alignItems="center">
-          <AlertTriangle size={18} color="#d32f2f" />
+          <AlertTriangle size={18} color={theme.palette.error.main} />
           <Box>
             <Typography variant="subtitle2" fontWeight={700} color="error.main">
               {t("p.misc.dangerZone")}

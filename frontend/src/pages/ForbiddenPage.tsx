@@ -1,5 +1,7 @@
-import { useNavigate } from "react-router-dom";
-import { Box, Typography, Button, Stack } from "@mui/material";
+﻿import { useNavigate } from "react-router-dom";
+import { Box, Typography, Button, Stack,
+  useTheme,
+} from "@mui/material";
 import { ShieldOff, ArrowLeft, Home } from "lucide-react";
 import { useTranslation } from "react-i18next";
 import "../i18n";
@@ -7,6 +9,7 @@ import "../i18n";
 /** 403: el usuario está autenticado pero sin permiso para el recurso. */
 export default function ForbiddenPage() {
   const { t } = useTranslation();
+  const theme = useTheme();
   const navigate = useNavigate();
   return (
     <Box
@@ -18,7 +21,7 @@ export default function ForbiddenPage() {
       textAlign="center"
       px={3}
     >
-      <ShieldOff size={56} color="#ed6c02" />
+      <ShieldOff size={56} color={theme.palette.warning.main} />
       <Typography variant="h4" fontWeight={700} mt={2}>
         {t("p.auth.forbidden.title")}
       </Typography>

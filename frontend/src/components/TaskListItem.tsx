@@ -74,6 +74,7 @@ import {
   Activity,
   STATE_COLORS,
   PRIORITY_COLORS,
+  FAVORITE_COLOR,
 } from "../types";
 
 interface Props {
@@ -535,7 +536,7 @@ export default function TaskListItem({ task, onEdit, timerRunning }: Props) {
                     alignSelf: "center",
                     fill: "currentColor",
                   }}
-                  color="#f5a623"
+                  color={FAVORITE_COLOR}
                   aria-hidden
                 />
               </Tooltip>

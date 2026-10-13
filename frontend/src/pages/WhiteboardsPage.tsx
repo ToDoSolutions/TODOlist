@@ -41,6 +41,7 @@ import {
 } from "../api/featExtras";
 import { notify } from "../notify";
 import { useConfirm } from "../components/ConfirmDialog";
+import { WHITEBOARD_NOTE_COLOR } from "../types";
 import "../i18n";
 
 const CANVAS_W = 2000;
@@ -338,7 +339,7 @@ function WhiteboardDetail({ id }: { id: number }) {
       x: 40 + ((idx * 60) % (CANVAS_W - NOTE_W - 80)),
       y: 40 + ((idx * 60) % (CANVAS_H - NOTE_H - 80)),
       text: "",
-      color: "#fff9c4",
+      color: WHITEBOARD_NOTE_COLOR,
       w: NOTE_W,
       h: NOTE_H,
     };
@@ -597,7 +598,7 @@ function WhiteboardDetail({ id }: { id: number }) {
                 top: node.y,
                 width: node.w,
                 minHeight: node.h,
-                bgcolor: node.color || "#fff9c4",
+                bgcolor: node.color || WHITEBOARD_NOTE_COLOR,
                 p: 1,
                 userSelect: "none",
                 touchAction: "none",

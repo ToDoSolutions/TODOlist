@@ -1,4 +1,4 @@
-import { useState } from "react";
+﻿import { useState } from "react";
 import { useParams } from "react-router-dom";
 import { useQuery, useMutation } from "@tanstack/react-query";
 import {
@@ -15,6 +15,7 @@ import {
   FormControlLabel,
   Alert,
   Divider,
+  useTheme,
 } from "@mui/material";
 import { AlertTriangle, CheckCircle2, ClipboardList } from "lucide-react";
 import { useTranslation } from "react-i18next";
@@ -32,6 +33,7 @@ import {
 export default function PublicIntakePage() {
   const { token } = useParams<{ token: string }>();
   const { t } = useTranslation();
+  const theme = useTheme();
   const [values, setValues] = useState<Record<string, unknown>>({});
   const [fieldErrors, setFieldErrors] = useState<Record<string, boolean>>({});
   const [submitted, setSubmitted] = useState(false);
@@ -128,7 +130,7 @@ export default function PublicIntakePage() {
         {data && data.enabled && submitted && (
           <Paper variant="outlined" sx={{ p: { xs: 3, sm: 4 } }}>
             <Stack alignItems="center" spacing={1.5} py={4} textAlign="center">
-              <CheckCircle2 size={48} strokeWidth={1.2} color="#43a047" />
+              <CheckCircle2 size={48} strokeWidth={1.2} color={theme.palette.success.main} />
               <Typography variant="h6" fontWeight={600}>
                 {t("p.public.intakePage.successTitle")}
               </Typography>

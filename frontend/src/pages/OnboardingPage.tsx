@@ -1,4 +1,4 @@
-import { useState } from "react";
+﻿import { useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { useQueryClient } from "@tanstack/react-query";
 import {
@@ -15,6 +15,7 @@ import {
   ListItem,
   ListItemIcon,
   ListItemText,
+  useTheme,
 } from "@mui/material";
 import { Check, CheckSquare, Folder, Users, Sparkles } from "lucide-react";
 import { useTranslation } from "react-i18next";
@@ -29,6 +30,7 @@ import { useUiStore } from "../store/uiStore";
  */
 export default function OnboardingPage() {
   const { t } = useTranslation();
+  const theme = useTheme();
   const navigate = useNavigate();
   const qc = useQueryClient();
   const setDone = useUiStore((s) => s.setOnboardingDone);
@@ -118,7 +120,7 @@ export default function OnboardingPage() {
       <Paper variant="outlined" sx={{ p: 4 }}>
         {step === 0 && (
           <Stack spacing={2} alignItems="flex-start">
-            <Sparkles size={32} color="#1976d2" />
+            <Sparkles size={32} color={theme.palette.primary.main} />
             <Typography variant="h5" fontWeight={700}>
               {t("p.auth.onboarding.welcomeTitle")}
             </Typography>
@@ -237,7 +239,7 @@ export default function OnboardingPage() {
 
         {step === 4 && (
           <Stack spacing={2} alignItems="flex-start">
-            <Check size={32} color="#2e7d32" />
+            <Check size={32} color={theme.palette.success.main} />
             <Typography variant="h5" fontWeight={700}>
               {t("p.auth.onboarding.doneTitle")}
             </Typography>

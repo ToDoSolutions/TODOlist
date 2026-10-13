@@ -1,4 +1,4 @@
-import { useState } from "react";
+﻿import { useState } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { useTranslation } from "react-i18next";
 import { advancedMetricsApi, sprintsApi, type Sprint } from "../api/resources";
@@ -18,6 +18,7 @@ import {
   Chip,
   ToggleButton,
   ToggleButtonGroup,
+  useTheme,
 } from "@mui/material";
 import {
   LineChart,
@@ -132,6 +133,7 @@ interface BurndownData {
 }
 function BurndownChart({ data }: { data: BurndownData }) {
   const { t } = useTranslation();
+  const theme = useTheme();
   const ideal: { date: string; ideal: number }[] = data.ideal || [];
   const actual: { date: string; remaining: number }[] = data.actual || [];
   const totalPoints = data.total_points || 0;
@@ -193,7 +195,7 @@ function BurndownChart({ data }: { data: BurndownData }) {
               type="linear"
               dataKey="ideal"
               name={t("p.plan.burndown.ideal")}
-              stroke="#9e9e9e"
+              stroke={theme.palette.grey[500]}
               strokeWidth={2}
               strokeDasharray="5 3"
               dot={false}
@@ -202,7 +204,7 @@ function BurndownChart({ data }: { data: BurndownData }) {
               type="linear"
               dataKey="actual"
               name={t("p.plan.burndown.actual")}
-              stroke="#1976d2"
+              stroke={theme.palette.primary.main}
               strokeWidth={2.5}
               dot={{ r: 3 }}
               connectNulls={false}
@@ -225,6 +227,7 @@ interface BurnupData {
 }
 function BurnupChart({ data }: { data: BurnupData }) {
   const { t } = useTranslation();
+  const theme = useTheme();
   const series: { date: string; completed: number; scope: number }[] = data.series || [];
   const totalPoints = data.total_points || 0;
 
@@ -273,7 +276,7 @@ function BurnupChart({ data }: { data: BurnupData }) {
               type="stepAfter"
               dataKey="scope"
               name={t("p.plan.burndown.scope")}
-              stroke="#9e9e9e"
+              stroke={theme.palette.grey[500]}
               strokeWidth={2}
               strokeDasharray="5 3"
               dot={false}
@@ -282,7 +285,7 @@ function BurnupChart({ data }: { data: BurnupData }) {
               type="linear"
               dataKey="completed"
               name={t("p.plan.burndown.completed")}
-              stroke="#2e7d32"
+              stroke={theme.palette.success.main}
               strokeWidth={2.5}
               dot={{ r: 3 }}
               connectNulls={false}

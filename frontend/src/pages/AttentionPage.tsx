@@ -1,4 +1,4 @@
-import { useMemo, useState } from "react";
+﻿import { useMemo, useState } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { useNavigate } from "react-router-dom";
 import { useTranslation } from "react-i18next";
@@ -12,6 +12,7 @@ import {
   Tab,
   Chip,
   Divider,
+  useTheme,
 } from "@mui/material";
 import {
   AtSign,
@@ -54,6 +55,7 @@ const TABS: { key: TabKey; labelKey: string }[] = [
  */
 export default function AttentionPage() {
   const { t } = useTranslation();
+  const theme = useTheme();
   const qc = useQueryClient();
   const navigate = useNavigate();
   const [tab, setTab] = useState<TabKey>("all");
@@ -203,7 +205,7 @@ export default function AttentionPage() {
             mentions.map((m) => (
               <Paper key={`m-${m.id}`} variant="outlined" sx={{ p: 1.5 }}>
                 <Stack direction="row" spacing={1.5} alignItems="flex-start">
-                  <AtSign size={18} color="#1976d2" style={{ marginTop: 2 }} />
+                  <AtSign size={18} color={theme.palette.primary.main} style={{ marginTop: 2 }} />
                   <Box flex={1} minWidth={0}>
                     <Typography variant="body2">
                       {t("p.work.attention.mentionedIn", {
@@ -242,7 +244,7 @@ export default function AttentionPage() {
             invitations.map((inv) => (
               <Paper key={`i-${inv.id}`} variant="outlined" sx={{ p: 1.5 }}>
                 <Stack direction="row" spacing={1.5} alignItems="center">
-                  <MailWarning size={18} color="#ed6c02" />
+                  <MailWarning size={18} color={theme.palette.warning.main} />
                   <Box flex={1} minWidth={0}>
                     <Typography variant="body2">
                       {inv.target_name
@@ -294,7 +296,7 @@ export default function AttentionPage() {
             conflicts.map((c) => (
               <Paper key={`c-${c.id}`} variant="outlined" sx={{ p: 1.5 }}>
                 <Stack direction="row" spacing={1.5} alignItems="center">
-                  <GitCompareArrows size={18} color="#d32f2f" />
+                  <GitCompareArrows size={18} color={theme.palette.error.main} />
                   <Box flex={1} minWidth={0}>
                     <Typography variant="body2">
                       {t("p.work.attention.syncConflict", {
@@ -321,7 +323,7 @@ export default function AttentionPage() {
             alerts.slice(0, 20).map((n) => (
               <Paper key={`n-${n.id}`} variant="outlined" sx={{ p: 1.5 }}>
                 <Stack direction="row" spacing={1.5} alignItems="flex-start">
-                  <ShieldAlert size={18} color="#9c27b0" style={{ marginTop: 2 }} />
+                  <ShieldAlert size={18} color={theme.palette.secondary.main} style={{ marginTop: 2 }} />
                   <Box flex={1} minWidth={0}>
                     <Typography variant="body2" fontWeight={600}>
                       {n.title ?? t("p.work.attention.notification")}

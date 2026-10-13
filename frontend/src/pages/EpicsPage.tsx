@@ -481,7 +481,7 @@ export default function EpicsPage() {
                   projectCtx.setProject({
                     id: viewTasksEpic.project,
                     name: projectMap.get(viewTasksEpic.project) || "",
-                    color: viewTasksEpic.color || "#1976d2",
+                    color: viewTasksEpic.color || DEFAULT_EPIC_COLOR,
                   });
                   navigate(`/app/project/${viewTasksEpic.project}`);
                 } else {

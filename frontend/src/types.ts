@@ -237,6 +237,12 @@ export const DEFAULT_CALENDAR_COLOR = "#607d8b";
 export const DEFAULT_TAG_COLOR = "#1976d2";
 export const DEFAULT_PORTFOLIO_COLOR = "#1976d2";
 
+/** Oro de la estrella de favorito (proyecto y tarea) */
+export const FAVORITE_COLOR = "#f5a623";
+
+/** Amarillo "post-it" por defecto de los nodos de pizarra */
+export const WHITEBOARD_NOTE_COLOR = "#fff9c4";
+
 export const KANBAN_COLUMNS: TaskState[] = [
   "backlog",
   "pending",

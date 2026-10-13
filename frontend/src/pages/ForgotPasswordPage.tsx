@@ -1,5 +1,7 @@
-import { useState } from "react";
-import { Box, Paper, Typography, TextField, Button, Alert, Stack } from "@mui/material";
+﻿import { useState } from "react";
+import { Box, Paper, Typography, TextField, Button, Alert, Stack,
+  useTheme,
+} from "@mui/material";
 import { Mail, ArrowLeft } from "lucide-react";
 import { Link as RouterLink } from "react-router-dom";
 import { useTranslation } from "react-i18next";
@@ -10,6 +12,7 @@ import { authApi } from "../api/auth";
  * El backend siempre responde 200 para no filtrar emails existentes. */
 export default function ForgotPasswordPage() {
   const { t } = useTranslation();
+  const theme = useTheme();
   const [email, setEmail] = useState("");
   const [sent, setSent] = useState(false);
   const [busy, setBusy] = useState(false);
@@ -44,7 +47,7 @@ export default function ForgotPasswordPage() {
       <Paper sx={{ p: 4, maxWidth: 420, width: "100%" }} variant="outlined">
         <Stack spacing={2.5}>
           <Box textAlign="center">
-            <Mail size={40} color="#1976d2" />
+            <Mail size={40} color={theme.palette.primary.main} />
             <Typography variant="h5" fontWeight={700} mt={1}>
               {t("p.auth.forgot.title")}
             </Typography>

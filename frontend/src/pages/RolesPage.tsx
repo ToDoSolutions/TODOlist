@@ -1,4 +1,4 @@
-import { useState } from "react";
+﻿import { useState } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { useTranslation } from "react-i18next";
 import {
@@ -15,6 +15,7 @@ import {
   MenuItem,
   Stack,
   CircularProgress,
+  useTheme,
 } from "@mui/material";
 import { Check, X } from "lucide-react";
 import PageHeader from "../components/ui/PageHeader";
@@ -132,10 +133,11 @@ const MATRIX: {
 
 const Cell = ({ ok }: { ok: boolean }) => {
   const { t } = useTranslation();
+  const theme = useTheme();
   return ok ? (
-    <Check size={16} color="#43a047" aria-label={t("p.admin.roles.allowed")} />
+    <Check size={16} color={theme.palette.success.main} aria-label={t("p.admin.roles.allowed")} />
   ) : (
-    <X size={16} color="#bdbdbd" aria-label={t("p.admin.roles.denied")} />
+    <X size={16} color={theme.palette.action.disabled} aria-label={t("p.admin.roles.denied")} />
   );
 };
 
@@ -159,6 +161,7 @@ const ROLE_CAPABILITIES: Record<string, string[]> = {
 
 export default function RolesPage() {
   const { t } = useTranslation();
+  const theme = useTheme();
   const { user } = useAuth();
   const [selectedProject, setSelectedProject] = useState<number | "">("");
 
@@ -289,7 +292,7 @@ export default function RolesPage() {
           <Stack spacing={0.5} mt={1.5}>
             {(ROLE_CAPABILITIES[effectiveRole ?? "viewer"] ?? []).map((c) => (
               <Stack direction="row" spacing={1} alignItems="center" key={c}>
-                <Check size={14} color="#43a047" />
+                <Check size={14} color={theme.palette.success.main} />
                 <Typography variant="body2">{t(c)}</Typography>
               </Stack>
             ))}

@@ -1,4 +1,4 @@
-import {
+﻿import {
   Box,
   Card,
   CardContent,
@@ -114,7 +114,7 @@ export default function DashboardPage() {
           {statCard(
             t("p.collab.dashboard.open"),
             dashboard?.open ?? 0,
-            "#1976d2",
+            theme.palette.primary.main,
             <Clock size={28} />,
           )}
         </Grid>
@@ -122,7 +122,7 @@ export default function DashboardPage() {
           {statCard(
             t("p.collab.dashboard.completed"),
             dashboard?.completed ?? 0,
-            "#43a047",
+            theme.palette.success.main,
             <CheckCircle size={28} />,
           )}
         </Grid>
@@ -130,7 +130,7 @@ export default function DashboardPage() {
           {statCard(
             t("p.collab.dashboard.overdue"),
             dashboard?.overdue ?? 0,
-            "#d32f2f",
+            theme.palette.error.main,
             <AlertCircle size={28} />,
           )}
         </Grid>
@@ -363,7 +363,7 @@ export default function DashboardPage() {
                           height: 10,
                           borderRadius: "50%",
                           bgcolor:
-                            STATE_COLORS[state as keyof typeof STATE_COLORS] || "#999",
+                            STATE_COLORS[state as keyof typeof STATE_COLORS] || theme.palette.grey[500],
                         }}
                       />
                       <Typography variant="body2" sx={{ flex: 1 }}>
@@ -399,7 +399,7 @@ export default function DashboardPage() {
                             label={typeLabel(type)}
                             sx={{
                               bgcolor:
-                                TYPE_COLORS[type as keyof typeof TYPE_COLORS] || "#999",
+                                TYPE_COLORS[type as keyof typeof TYPE_COLORS] || theme.palette.grey[500],
                               color: "common.white",
                               height: 18,
                               fontSize: 10,

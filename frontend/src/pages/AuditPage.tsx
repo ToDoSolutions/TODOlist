@@ -211,7 +211,7 @@ export default function AuditPage() {
                       sx={{
                         height: 20,
                         fontSize: 10,
-                        bgcolor: ACTION_COLORS[log.action] || "#757575",
+                        bgcolor: ACTION_COLORS[log.action] || theme.palette.grey[500],
                         color: "common.white",
                       }}
                     />

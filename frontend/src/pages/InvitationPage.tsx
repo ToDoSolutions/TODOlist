@@ -1,4 +1,4 @@
-import { useState } from "react";
+﻿import { useState } from "react";
 import { useParams, useNavigate } from "react-router-dom";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import {
@@ -11,6 +11,7 @@ import {
   CircularProgress,
   Alert,
   Divider,
+  useTheme,
 } from "@mui/material";
 import { Mail, Check, X, ArrowLeft } from "lucide-react";
 import { parseISO, isPast } from "date-fns";
@@ -39,6 +40,7 @@ interface Invitation {
  *  ya respondida, no encontrada. */
 export default function InvitationPage() {
   const { t } = useTranslation();
+  const theme = useTheme();
   const { invitationId } = useParams();
   const id = Number(invitationId);
   const navigate = useNavigate();
@@ -142,7 +144,7 @@ export default function InvitationPage() {
     <Box display="flex" justifyContent="center" py={6} px={2}>
       <Paper variant="outlined" sx={{ p: 4, maxWidth: 480, width: "100%" }}>
         <Stack spacing={2.5} alignItems="center" textAlign="center">
-          <Mail size={40} color="#1976d2" />
+          <Mail size={40} color={theme.palette.primary.main} />
           <Typography variant="h5" fontWeight={700}>
             {t("p.auth.invitation.title")}
           </Typography>

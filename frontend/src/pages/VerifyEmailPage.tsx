@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from "react";
+﻿import { useEffect, useRef, useState } from "react";
 import {
   Box,
   Paper,
@@ -7,6 +7,7 @@ import {
   Stack,
   Alert,
   CircularProgress,
+  useTheme,
 } from "@mui/material";
 import { MailCheck, ArrowLeft } from "lucide-react";
 import { Link as RouterLink, useSearchParams } from "react-router-dom";
@@ -17,6 +18,7 @@ import { authApi } from "../api/auth";
 /** Destino del enlace de verificación de email (/verify-email?uid&token). */
 export default function VerifyEmailPage() {
   const { t } = useTranslation();
+  const theme = useTheme();
   const [params] = useSearchParams();
   const uid = params.get("uid") || "";
   const token = params.get("token") || "";
@@ -45,7 +47,7 @@ export default function VerifyEmailPage() {
     >
       <Paper sx={{ p: 4, maxWidth: 420, width: "100%" }} variant="outlined">
         <Stack spacing={2.5} alignItems="center" textAlign="center">
-          <MailCheck size={40} color="#1976d2" />
+          <MailCheck size={40} color={theme.palette.primary.main} />
           <Typography variant="h5" fontWeight={700}>
             {t("p.auth.verifyEmail.title")}
           </Typography>

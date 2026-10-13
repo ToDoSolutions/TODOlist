@@ -1,4 +1,4 @@
-import { useState } from "react";
+﻿import { useState } from "react";
 import {
   Box,
   Paper,
@@ -9,6 +9,7 @@ import {
   Stack,
   IconButton,
   InputAdornment,
+  useTheme,
 } from "@mui/material";
 import { KeyRound, Eye, EyeOff, ArrowLeft } from "lucide-react";
 import { Link as RouterLink, useNavigate, useSearchParams } from "react-router-dom";
@@ -20,6 +21,7 @@ import { authApi } from "../api/auth";
  *  (/reset-password?uid=…&token=…). */
 export default function ResetPasswordPage() {
   const { t } = useTranslation();
+  const theme = useTheme();
   const [params] = useSearchParams();
   const navigate = useNavigate();
   const uid = params.get("uid") || "";
@@ -72,7 +74,7 @@ export default function ResetPasswordPage() {
       <Paper sx={{ p: 4, maxWidth: 420, width: "100%" }} variant="outlined">
         <Stack spacing={2.5}>
           <Box textAlign="center">
-            <KeyRound size={40} color="#1976d2" />
+            <KeyRound size={40} color={theme.palette.primary.main} />
             <Typography variant="h5" fontWeight={700} mt={1}>
               {t("p.auth.reset.newPassword")}
             </Typography>

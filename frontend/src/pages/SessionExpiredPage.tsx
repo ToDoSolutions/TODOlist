@@ -1,5 +1,7 @@
-import { useNavigate, useSearchParams } from "react-router-dom";
-import { Box, Typography, Button, Paper, Stack } from "@mui/material";
+﻿import { useNavigate, useSearchParams } from "react-router-dom";
+import { Box, Typography, Button, Paper, Stack,
+  useTheme,
+} from "@mui/material";
 import { TimerOff } from "lucide-react";
 import { useTranslation } from "react-i18next";
 import "../i18n";
@@ -10,6 +12,7 @@ import "../i18n";
  */
 export default function SessionExpiredPage() {
   const { t } = useTranslation();
+  const theme = useTheme();
   const navigate = useNavigate();
   const [params] = useSearchParams();
   const next = params.get("next") || "/app";
@@ -24,7 +27,7 @@ export default function SessionExpiredPage() {
       px={3}
     >
       <Paper variant="outlined" sx={{ p: 5, maxWidth: 420, textAlign: "center" }}>
-        <TimerOff size={48} color="#ed6c02" />
+        <TimerOff size={48} color={theme.palette.warning.main} />
         <Typography variant="h5" fontWeight={700} mt={2}>
           {t("p.auth.sessionExpired.title")}
         </Typography>

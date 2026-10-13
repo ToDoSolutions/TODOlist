@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+﻿import { useEffect, useState } from "react";
 import { Outlet, useNavigate, useLocation } from "react-router-dom";
 import { useProject } from "../auth/ProjectContext";
 import { DEFAULT_PROJECT_COLOR } from "../types";
@@ -1421,7 +1421,7 @@ export default function AppLayout() {
           }}
         >
           <Stack direction="row" spacing={0.75} alignItems="center">
-            {online ? <Wifi size={12} /> : <WifiOff size={12} color="#d32f2f" />}
+            {online ? <Wifi size={12} /> : <WifiOff size={12} color={theme.palette.error.main} />}
             <Typography
               variant="caption"
               color={online ? "text.secondary" : "error.main"}

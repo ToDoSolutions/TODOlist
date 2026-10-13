@@ -31,6 +31,7 @@ import { projectsApi } from "../api/resources";
 import { stateLabelsApi } from "../api/featOrg";
 import { notify } from "../notify";
 import { useConfirm } from "../components/ConfirmDialog";
+import { DEFAULT_PROJECT_COLOR } from "../types";
 import type { TaskState } from "../types";
 import { TASK_STATE_I18N_KEYS } from "../i18n/batchTaskUi";
 
@@ -198,7 +199,7 @@ export default function ProjectSettingsPage() {
   const current = form ?? {
     name: project?.name ?? "",
     description: project?.description ?? "",
-    color: project?.color ?? "#1976d2",
+    color: project?.color ?? DEFAULT_PROJECT_COLOR,
   };
 
   const saveMut = useMutation({
